@@ -26,6 +26,48 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Режим исполнения</h2>
+          <span class="muted">Paper / Live Testnet / Live Real</span>
+        </div>
+        <div class="execution-grid">
+          <div id="execution-status" class="execution-status-card"></div>
+          <div class="execution-actions">
+            <button class="secondary-button" data-execution-mode="paper" data-market-type="spot">
+              Paper
+            </button>
+            <button
+              class="secondary-button"
+              data-execution-mode="live_testnet"
+              data-market-type="spot"
+            >
+              Testnet Spot
+            </button>
+            <button
+              class="secondary-button"
+              data-execution-mode="live_testnet"
+              data-market-type="futures"
+            >
+              Testnet Futures
+            </button>
+            <button class="danger-button" data-execution-mode="live_real" data-market-type="spot">
+              Live Real Spot
+            </button>
+            <button
+              class="danger-button"
+              data-execution-mode="live_real"
+              data-market-type="futures"
+            >
+              Live Real Futures
+            </button>
+            <button id="refresh-execution-button" class="secondary-button">
+              Обновить статус Binance
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>График капитала</h2>
           <span class="muted">Live equity curve</span>
         </div>

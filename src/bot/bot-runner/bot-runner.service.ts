@@ -10,7 +10,7 @@ import {
 import { HigherTimeframeConfirmationService } from '../../strategy/higher-timeframe-confirmation/higher-timeframe-confirmation.service';
 import { StrategyRegistryService } from '../../strategy/strategy-registry/strategy-registry.service';
 import { StrategyResult, TradingStrategy } from '../../strategy/types';
-import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
+import { ExecutionGatewayService } from '../../trader/execution-gateway/execution-gateway.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
 import { ExecutedTrade, ExecutionResult } from '../../trader/types';
@@ -35,7 +35,7 @@ export class BotRunnerService implements OnModuleDestroy {
     private readonly market: BinanceMarketService,
     private readonly strategyRegistry: StrategyRegistryService,
     private readonly confirmation: HigherTimeframeConfirmationService,
-    private readonly trader: PaperTraderService,
+    private readonly trader: ExecutionGatewayService,
     private readonly portfolio: PortfolioService,
     private readonly riskManager: RiskManagerService,
     private readonly logger: BotLoggerService,
@@ -44,6 +44,7 @@ export class BotRunnerService implements OnModuleDestroy {
 
   async start() {
     this.logger.logInfo('Запуск multi-pair торгового бота');
+    await this.trader.refreshExecutionStatus();
 
     const initialUniverse = await this.resolveInitialUniverse();
     await this.syncUniverse(initialUniverse);
@@ -268,7 +269,7 @@ export class BotRunnerService implements OnModuleDestroy {
         объём: candle.volume,
       });
 
-      const stopAction = this.trader.checkStops(candle);
+      const stopAction = await this.trader.checkStops(candle);
       for (const action of stopAction) {
         this.handleExecutionResult(action);
       }
@@ -307,13 +308,13 @@ export class BotRunnerService implements OnModuleDestroy {
         if (!position) {
           if (result.signal === 'OPEN_LONG') {
             tradeHappened =
-              this.tryOpenWithRisk(candle, strategy, 'LONG', result.reason) ||
+              (await this.tryOpenWithRisk(candle, strategy, 'LONG', result.reason)) ||
               tradeHappened;
           }
 
           if (result.signal === 'OPEN_SHORT') {
             tradeHappened =
-              this.tryOpenWithRisk(candle, strategy, 'SHORT', result.reason) ||
+              (await this.tryOpenWithRisk(candle, strategy, 'SHORT', result.reason)) ||
               tradeHappened;
           }
 
@@ -324,7 +325,7 @@ export class BotRunnerService implements OnModuleDestroy {
           if (result.signal === 'CLOSE_LONG') {
             tradeHappened =
               this.handleExecutionResult(
-                this.trader.tryCloseLong(
+                await this.trader.tryCloseLong(
                   candle.symbol,
                   strategy.id,
                   candle.close,
@@ -336,7 +337,7 @@ export class BotRunnerService implements OnModuleDestroy {
 
           if (result.signal === 'REVERSE_TO_SHORT') {
             const closeExecuted = this.handleExecutionResult(
-              this.trader.tryCloseLong(
+              await this.trader.tryCloseLong(
                 candle.symbol,
                 strategy.id,
                 candle.close,
@@ -344,7 +345,7 @@ export class BotRunnerService implements OnModuleDestroy {
                 'Переворот: закрываем лонг перед открытием шорта',
               ),
             );
-            const openExecuted = this.tryOpenWithRisk(
+            const openExecuted = await this.tryOpenWithRisk(
               candle,
               strategy,
               'SHORT',
@@ -358,7 +359,7 @@ export class BotRunnerService implements OnModuleDestroy {
           if (result.signal === 'CLOSE_SHORT') {
             tradeHappened =
               this.handleExecutionResult(
-                this.trader.tryCloseShort(
+                await this.trader.tryCloseShort(
                   candle.symbol,
                   strategy.id,
                   candle.close,
@@ -370,7 +371,7 @@ export class BotRunnerService implements OnModuleDestroy {
 
           if (result.signal === 'REVERSE_TO_LONG') {
             const closeExecuted = this.handleExecutionResult(
-              this.trader.tryCloseShort(
+              await this.trader.tryCloseShort(
                 candle.symbol,
                 strategy.id,
                 candle.close,
@@ -378,7 +379,7 @@ export class BotRunnerService implements OnModuleDestroy {
                 'Переворот: закрываем шорт перед открытием лонга',
               ),
             );
-            const openExecuted = this.tryOpenWithRisk(
+            const openExecuted = await this.tryOpenWithRisk(
               candle,
               strategy,
               'LONG',
@@ -397,7 +398,7 @@ export class BotRunnerService implements OnModuleDestroy {
     }
   }
 
-  private tryOpenWithRisk(
+  private async tryOpenWithRisk(
     candle: Candle,
     strategy: TradingStrategy,
     side: 'LONG' | 'SHORT',
@@ -425,7 +426,7 @@ export class BotRunnerService implements OnModuleDestroy {
 
     const execution =
       side === 'LONG'
-        ? this.trader.tryOpenLong(
+        ? await this.trader.tryOpenLong(
             candle.symbol,
             candle.interval,
             strategy.id,
@@ -435,7 +436,7 @@ export class BotRunnerService implements OnModuleDestroy {
             reason,
             approval.approvedSizeUsdt,
           )
-        : this.trader.tryOpenShort(
+        : await this.trader.tryOpenShort(
             candle.symbol,
             candle.interval,
             strategy.id,
@@ -859,6 +860,7 @@ export class BotRunnerService implements OnModuleDestroy {
       executionInterval: this.activeInterval,
       confirmationInterval: this.confirmationInterval,
       confirmationMode: this.config.confirmationMode,
+      execution: this.trader.getExecutionStatus(),
       watchedSymbols: [...this.watchedSymbols],
       idleCountersBySymbol: Object.fromEntries(this.candlesWithoutPosition),
       confirmationBySymbol: this.confirmationInterval
@@ -927,7 +929,48 @@ export class BotRunnerService implements OnModuleDestroy {
     };
   }
 
-  closePosition(
+  async setExecutionMode(
+    mode: 'paper' | 'live_testnet' | 'live_real',
+    marketType: 'spot' | 'futures',
+    confirmationPhrase?: string,
+  ) {
+    const result = await this.trader.setExecutionMode(
+      mode,
+      marketType,
+      confirmationPhrase,
+    );
+
+    this.logger.logInfo('Обновление режима исполнения', {
+      успех: result.success,
+      режим: mode,
+      рынок: marketType,
+      сообщение: result.message,
+    });
+
+    return {
+      ...result,
+      snapshot: this.getDashboardSnapshot(),
+    };
+  }
+
+  async refreshExecutionStatus() {
+    const status = await this.trader.refreshExecutionStatus();
+
+    this.logger.logInfo('Обновлён статус execution layer', {
+      режим: status.mode,
+      рынок: status.marketType,
+      label: status.label,
+      доступностьПодключения: status.accountConnectivity,
+      свободныйБалансUSDT: status.quoteFree,
+    });
+
+    return {
+      status,
+      snapshot: this.getDashboardSnapshot(),
+    };
+  }
+
+  async closePosition(
     symbol: string,
     strategyId: string,
     reason = 'Ручное закрытие позиции через dashboard',
@@ -953,14 +996,14 @@ export class BotRunnerService implements OnModuleDestroy {
     const price = this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
     const execution =
       position.side === 'LONG'
-        ? this.trader.tryCloseLong(
+        ? await this.trader.tryCloseLong(
             position.symbol,
             position.strategyId,
             price,
             Date.now(),
             reason,
           )
-        : this.trader.tryCloseShort(
+        : await this.trader.tryCloseShort(
             position.symbol,
             position.strategyId,
             price,
@@ -989,7 +1032,9 @@ export class BotRunnerService implements OnModuleDestroy {
     };
   }
 
-  emergencyCloseAllPositions(reason = 'Экстренное закрытие всех позиций через dashboard') {
+  async emergencyCloseAllPositions(
+    reason = 'Экстренное закрытие всех позиций через dashboard',
+  ) {
     const openPositions = this.portfolio.getOpenPositions();
     let closedPositions = 0;
 
@@ -1002,14 +1047,14 @@ export class BotRunnerService implements OnModuleDestroy {
       const price = this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
       const execution =
         position.side === 'LONG'
-          ? this.trader.tryCloseLong(
+          ? await this.trader.tryCloseLong(
               position.symbol,
               position.strategyId,
               price,
               Date.now(),
               reason,
             )
-          : this.trader.tryCloseShort(
+          : await this.trader.tryCloseShort(
               position.symbol,
               position.strategyId,
               price,

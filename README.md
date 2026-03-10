@@ -574,6 +574,13 @@ BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
 BOT_COOLDOWN_CANDLES=2
 BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion
+BOT_EXECUTION_MODE=paper
+BOT_EXECUTION_MARKET_TYPE=futures
+BOT_ALLOW_LIVE_REAL=false
+BINANCE_TESTNET_API_KEY=
+BINANCE_TESTNET_API_SECRET=
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
 
 BOT_MIN_TREND_STRENGTH_PCT=0.0015
 BOT_MIN_ATR_PCT=0.001
@@ -633,6 +640,13 @@ BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
 BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion
+BOT_EXECUTION_MODE=paper
+BOT_EXECUTION_MARKET_TYPE=futures
+BOT_ALLOW_LIVE_REAL=false
+BINANCE_TESTNET_API_KEY=
+BINANCE_TESTNET_API_SECRET=
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
 
 BOT_MAX_CONCURRENT_POSITIONS=2
 BOT_MAX_POSITIONS_PER_SYMBOL=2
@@ -761,6 +775,13 @@ npm run build
 - `BOT_DASHBOARD_ENABLED`
 - `BOT_DASHBOARD_HOST`
 - `BOT_DASHBOARD_PORT`
+- `BOT_EXECUTION_MODE`
+- `BOT_EXECUTION_MARKET_TYPE`
+- `BOT_ALLOW_LIVE_REAL`
+- `BINANCE_TESTNET_API_KEY`
+- `BINANCE_TESTNET_API_SECRET`
+- `BINANCE_API_KEY`
+- `BINANCE_API_SECRET`
 
 ## Таблица переменных окружения
 
@@ -810,6 +831,13 @@ npm run build
 | `BOT_DASHBOARD_ENABLED` | Включить live dashboard | `true` | Можно отключить для headless режима |
 | `BOT_DASHBOARD_HOST` | Хост dashboard-сервера | `127.0.0.1` | Локальный доступ по умолчанию |
 | `BOT_DASHBOARD_PORT` | Порт dashboard-сервера | `3200` | Открой в браузере |
+| `BOT_EXECUTION_MODE` | Режим исполнения ордеров | `paper`, `live_testnet`, `live_real` | Начинай с `paper` |
+| `BOT_EXECUTION_MARKET_TYPE` | Рынок исполнения | `spot` или `futures` | Short полноценно работает в `futures` |
+| `BOT_ALLOW_LIVE_REAL` | Явное разрешение реального LIVE | `false` | Без этого `live_real` не включится |
+| `BINANCE_TESTNET_API_KEY` | API key Binance Testnet | пусто | Используется для `live_testnet` |
+| `BINANCE_TESTNET_API_SECRET` | API secret Binance Testnet | пусто | Используется для `live_testnet` |
+| `BINANCE_API_KEY` | API key реального Binance | пусто | Используется для `live_real` |
+| `BINANCE_API_SECRET` | API secret реального Binance | пусто | Используется для `live_real` |
 | `BINANCE_REST_BASE_URL` | REST endpoint Binance | `https://api.binance.com` | Можно заменить на test/testnet endpoint |
 | `BINANCE_WS_BASE_URL` | WebSocket endpoint Binance | `wss://stream.binance.com/ws` | База для stream subscriptions |
 

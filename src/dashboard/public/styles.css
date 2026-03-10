@@ -117,6 +117,55 @@ button {
   gap: 14px;
 }
 
+.execution-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 16px;
+}
+
+.execution-status-card {
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.execution-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.execution-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.execution-chip.paper {
+  background: rgba(37, 99, 235, 0.18);
+  color: #bfdbfe;
+}
+
+.execution-chip.testnet {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+}
+
+.execution-chip.live {
+  background: rgba(220, 38, 38, 0.18);
+  color: #fecaca;
+}
+
+.execution-kv {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .metric-card {
   padding: 16px;
 }

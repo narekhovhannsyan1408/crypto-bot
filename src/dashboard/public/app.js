@@ -11,6 +11,7 @@ const state = {
 const elements = {
   connectionStatus: document.getElementById('connection-status'),
   metricsGrid: document.getElementById('metrics-grid'),
+  executionStatus: document.getElementById('execution-status'),
   positionsTable: document.getElementById('positions-table'),
   positionsCount: document.getElementById('positions-count'),
   universeList: document.getElementById('universe-list'),
@@ -22,6 +23,7 @@ const elements = {
   chart: document.getElementById('equity-chart'),
   panicButton: document.getElementById('panic-button'),
   refreshButton: document.getElementById('refresh-button'),
+  refreshExecutionButton: document.getElementById('refresh-execution-button'),
 };
 
 function connect() {
@@ -93,6 +95,50 @@ function connect() {
   elements.refreshButton.onclick = () => {
     socket.send(JSON.stringify({ type: 'request_snapshot' }));
   };
+
+  elements.refreshExecutionButton.onclick = () => {
+    socket.send(JSON.stringify({ type: 'refresh_execution_status' }));
+  };
+
+  document.querySelectorAll('[data-execution-mode]').forEach((button) => {
+    button.onclick = () => {
+      if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+        window.alert('Нет активного WebSocket-соединения с dashboard');
+        return;
+      }
+
+      const mode = button.dataset.executionMode;
+      const marketType = button.dataset.marketType;
+
+      if (!mode || !marketType) {
+        return;
+      }
+
+      let confirmationPhrase;
+      if (mode === 'live_real') {
+        const isConfirmed = window.confirm(
+          `Включить ${mode} / ${marketType}? Это может отправлять реальные ордера.`,
+        );
+        if (!isConfirmed) {
+          return;
+        }
+
+        confirmationPhrase = window.prompt(
+          'Для подтверждения LIVE REAL введи фразу ENABLE LIVE',
+          '',
+        );
+      }
+
+      state.socket.send(
+        JSON.stringify({
+          type: 'set_execution_mode',
+          mode,
+          marketType,
+          confirmationPhrase,
+        }),
+      );
+    };
+  });
 
   elements.logFilterGroup.onclick = (event) => {
     const target = event.target;
@@ -185,6 +231,7 @@ function handleLiveEvent(event) {
 
 function renderAll() {
   renderMetrics();
+  renderExecution();
   renderPositions();
   renderUniverse();
   renderRiskState();
@@ -192,6 +239,38 @@ function renderAll() {
   renderLogFilters();
   renderLogs();
   renderChart();
+}
+
+function renderExecution() {
+  const execution = state.runtime?.execution;
+  if (!execution) {
+    elements.executionStatus.innerHTML = '';
+    return;
+  }
+
+  const chipClass =
+    execution.mode === 'paper'
+      ? 'paper'
+      : execution.mode === 'live_testnet'
+        ? 'testnet'
+        : 'live';
+
+  elements.executionStatus.innerHTML = `
+    <div class="execution-chip ${chipClass}">${escapeHtml(execution.label)}</div>
+    <div class="execution-kv">
+      <div class="kv-row"><span>Режим</span><strong>${escapeHtml(execution.mode)}</strong></div>
+      <div class="kv-row"><span>Рынок</span><strong>${escapeHtml(execution.marketType)}</strong></div>
+      <div class="kv-row"><span>Short</span><strong>${execution.canTradeShort ? 'да' : 'нет'}</strong></div>
+      <div class="kv-row"><span>Testnet</span><strong>${execution.usingTestnet ? 'да' : 'нет'}</strong></div>
+      <div class="kv-row"><span>API configured</span><strong>${execution.apiConfigured ? 'да' : 'нет'}</strong></div>
+      <div class="kv-row"><span>Связь с Binance</span><strong>${escapeHtml(execution.accountConnectivity)}</strong></div>
+      <div class="kv-row"><span>Свободный USDT</span><strong>${formatNumber(execution.quoteFree)}</strong></div>
+      <div class="kv-row"><span>Всего USDT</span><strong>${formatNumber(execution.quoteTotal)}</strong></div>
+      <div class="kv-row"><span>Источник total</span><strong>USDT wallet Binance</strong></div>
+      <div class="kv-row"><span>Последняя ошибка</span><strong>${escapeHtml(execution.lastError || '-')}</strong></div>
+      <div class="kv-row"><span>Предупреждения</span><strong>${escapeHtml((execution.warnings || []).join(' | ') || '-')}</strong></div>
+    </div>
+  `;
 }
 
 function renderMetrics() {

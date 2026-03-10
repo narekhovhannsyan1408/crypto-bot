@@ -24,6 +24,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "axios": "^1.13.6",
+    "ccxt": "^4.5.42",
     "decimal.js": "^10.6.0",
     "dotenv": "^17.3.1",
     "reflect-metadata": "^0.2.2",

@@ -6,14 +6,15 @@ import { SymbolScannerService } from '../../scanner/symbol-scanner/symbol-scanne
 import { StrategyService } from '../../strategy/strategy/strategy.service';
 import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
+import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
 import { BotRunnerService } from './bot-runner.service';
 
 describe('BotRunnerService', () => {
   let service: BotRunnerService;
   const marketMock = {
-    connect: jest.fn(),
+    connectSymbols: jest.fn(),
+    replaceSymbols: jest.fn(),
     loadHistoricalCandles: jest.fn().mockResolvedValue([]),
-    switchSymbol: jest.fn(),
   };
   const scannerMock = {
     scanBestSymbol: jest.fn().mockResolvedValue(null),
@@ -34,20 +35,31 @@ describe('BotRunnerService', () => {
   };
   const portfolioMock = {
     hasOpenPosition: jest.fn().mockReturnValue(false),
-    getUnrealizedPnl: jest.fn().mockReturnValue(0),
+    getPosition: jest.fn().mockReturnValue(null),
+    getOpenPositions: jest.fn().mockReturnValue([]),
+    getSnapshot: jest.fn().mockReturnValue({
+      balance: 1000,
+      realizedPnl: 0,
+      unrealizedPnl: 0,
+      equity: 1000,
+      feesPaid: 0,
+      peakEquity: 1000,
+      maxDrawdownPct: 0,
+      openPositions: [],
+      openPositionsCount: 0,
+      totalTrades: 0,
+      wins: 0,
+      losses: 0,
+      consecutiveLosses: 0,
+    }),
     getEquity: jest.fn().mockReturnValue(1000),
     trackDrawdown: jest.fn(),
     getWinRate: jest.fn().mockReturnValue(0),
-    position: null,
-    balance: 1000,
-    realizedPnl: 0,
-    feesPaid: 0,
-    peakEquity: 1000,
-    maxDrawdownPct: 0,
-    totalTrades: 0,
-    wins: 0,
-    losses: 0,
-    consecutiveLosses: 0,
+    updateMark: jest.fn(),
+  };
+  const riskManagerMock = {
+    approveOpenPosition: jest.fn(),
+    getRiskState: jest.fn().mockReturnValue({}),
   };
   const loggerMock = {
     logInfo: jest.fn(),
@@ -71,6 +83,7 @@ describe('BotRunnerService', () => {
         { provide: StrategyService, useValue: strategyMock },
         { provide: PaperTraderService, useValue: traderMock },
         { provide: PortfolioService, useValue: portfolioMock },
+        { provide: RiskManagerService, useValue: riskManagerMock },
         { provide: BotLoggerService, useValue: loggerMock },
         { provide: SymbolScannerService, useValue: scannerMock },
       ],
@@ -89,8 +102,9 @@ describe('BotRunnerService', () => {
 
     expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith('BTCUSDT', '1m', 250);
     expect(strategyMock.seedHistory).toHaveBeenCalled();
-    expect(marketMock.connect).toHaveBeenCalledWith(
-      'btcusdt@kline_1m',
+    expect(marketMock.connectSymbols).toHaveBeenCalledWith(
+      ['BTCUSDT'],
+      '1m',
       expect.any(Function),
     );
   });

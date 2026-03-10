@@ -1,62 +1,84 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
-import { BinanceMarketService } from '../../market/binance-market/binance-market.service';
-import { StrategyService } from '../../strategy/strategy/strategy.service';
-import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
-import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { BotLoggerService } from '../../logger/bot-logger/bot-logger.service';
+import { BinanceMarketService } from '../../market/binance-market/binance-market.service';
 import { Candle } from '../../market/types';
-import { ExecutedTrade, ExecutionResult } from '../../trader/types';
 import {
   ScannedSymbol,
   SymbolScannerService,
 } from '../../scanner/symbol-scanner/symbol-scanner.service';
+import { StrategyService } from '../../strategy/strategy/strategy.service';
+import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
+import { PortfolioService } from '../../trader/portfolio/portfolio.service';
+import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
+import { ExecutedTrade, ExecutionResult } from '../../trader/types';
 
 @Injectable()
 export class BotRunnerService implements OnModuleDestroy {
   private readonly config = getBotConfig();
-  private activeSymbol = this.config.symbol;
+  private readonly watchedSymbols = new Set<string>();
+  private readonly candlesWithoutPosition = new Map<string, number>();
   private activeInterval = this.config.interval;
-  private candlesWithoutPosition = 0;
   private lastScanTop: ScannedSymbol[] = [];
   private scannerInterval?: NodeJS.Timeout;
   private scannerInProgress = false;
+  private marketStarted = false;
 
   constructor(
     private readonly market: BinanceMarketService,
     private readonly strategy: StrategyService,
     private readonly trader: PaperTraderService,
     private readonly portfolio: PortfolioService,
+    private readonly riskManager: RiskManagerService,
     private readonly logger: BotLoggerService,
     private readonly scanner: SymbolScannerService,
   ) {}
 
   async start() {
-    this.logger.logInfo('Запуск торгового бота');
+    this.logger.logInfo('Запуск multi-pair торгового бота');
 
-    if (this.config.useScanner) {
-      await this.selectInitialSymbol();
-      this.startScannerLoop();
-    }
+    const initialUniverse = await this.resolveInitialUniverse();
+    await this.syncUniverse(initialUniverse);
 
-    await this.preloadSymbolHistory(this.activeSymbol);
-
-    const stream = `${this.activeSymbol.toLowerCase()}@kline_${this.activeInterval}`;
-    this.market.connect(stream, (candle) => {
+    this.market.connectSymbols([...this.watchedSymbols], this.activeInterval, (candle) => {
       void this.handleCandle(candle);
     });
+    this.marketStarted = true;
+
+    if (this.config.useScanner) {
+      this.startScannerLoop();
+    }
   }
 
-  private async selectInitialSymbol() {
+  private async resolveInitialUniverse() {
+    if (!this.config.useScanner) {
+      return this.getManualUniverse();
+    }
+
     try {
-      const best = await this.scanner.scanBestSymbol();
-      if (best) {
-        this.activeSymbol = best.symbol;
-        this.logger.logInfo('Выбрана стартовая пара', this.translateScannedSymbol(best));
+      const top = await this.scanner.scanTopSymbols(this.config.universeSize);
+      this.lastScanTop = top;
+
+      if (top.length > 0) {
+        this.logger.logInfo(
+          'Стартовый universe выбран сканером',
+          top.map((item) => this.translateScannedSymbol(item)),
+        );
+        return top.map((item) => item.symbol);
       }
     } catch (error) {
-      this.logger.logError('Не удалось выбрать стартовую пару', error);
+      this.logger.logError('Не удалось выбрать стартовый universe сканером', error);
     }
+
+    return this.getManualUniverse();
+  }
+
+  private getManualUniverse() {
+    if (this.config.allowedSymbols.length > 0) {
+      return this.config.allowedSymbols.slice(0, this.config.universeSize);
+    }
+
+    return [this.config.symbol];
   }
 
   private startScannerLoop() {
@@ -78,7 +100,7 @@ export class BotRunnerService implements OnModuleDestroy {
     this.scannerInProgress = true;
 
     try {
-      const top = await this.scanner.scanTopSymbols(5);
+      const top = await this.scanner.scanTopSymbols(this.config.maxScannerCandidates);
       this.lastScanTop = top;
 
       this.logger.logInfo(
@@ -86,28 +108,8 @@ export class BotRunnerService implements OnModuleDestroy {
         top.map((item) => this.translateScannedSymbol(item)),
       );
 
-      if (this.portfolio.hasOpenPosition()) {
-        return;
-      }
-
-      const best = top[0];
-      if (!best) {
-        return;
-      }
-
-      const current = top.find((item) => item.symbol === this.activeSymbol);
-      const currentScore = current?.score ?? 0;
-      const bestScore = best.score;
-
-      const shouldSwitch =
-        best.symbol !== this.activeSymbol &&
-        (this.candlesWithoutPosition >=
-          this.config.maxCandlesWithoutPositionBeforeSwitch ||
-          bestScore > currentScore * 1.15);
-
-      if (shouldSwitch) {
-        await this.activateSymbol(best.symbol, 'Переключаемся на более активную пару');
-      }
+      const nextUniverse = this.buildTargetUniverse(top);
+      await this.syncUniverse(nextUniverse);
     } catch (error) {
       this.logger.logError('Ошибка сканера', error);
     } finally {
@@ -115,10 +117,66 @@ export class BotRunnerService implements OnModuleDestroy {
     }
   }
 
+  private buildTargetUniverse(top: ScannedSymbol[]) {
+    const desired = new Set<string>(
+      top.slice(0, this.config.universeSize).map((item) => item.symbol),
+    );
+
+    for (const position of this.portfolio.getOpenPositions()) {
+      desired.add(position.symbol);
+    }
+
+    if (desired.size === 0) {
+      for (const symbol of this.getManualUniverse()) {
+        desired.add(symbol);
+      }
+    }
+
+    return [...desired];
+  }
+
+  private async syncUniverse(nextSymbols: string[]) {
+    const normalized = [...new Set(nextSymbols)].filter(Boolean);
+    const previousSymbols = [...this.watchedSymbols];
+    const addedSymbols = normalized.filter((symbol) => !this.watchedSymbols.has(symbol));
+    const removedSymbols = previousSymbols.filter(
+      (symbol) => !normalized.includes(symbol) && !this.portfolio.hasOpenPosition(symbol),
+    );
+
+    for (const symbol of addedSymbols) {
+      await this.preloadSymbolHistory(symbol);
+      this.candlesWithoutPosition.set(symbol, 0);
+      this.watchedSymbols.add(symbol);
+    }
+
+    for (const symbol of removedSymbols) {
+      this.watchedSymbols.delete(symbol);
+      this.candlesWithoutPosition.delete(symbol);
+      this.strategy.resetSymbol(symbol, this.activeInterval);
+    }
+
+    if (!this.marketStarted) {
+      return;
+    }
+
+    const previousUniverse = previousSymbols.sort().join(',');
+    const currentUniverse = [...this.watchedSymbols].sort().join(',');
+
+    if (previousUniverse !== currentUniverse) {
+      this.logger.logInfo('Обновлён торговый universe', {
+        символовВСлежении: this.watchedSymbols.size,
+        списокСимволов: [...this.watchedSymbols],
+      });
+      this.market.replaceSymbols([...this.watchedSymbols], this.activeInterval);
+    }
+  }
+
   private async handleCandle(candle: Candle) {
     try {
       if (!candle.isClosed) return;
-      if (candle.symbol !== this.activeSymbol) return;
+      if (!this.watchedSymbols.has(candle.symbol)) return;
+
+      this.portfolio.updateMark(candle.symbol, candle.close);
 
       this.logger.logCandle({
         символ: candle.symbol,
@@ -131,14 +189,12 @@ export class BotRunnerService implements OnModuleDestroy {
       const stopAction = this.trader.checkStops(candle);
       if (stopAction?.status === 'EXECUTED') {
         this.handleExecutionResult(stopAction);
-        this.printPortfolio(candle.close);
+        this.printPortfolio(candle.symbol);
         return;
       }
 
-      const result = this.strategy.onNewCandle(
-        candle,
-        this.portfolio.position?.side ?? null,
-      );
+      const position = this.portfolio.getPosition(candle.symbol);
+      const result = this.strategy.onNewCandle(candle, position?.side ?? null);
 
       this.logger.logSignal({
         символ: candle.symbol,
@@ -164,62 +220,43 @@ export class BotRunnerService implements OnModuleDestroy {
           : null,
       });
 
-      const position = this.portfolio.position;
       let tradeHappened = false;
 
       if (!position) {
-        this.candlesWithoutPosition += 1;
+        this.incrementIdleCounter(candle.symbol);
 
         if (result.signal === 'OPEN_LONG') {
-          tradeHappened = this.handleExecutionResult(
-            this.trader.tryOpenLong(
-              candle.symbol,
-              candle.interval,
-              candle.close,
-              candle.closeTime,
-              result.reason,
-            ),
-          );
+          tradeHappened = this.tryOpenWithRisk(candle, 'LONG', result.reason);
         }
 
         if (result.signal === 'OPEN_SHORT') {
-          tradeHappened = this.handleExecutionResult(
-            this.trader.tryOpenShort(
-              candle.symbol,
-              candle.interval,
-              candle.close,
-              candle.closeTime,
-              result.reason,
-            ),
-          );
+          tradeHappened = this.tryOpenWithRisk(candle, 'SHORT', result.reason);
         }
       } else {
-        this.candlesWithoutPosition = 0;
+        this.candlesWithoutPosition.set(candle.symbol, 0);
 
         if (position.side === 'LONG') {
           if (result.signal === 'CLOSE_LONG') {
             tradeHappened = this.handleExecutionResult(
-              this.trader.tryCloseLong(candle.close, candle.closeTime, result.reason),
+              this.trader.tryCloseLong(
+                candle.symbol,
+                candle.close,
+                candle.closeTime,
+                result.reason,
+              ),
             );
           }
 
           if (result.signal === 'REVERSE_TO_SHORT') {
             const closeExecuted = this.handleExecutionResult(
               this.trader.tryCloseLong(
+                candle.symbol,
                 candle.close,
                 candle.closeTime,
                 'Переворот: закрываем лонг перед открытием шорта',
               ),
             );
-            const openExecuted = this.handleExecutionResult(
-              this.trader.tryOpenShort(
-                candle.symbol,
-                candle.interval,
-                candle.close,
-                candle.closeTime,
-                result.reason,
-              ),
-            );
+            const openExecuted = this.tryOpenWithRisk(candle, 'SHORT', result.reason);
             tradeHappened = closeExecuted || openExecuted;
           }
         }
@@ -227,58 +264,80 @@ export class BotRunnerService implements OnModuleDestroy {
         if (position.side === 'SHORT') {
           if (result.signal === 'CLOSE_SHORT') {
             tradeHappened = this.handleExecutionResult(
-              this.trader.tryCloseShort(candle.close, candle.closeTime, result.reason),
+              this.trader.tryCloseShort(
+                candle.symbol,
+                candle.close,
+                candle.closeTime,
+                result.reason,
+              ),
             );
           }
 
           if (result.signal === 'REVERSE_TO_LONG') {
             const closeExecuted = this.handleExecutionResult(
               this.trader.tryCloseShort(
+                candle.symbol,
                 candle.close,
                 candle.closeTime,
                 'Переворот: закрываем шорт перед открытием лонга',
               ),
             );
-            const openExecuted = this.handleExecutionResult(
-              this.trader.tryOpenLong(
-                candle.symbol,
-                candle.interval,
-                candle.close,
-                candle.closeTime,
-                result.reason,
-              ),
-            );
+            const openExecuted = this.tryOpenWithRisk(candle, 'LONG', result.reason);
             tradeHappened = closeExecuted || openExecuted;
           }
         }
       }
 
-      if (!tradeHappened && !this.portfolio.hasOpenPosition()) {
-        await this.trySwitchByWeakness();
+      if (!tradeHappened) {
+        this.printPortfolio(candle.symbol);
       }
-
-      this.printPortfolio(candle.close);
     } catch (error) {
       this.logger.logError('Ошибка обработки свечи', error);
     }
   }
 
-  private async trySwitchByWeakness() {
-    if (this.lastScanTop.length === 0) return;
+  private tryOpenWithRisk(
+    candle: Candle,
+    side: 'LONG' | 'SHORT',
+    reason: string,
+  ) {
+    const approval = this.riskManager.approveOpenPosition({
+      symbol: candle.symbol,
+      interval: candle.interval,
+      side,
+      entryPrice: candle.close,
+      timestamp: candle.closeTime,
+    });
 
-    const best = this.lastScanTop[0];
-    if (!best) return;
-    if (best.symbol === this.activeSymbol) return;
-    if (this.portfolio.hasOpenPosition()) return;
-
-    if (
-      this.candlesWithoutPosition <
-      this.config.maxCandlesWithoutPositionBeforeSwitch
-    ) {
-      return;
+    if (approval.status === 'DENIED') {
+      this.logger.logInfo('Риск-менеджер отклонил сделку', {
+        символ: candle.symbol,
+        сторона: side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+        причина: approval.reason,
+      });
+      return false;
     }
 
-    await this.activateSymbol(best.symbol, 'Текущая пара ослабла, переключаемся');
+    const execution =
+      side === 'LONG'
+        ? this.trader.tryOpenLong(
+            candle.symbol,
+            candle.interval,
+            candle.close,
+            candle.closeTime,
+            reason,
+            approval.approvedSizeUsdt,
+          )
+        : this.trader.tryOpenShort(
+            candle.symbol,
+            candle.interval,
+            candle.close,
+            candle.closeTime,
+            reason,
+            approval.approvedSizeUsdt,
+          );
+
+    return this.handleExecutionResult(execution);
   }
 
   private handleExecutionResult(execution: ExecutionResult | null) {
@@ -289,7 +348,7 @@ export class BotRunnerService implements OnModuleDestroy {
     if (execution.status === 'REJECTED') {
       this.logger.logInfo('Сделка отклонена', {
         действие: this.translateAction(execution.action),
-        символ: execution.symbol ?? this.activeSymbol,
+        символ: execution.symbol ?? 'НЕИЗВЕСТНО',
         причина: execution.reason,
       });
       return false;
@@ -307,28 +366,8 @@ export class BotRunnerService implements OnModuleDestroy {
       );
     }
 
-    this.candlesWithoutPosition = 0;
+    this.candlesWithoutPosition.set(execution.trade.symbol, 0);
     return true;
-  }
-
-  private async activateSymbol(symbol: string, message: string) {
-    if (symbol === this.activeSymbol) {
-      return;
-    }
-
-    const previousSymbol = this.activeSymbol;
-
-    await this.preloadSymbolHistory(symbol);
-
-    this.activeSymbol = symbol;
-    this.candlesWithoutPosition = 0;
-
-    this.logger.logInfo(message, {
-      стараяПара: previousSymbol,
-      новаяПара: symbol,
-    });
-
-    this.market.switchSymbol(symbol, this.activeInterval);
   }
 
   private async preloadSymbolHistory(symbol: string) {
@@ -352,43 +391,47 @@ export class BotRunnerService implements OnModuleDestroy {
     }
   }
 
-  private printPortfolio(currentPrice: number) {
-    const position = this.portfolio.position;
-    const unrealizedPnl = this.portfolio.getUnrealizedPnl(currentPrice);
-    const equity = this.portfolio.getEquity(currentPrice);
-    this.portfolio.trackDrawdown(equity);
+  private printPortfolio(symbol: string) {
+    const snapshot = this.portfolio.getSnapshot();
+    this.portfolio.trackDrawdown(snapshot.equity);
 
     this.logger.logPortfolio({
-      активнаяПара: this.activeSymbol,
-      баланс: Number(this.portfolio.balance.toFixed(6)),
-      реализованныйРезультат: Number(this.portfolio.realizedPnl.toFixed(6)),
-      накопленныйРезультат: Number(this.portfolio.realizedPnl.toFixed(6)),
-      уплаченоКомиссий: Number(this.portfolio.feesPaid.toFixed(6)),
-      капитал: Number(equity.toFixed(6)),
-      пиковыйКапитал: Number(this.portfolio.peakEquity.toFixed(6)),
+      символКоторыйОбновился: symbol,
+      баланс: Number(snapshot.balance.toFixed(6)),
+      реализованныйРезультат: Number(snapshot.realizedPnl.toFixed(6)),
+      плавающийРезультат: Number(snapshot.unrealizedPnl.toFixed(6)),
+      капитал: Number(snapshot.equity.toFixed(6)),
+      пиковыйКапитал: Number(snapshot.peakEquity.toFixed(6)),
       максимальнаяПросадкаВПроцентах: Number(
-        this.portfolio.maxDrawdownPct.toFixed(2),
+        snapshot.maxDrawdownPct.toFixed(2),
       ),
-      естьОткрытаяПозиция: this.portfolio.hasOpenPosition(),
-      текущаяЦена: Number(currentPrice.toFixed(2)),
-      сторонаПозиции:
-        position?.side === 'LONG'
-          ? 'ЛОНГ'
-          : position?.side === 'SHORT'
-            ? 'ШОРТ'
-            : null,
-      ценаВхода: position ? Number(position.entryPrice.toFixed(2)) : null,
-      количество: position ? Number(position.quantity.toFixed(8)) : null,
-      плавающийРезультат: Number(unrealizedPnl.toFixed(6)),
-      стопЦена: position ? Number(position.stopPrice.toFixed(2)) : null,
-      тейкЦена: position ? Number(position.takePrice.toFixed(2)) : null,
-      всегоСделок: this.portfolio.totalTrades,
-      прибыльныхСделок: this.portfolio.wins,
-      убыточныхСделок: this.portfolio.losses,
-      подрядУбыточныхСделок: this.portfolio.consecutiveLosses,
+      уплаченоКомиссий: Number(snapshot.feesPaid.toFixed(6)),
+      открытыхПозиций: snapshot.openPositionsCount,
+      symbolsUniverse: [...this.watchedSymbols],
+      позиций: snapshot.openPositions.map((position) => ({
+        символ: position.symbol,
+        сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+        ценаВхода: Number(position.entryPrice.toFixed(2)),
+        количество: Number(position.quantity.toFixed(8)),
+        стопЦена: Number(position.stopPrice.toFixed(2)),
+        тейкЦена: Number(position.takePrice.toFixed(2)),
+        плавающийРезультат: Number(
+          this.portfolio.getUnrealizedPnl(position.symbol).toFixed(6),
+        ),
+      })),
+      всегоСделок: snapshot.totalTrades,
+      прибыльныхСделок: snapshot.wins,
+      убыточныхСделок: snapshot.losses,
+      подрядУбыточныхСделок: snapshot.consecutiveLosses,
       винрейт: Number(this.portfolio.getWinRate().toFixed(2)),
-      свечейБезПозиции: this.candlesWithoutPosition,
+      рискМенеджмент: this.riskManager.getRiskState(),
+      свечейБезПозицииПоСимволам: Object.fromEntries(this.candlesWithoutPosition),
     });
+  }
+
+  private incrementIdleCounter(symbol: string) {
+    const current = this.candlesWithoutPosition.get(symbol) ?? 0;
+    this.candlesWithoutPosition.set(symbol, current + 1);
   }
 
   private translateTrade(trade: ExecutedTrade) {

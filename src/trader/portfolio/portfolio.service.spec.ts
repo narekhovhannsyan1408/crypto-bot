@@ -23,7 +23,7 @@ describe('PortfolioService', () => {
 
   it('calculates long equity using liquidation value', () => {
     service.balance = 900;
-    service.position = {
+    service.registerOpenedPosition({
       symbol: 'BTCUSDT',
       interval: '1m',
       side: 'LONG',
@@ -39,14 +39,15 @@ describe('PortfolioService', () => {
       takePrice: 102,
       highestPrice: 100,
       lowestPrice: 100,
-    };
+    });
+    service.updateMark('BTCUSDT', 100);
 
-    expect(service.getEquity(100)).toBeCloseTo(999.8001, 6);
+    expect(service.getEquity()).toBeCloseTo(999.8001, 6);
   });
 
   it('calculates short equity including both entry and exit fees', () => {
     service.balance = 900;
-    service.position = {
+    service.registerOpenedPosition({
       symbol: 'BTCUSDT',
       interval: '1m',
       side: 'SHORT',
@@ -62,8 +63,54 @@ describe('PortfolioService', () => {
       takePrice: 98,
       highestPrice: 100,
       lowestPrice: 100,
-    };
+    });
+    service.updateMark('BTCUSDT', 100);
 
-    expect(service.getEquity(100)).toBeCloseTo(999.8001, 6);
+    expect(service.getEquity()).toBeCloseTo(999.8001, 6);
+  });
+
+  it('aggregates equity across multiple positions', () => {
+    service.balance = 800;
+
+    service.registerOpenedPosition({
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      side: 'LONG',
+      entryPrice: 100,
+      quantity: 1,
+      investedUsdt: 100,
+      openedAt: 1,
+      entryFeePaid: 0.1,
+      stopLossPct: 0.012,
+      takeProfitPct: 0.02,
+      trailingStopPct: 0.008,
+      stopPrice: 98.8,
+      takePrice: 102,
+      highestPrice: 100,
+      lowestPrice: 100,
+    });
+    service.registerOpenedPosition({
+      symbol: 'ETHUSDT',
+      interval: '1m',
+      side: 'LONG',
+      entryPrice: 200,
+      quantity: 0.5,
+      investedUsdt: 100,
+      openedAt: 1,
+      entryFeePaid: 0.1,
+      stopLossPct: 0.012,
+      takeProfitPct: 0.02,
+      trailingStopPct: 0.008,
+      stopPrice: 197.6,
+      takePrice: 204,
+      highestPrice: 200,
+      lowestPrice: 200,
+    });
+
+    service.updateMark('BTCUSDT', 100);
+    service.updateMark('ETHUSDT', 200);
+
+    expect(service.getOpenPositionsCount()).toBe(2);
+    expect(service.getEquity()).toBeCloseTo(999.8, 6);
   });
 });

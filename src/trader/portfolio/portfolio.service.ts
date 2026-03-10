@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
-import { ClosedTrade, PortfolioSnapshot, Position } from '../types';
+import {
+  ClosedTrade,
+  makePositionKey,
+  PortfolioSnapshot,
+  Position,
+} from '../types';
 
 @Injectable()
 export class PortfolioService {
@@ -25,16 +30,24 @@ export class PortfolioService {
     return this.getOpenPositions()[0] ?? null;
   }
 
-  hasOpenPosition(symbol?: string) {
+  hasOpenPosition(symbol?: string, strategyId?: string) {
+    if (symbol && strategyId) {
+      return this.getPosition(symbol, strategyId) !== null;
+    }
+
     if (symbol) {
-      return this.positions.has(symbol);
+      return this.getPositionsForSymbol(symbol).length > 0;
     }
 
     return this.positions.size > 0;
   }
 
-  getPosition(symbol: string) {
-    return this.positions.get(symbol) ?? null;
+  hasOpenPositionForStrategy(strategyId: string) {
+    return this.getPositionsForStrategy(strategyId).length > 0;
+  }
+
+  getPosition(symbol: string, strategyId: string) {
+    return this.positions.get(makePositionKey(symbol, strategyId)) ?? null;
   }
 
   getMarkPrice(symbol: string) {
@@ -45,17 +58,27 @@ export class PortfolioService {
     return [...this.positions.values()];
   }
 
+  getPositionsForSymbol(symbol: string) {
+    return this.getOpenPositions().filter((position) => position.symbol === symbol);
+  }
+
+  getPositionsForStrategy(strategyId: string) {
+    return this.getOpenPositions().filter(
+      (position) => position.strategyId === strategyId,
+    );
+  }
+
   getOpenPositionsCount() {
     return this.positions.size;
   }
 
   registerOpenedPosition(position: Position) {
-    this.positions.set(position.symbol, position);
+    this.positions.set(position.key, position);
     this.marks.set(position.symbol, position.entryPrice);
   }
 
-  clearPosition(symbol: string) {
-    this.positions.delete(symbol);
+  clearPosition(symbol: string, strategyId: string) {
+    this.positions.delete(makePositionKey(symbol, strategyId));
   }
 
   updateMark(symbol: string, price: number) {
@@ -75,8 +98,8 @@ export class PortfolioService {
 
   getUnrealizedPnl(symbol?: string, currentPrice?: number) {
     if (symbol) {
-      const position = this.getPosition(symbol);
-      if (!position) {
+      const positions = this.getPositionsForSymbol(symbol);
+      if (positions.length === 0) {
         return 0;
       }
 
@@ -85,7 +108,13 @@ export class PortfolioService {
         return 0;
       }
 
-      return this.getPositionLiquidationValue(symbol, markPrice) - position.investedUsdt;
+      return positions.reduce((sum, position) => {
+        return (
+          sum +
+          (this.getPositionLiquidationValue(symbol, position.strategyId, markPrice) -
+            position.investedUsdt)
+        );
+      }, 0);
     }
 
     return this.getOpenPositions().reduce((sum, position) => {
@@ -96,14 +125,39 @@ export class PortfolioService {
 
       return (
         sum +
-        (this.getPositionLiquidationValue(position.symbol, markPrice) -
+        (this.getPositionLiquidationValue(
+          position.symbol,
+          position.strategyId,
+          markPrice,
+        ) -
           position.investedUsdt)
       );
     }, 0);
   }
 
-  getPositionLiquidationValue(symbol: string, currentPrice?: number) {
-    const position = this.getPosition(symbol);
+  getPositionUnrealizedPnl(symbol: string, strategyId: string, currentPrice?: number) {
+    const position = this.getPosition(symbol, strategyId);
+    if (!position) {
+      return 0;
+    }
+
+    const markPrice = currentPrice ?? this.getMark(symbol);
+    if (markPrice === undefined) {
+      return 0;
+    }
+
+    return (
+      this.getPositionLiquidationValue(symbol, strategyId, markPrice) -
+      position.investedUsdt
+    );
+  }
+
+  getPositionLiquidationValue(
+    symbol: string,
+    strategyId: string,
+    currentPrice?: number,
+  ) {
+    const position = this.getPosition(symbol, strategyId);
 
     if (!position) {
       return 0;
@@ -130,7 +184,10 @@ export class PortfolioService {
     return (
       this.balance +
       this.getOpenPositions().reduce((sum, position) => {
-        return sum + this.getPositionLiquidationValue(position.symbol);
+        return (
+          sum +
+          this.getPositionLiquidationValue(position.symbol, position.strategyId)
+        );
       }, 0)
     );
   }
@@ -185,6 +242,7 @@ export class PortfolioService {
       maxDrawdownPct: this.maxDrawdownPct,
       openPositions: this.getOpenPositions(),
       openPositionsCount: this.getOpenPositionsCount(),
+      exposureByStrategy: this.getExposureByStrategy(),
       totalTrades: this.totalTrades,
       wins: this.wins,
       losses: this.losses,
@@ -219,5 +277,12 @@ export class PortfolioService {
 
   private getMark(symbol: string) {
     return this.marks.get(symbol);
+  }
+
+  private getExposureByStrategy() {
+    return this.getOpenPositions().reduce<Record<string, number>>((acc, position) => {
+      acc[position.strategyId] = (acc[position.strategyId] ?? 0) + position.investedUsdt;
+      return acc;
+    }, {});
   }
 }

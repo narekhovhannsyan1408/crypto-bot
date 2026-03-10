@@ -9,13 +9,16 @@ const stringValue = (value: string | undefined, fallback: string) =>
 export type BotConfig = {
   symbol: string;
   interval: string;
+  confirmationInterval: string | null;
   useScanner: boolean;
   scanIntervalMs: number;
   maxCandlesWithoutPositionBeforeSwitch: number;
   maxScannerCandidates: number;
   universeSize: number;
+  minPositionSizeUsdt: number;
   initialBalance: number;
   maxPositionSizeUsdt: number;
+  maxPositionSizePctOfEquity: number;
   riskPerTradePct: number;
   feePct: number;
   stopLossPct: number;
@@ -38,6 +41,10 @@ export type BotConfig = {
   maxDrawdownStopPct: number;
   maxDailyLossPct: number;
   maxConsecutiveLosses: number;
+  maxPositionsPerSymbol: number;
+  maxPositionsPerStrategy: number;
+  allowOppositePositionsSameSymbol: boolean;
+  enabledStrategies: string[];
   dashboardEnabled: boolean;
   dashboardHost: string;
   dashboardPort: number;
@@ -56,6 +63,7 @@ export const getBotConfig = (): BotConfig => {
   cachedConfig = {
     symbol: stringValue(process.env.BOT_SYMBOL, 'BTCUSDT'),
     interval: stringValue(process.env.BOT_INTERVAL, '1m'),
+    confirmationInterval: process.env.BOT_CONFIRMATION_INTERVAL?.trim() || null,
     useScanner: process.env.BOT_USE_SCANNER === 'true',
     scanIntervalMs: numberValue(process.env.BOT_SCAN_INTERVAL_MS, 60_000),
     maxCandlesWithoutPositionBeforeSwitch: numberValue(
@@ -64,8 +72,13 @@ export const getBotConfig = (): BotConfig => {
     ),
     maxScannerCandidates: numberValue(process.env.BOT_SCANNER_SHORTLIST_SIZE, 8),
     universeSize: numberValue(process.env.BOT_UNIVERSE_SIZE, 5),
+    minPositionSizeUsdt: numberValue(process.env.BOT_MIN_POSITION_SIZE_USDT, 25),
     initialBalance: numberValue(process.env.BOT_INITIAL_BALANCE, 1_000),
-    maxPositionSizeUsdt: numberValue(process.env.BOT_POSITION_SIZE_USDT, 100),
+    maxPositionSizeUsdt: numberValue(process.env.BOT_POSITION_SIZE_USDT, 0),
+    maxPositionSizePctOfEquity: numberValue(
+      process.env.BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY,
+      0.1,
+    ),
     riskPerTradePct: numberValue(process.env.BOT_RISK_PER_TRADE_PCT, 0.005),
     feePct: numberValue(process.env.BOT_FEE_PCT, 0.001),
     stopLossPct: numberValue(process.env.BOT_STOP_LOSS_PCT, 0.012),
@@ -100,6 +113,18 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_MAX_CONSECUTIVE_LOSSES,
       4,
     ),
+    maxPositionsPerSymbol: numberValue(process.env.BOT_MAX_POSITIONS_PER_SYMBOL, 2),
+    maxPositionsPerStrategy: numberValue(
+      process.env.BOT_MAX_POSITIONS_PER_STRATEGY,
+      3,
+    ),
+    allowOppositePositionsSameSymbol:
+      process.env.BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL === 'true',
+    enabledStrategies: (process.env.BOT_ENABLED_STRATEGIES ||
+      'momentum_trend,mean_reversion')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
     dashboardEnabled: process.env.BOT_DASHBOARD_ENABLED !== 'false',
     dashboardHost: stringValue(process.env.BOT_DASHBOARD_HOST, '127.0.0.1'),
     dashboardPort: numberValue(process.env.BOT_DASHBOARD_PORT, 3200),

@@ -3,7 +3,7 @@ import { ATR, EMA, RSI } from 'technicalindicators';
 import { getBotConfig } from '../../config/bot-config';
 import { Candle } from '../../market/types';
 import { PositionSide } from '../../trader/types';
-import { TradingStrategy, StrategyResult } from '../types';
+import { StrategyResult, TradingStrategy } from '../types';
 
 type StrategyState = {
   candles: Candle[];
@@ -12,18 +12,19 @@ type StrategyState = {
 };
 
 @Injectable()
-export class StrategyService implements TradingStrategy {
-  readonly id = 'momentum_trend';
-  readonly name = 'Momentum Trend';
+export class MeanReversionStrategyService implements TradingStrategy {
+  readonly id = 'mean_reversion';
+  readonly name = 'Mean Reversion';
+
   private readonly config = getBotConfig();
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 1, this.config.rsiPeriod + 1, 15);
+    return Math.max(this.config.emaSlowPeriod + 5, this.config.rsiPeriod + 5, 25);
   }
 
   getConfirmationPolicy() {
-    return 'align_with_signal' as const;
+    return 'none' as const;
   }
 
   seedHistory(symbol: string, interval: string, candles: Candle[]) {
@@ -45,10 +46,7 @@ export class StrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(
-    candle: Candle,
-    positionSide: PositionSide | null,
-  ): StrategyResult {
+  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -72,20 +70,19 @@ export class StrategyService implements TradingStrategy {
     const lows = state.candles.map((item) => item.low);
 
     const warmupBars = this.getRequiredWarmupCandles();
-
     if (closes.length < warmupBars) {
       return {
         signal: 'HOLD',
-        reason: `Прогрев индикаторов: ${closes.length}/${warmupBars}`,
+        reason: `Прогрев индикаторов стратегии mean reversion: ${closes.length}/${warmupBars}`,
       };
     }
 
-    const emaFast = EMA.calculate({
-      period: this.config.emaFastPeriod,
-      values: closes,
-    }).at(-1);
     const emaSlow = EMA.calculate({
       period: this.config.emaSlowPeriod,
+      values: closes,
+    }).at(-1);
+    const emaFast = EMA.calculate({
+      period: this.config.emaFastPeriod,
       values: closes,
     }).at(-1);
     const rsi = RSI.calculate({
@@ -100,129 +97,112 @@ export class StrategyService implements TradingStrategy {
     }).at(-1);
 
     if (
-      emaFast === undefined ||
       emaSlow === undefined ||
+      emaFast === undefined ||
       rsi === undefined ||
       atr === undefined
     ) {
-      return { signal: 'HOLD', reason: 'Индикаторы ещё не готовы' };
+      return { signal: 'HOLD', reason: 'Индикаторы mean reversion ещё не готовы' };
     }
 
     const atrPct = atr / candle.close;
-    const trendStrengthPct = Math.abs(emaFast - emaSlow) / candle.close;
+    const deviationPct = (candle.close - emaSlow) / emaSlow;
     const indicators = {
       emaFast,
       emaSlow,
       rsi,
       atr,
       atrPct,
-      trendStrengthPct,
+      deviationPct,
     };
 
     if (!positionSide && this.isInCooldown(state)) {
       return {
         signal: 'HOLD',
-        reason: `Cooldown после сделки: ${this.config.cooldownCandles} свечей`,
+        reason: `Cooldown mean reversion после сделки: ${this.config.cooldownCandles} свечей`,
         indicators,
       };
     }
 
-    if (atrPct < this.config.minAtrPct) {
+    if (atrPct < this.config.minAtrPct || atrPct > this.config.maxAtrPct) {
       return {
         signal: 'HOLD',
-        reason: 'Слишком низкая волатильность для входа',
+        reason: 'Mean reversion пропускает рынок из-за неподходящей волатильности',
         indicators,
       };
     }
 
-    if (atrPct > this.config.maxAtrPct) {
-      return {
-        signal: 'HOLD',
-        reason: 'Слишком высокая волатильность, пропускаем вход',
-        indicators,
-      };
-    }
-
-    if (trendStrengthPct < this.config.minTrendStrengthPct) {
-      return {
-        signal: 'HOLD',
-        reason: 'Тренд слишком слабый',
-        indicators,
-      };
-    }
-
-    const bullishEntry =
-      emaFast > emaSlow && rsi > this.config.rsiLongThreshold;
-    const bearishEntry =
-      emaFast < emaSlow && rsi < this.config.rsiShortThreshold;
+    const oversoldLong = deviationPct < -0.003 && rsi < 35;
+    const overboughtShort = deviationPct > 0.003 && rsi > 65;
+    const meanRecovered = Math.abs(deviationPct) < 0.0008;
 
     if (!positionSide) {
-      if (bullishEntry) {
+      if (oversoldLong) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Long: fast EMA выше slow EMA, RSI подтверждает импульс',
+          reason: 'Mean reversion long: цена сильно ниже среднего и RSI перепродан',
           indicators,
         };
       }
 
-      if (bearishEntry) {
+      if (overboughtShort) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Short: fast EMA ниже slow EMA, RSI подтверждает импульс',
+          reason: 'Mean reversion short: цена сильно выше среднего и RSI перекуплен',
           indicators,
         };
       }
 
       return {
         signal: 'HOLD',
-        reason: 'Нет сигнала на вход',
+        reason: 'Mean reversion не видит экстремума',
         indicators,
       };
     }
 
     if (positionSide === 'LONG') {
-      if (bearishEntry) {
+      if (overboughtShort) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Переворот: bullish regime сломан и сформирован bearish impulse',
+          reason: 'Mean reversion: long экстремум исчерпан и сформирован short-экстремум',
           indicators,
         };
       }
 
-      if (emaFast < emaSlow || rsi < this.config.rsiShortThreshold) {
+      if (meanRecovered || rsi > 52) {
         return {
           signal: 'CLOSE_LONG',
-          reason: 'Закрытие лонга: импульс ослаб и структура стала bearish',
+          reason: 'Mean reversion закрывает long после возврата к среднему',
           indicators,
         };
       }
 
       return {
         signal: 'HOLD',
-        reason: 'Держим лонг',
+        reason: 'Mean reversion удерживает long',
         indicators,
       };
     }
 
-    if (bullishEntry) {
+    if (oversoldLong) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Переворот: bearish regime сломан и сформирован bullish impulse',
+        reason: 'Mean reversion: short экстремум исчерпан и сформирован long-экстремум',
         indicators,
       };
     }
 
-    if (emaFast > emaSlow || rsi > this.config.rsiLongThreshold) {
+    if (meanRecovered || rsi < 48) {
       return {
         signal: 'CLOSE_SHORT',
-        reason: 'Закрытие шорта: импульс ослаб и структура стала bullish',
+        reason: 'Mean reversion закрывает short после возврата к среднему',
         indicators,
       };
     }
 
     return {
       signal: 'HOLD',
-      reason: 'Держим шорт',
+      reason: 'Mean reversion удерживает short',
       indicators,
     };
   }
@@ -240,7 +220,6 @@ export class StrategyService implements TradingStrategy {
       barsSeen: 0,
       lastExitBarIndex: null,
     };
-
     this.states.set(key, state);
     return state;
   }

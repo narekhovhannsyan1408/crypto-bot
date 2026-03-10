@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
 import { Candle } from '../../market/types';
+import { MeanReversionStrategyService } from '../../strategy/mean-reversion/mean-reversion.strategy.service';
 import { StrategyService } from '../../strategy/strategy/strategy.service';
+import { TradingStrategy } from '../../strategy/types';
 import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
@@ -13,7 +15,7 @@ export class BacktestEngineService {
 
   runBacktest(input: BacktestInput): BacktestReport {
     const portfolio = new PortfolioService();
-    const strategy = new StrategyService();
+    const strategies = this.buildStrategies();
     const riskManager = new RiskManagerService(portfolio);
     const trader = new PaperTraderService(portfolio);
 
@@ -37,43 +39,104 @@ export class BacktestEngineService {
 
       const symbolKey = `${candle.symbol}:${candle.interval}`;
       if (!seededBySymbol.has(symbolKey)) {
-        strategy.seedHistory(candle.symbol, candle.interval, []);
+        for (const strategy of strategies) {
+          strategy.seedHistory(candle.symbol, candle.interval, []);
+        }
         seededBySymbol.add(symbolKey);
       }
 
-      const stopAction = trader.checkStops(candle);
-      if (stopAction?.status === 'EXECUTED') {
-        strategy.registerTradeClosed(candle.symbol, candle.interval);
+      const stopActions = trader.checkStops(candle);
+      for (const action of stopActions) {
+        if (action.status === 'EXECUTED') {
+          strategies
+            .find((strategy) => strategy.id === action.trade.strategyId)
+            ?.registerTradeClosed(candle.symbol, candle.interval);
+        }
       }
 
-      const position = portfolio.getPosition(candle.symbol);
-      const signal = strategy.onNewCandle(candle, position?.side ?? null);
+      for (const strategy of strategies) {
+        const position = portfolio.getPosition(candle.symbol, strategy.id);
+        const signal = strategy.onNewCandle(candle, position?.side ?? null);
 
-      if (!position) {
-        if (signal.signal === 'OPEN_LONG' || signal.signal === 'OPEN_SHORT') {
-          const side = signal.signal === 'OPEN_LONG' ? 'LONG' : 'SHORT';
-          const approval = riskManager.approveOpenPosition({
-            symbol: candle.symbol,
-            interval: candle.interval,
-            side,
-            entryPrice: candle.close,
-            timestamp: candle.closeTime,
-          });
+        if (!position) {
+          if (signal.signal === 'OPEN_LONG' || signal.signal === 'OPEN_SHORT') {
+            const side = signal.signal === 'OPEN_LONG' ? 'LONG' : 'SHORT';
+            const approval = riskManager.approveOpenPosition({
+              symbol: candle.symbol,
+              interval: candle.interval,
+              strategyId: strategy.id,
+              side,
+              entryPrice: candle.close,
+              timestamp: candle.closeTime,
+            });
 
-          if (approval.status === 'APPROVED') {
-            if (side === 'LONG') {
-              trader.tryOpenLong(
-                candle.symbol,
-                candle.interval,
-                candle.close,
-                candle.closeTime,
-                signal.reason,
-                approval.approvedSizeUsdt,
-              );
-            } else {
+            if (approval.status === 'APPROVED') {
+              if (side === 'LONG') {
+                trader.tryOpenLong(
+                  candle.symbol,
+                  candle.interval,
+                  strategy.id,
+                  strategy.name,
+                  candle.close,
+                  candle.closeTime,
+                  signal.reason,
+                  approval.approvedSizeUsdt,
+                );
+              } else {
+                trader.tryOpenShort(
+                  candle.symbol,
+                  candle.interval,
+                  strategy.id,
+                  strategy.name,
+                  candle.close,
+                  candle.closeTime,
+                  signal.reason,
+                  approval.approvedSizeUsdt,
+                );
+              }
+            }
+          }
+
+          continue;
+        }
+
+        if (position.side === 'LONG') {
+          if (signal.signal === 'CLOSE_LONG') {
+            trader.tryCloseLong(
+              candle.symbol,
+              strategy.id,
+              candle.close,
+              candle.closeTime,
+              signal.reason,
+            );
+            strategy.registerTradeClosed(candle.symbol, candle.interval);
+          }
+
+          if (signal.signal === 'REVERSE_TO_SHORT') {
+            trader.tryCloseLong(
+              candle.symbol,
+              strategy.id,
+              candle.close,
+              candle.closeTime,
+              'Backtest: переворот из лонга в шорт',
+            );
+            strategy.registerTradeClosed(candle.symbol, candle.interval);
+
+            const approval = riskManager.approveOpenPosition({
+              symbol: candle.symbol,
+              interval: candle.interval,
+              strategyId: strategy.id,
+              side: 'SHORT',
+              entryPrice: candle.close,
+              timestamp: candle.closeTime,
+            });
+
+            if (approval.status === 'APPROVED') {
               trader.tryOpenShort(
                 candle.symbol,
                 candle.interval,
+                strategy.id,
+                strategy.name,
                 candle.close,
                 candle.closeTime,
                 signal.reason,
@@ -81,50 +144,14 @@ export class BacktestEngineService {
               );
             }
           }
-        }
-      } else if (position.side === 'LONG') {
-        if (signal.signal === 'CLOSE_LONG') {
-          trader.tryCloseLong(
-            candle.symbol,
-            candle.close,
-            candle.closeTime,
-            signal.reason,
-          );
-          strategy.registerTradeClosed(candle.symbol, candle.interval);
+
+          continue;
         }
 
-        if (signal.signal === 'REVERSE_TO_SHORT') {
-          trader.tryCloseLong(
-            candle.symbol,
-            candle.close,
-            candle.closeTime,
-            'Backtest: переворот из лонга в шорт',
-          );
-          strategy.registerTradeClosed(candle.symbol, candle.interval);
-
-          const approval = riskManager.approveOpenPosition({
-            symbol: candle.symbol,
-            interval: candle.interval,
-            side: 'SHORT',
-            entryPrice: candle.close,
-            timestamp: candle.closeTime,
-          });
-
-          if (approval.status === 'APPROVED') {
-            trader.tryOpenShort(
-              candle.symbol,
-              candle.interval,
-              candle.close,
-              candle.closeTime,
-              signal.reason,
-              approval.approvedSizeUsdt,
-            );
-          }
-        }
-      } else {
         if (signal.signal === 'CLOSE_SHORT') {
           trader.tryCloseShort(
             candle.symbol,
+            strategy.id,
             candle.close,
             candle.closeTime,
             signal.reason,
@@ -135,6 +162,7 @@ export class BacktestEngineService {
         if (signal.signal === 'REVERSE_TO_LONG') {
           trader.tryCloseShort(
             candle.symbol,
+            strategy.id,
             candle.close,
             candle.closeTime,
             'Backtest: переворот из шорта в лонг',
@@ -144,6 +172,7 @@ export class BacktestEngineService {
           const approval = riskManager.approveOpenPosition({
             symbol: candle.symbol,
             interval: candle.interval,
+            strategyId: strategy.id,
             side: 'LONG',
             entryPrice: candle.close,
             timestamp: candle.closeTime,
@@ -153,6 +182,8 @@ export class BacktestEngineService {
             trader.tryOpenLong(
               candle.symbol,
               candle.interval,
+              strategy.id,
+              strategy.name,
               candle.close,
               candle.closeTime,
               signal.reason,
@@ -186,5 +217,15 @@ export class BacktestEngineService {
       closedTrades: portfolio.closedTrades,
       equityCurve,
     };
+  }
+
+  private buildStrategies(): TradingStrategy[] {
+    const strategies: TradingStrategy[] = [
+      new StrategyService(),
+      new MeanReversionStrategyService(),
+    ];
+    const enabled = new Set(this.config.enabledStrategies);
+
+    return strategies.filter((strategy) => enabled.has(strategy.id));
   }
 }

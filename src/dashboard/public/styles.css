@@ -100,6 +100,17 @@ button {
   color: white;
 }
 
+.table-action-button {
+  padding: 8px 12px;
+  background: rgba(220, 38, 38, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+}
+
+.table-action-button:hover {
+  background: rgba(220, 38, 38, 0.24);
+}
+
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

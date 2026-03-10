@@ -80,7 +80,10 @@ export class BacktestEngineService {
         }
 
         if (position.side === 'LONG') {
-          if (signal.signal === 'CLOSE_LONG') {
+          if (
+            signal.signal === 'CLOSE_LONG' &&
+            this.config.exitOnStrategySignal
+          ) {
             trader.tryCloseLong(
               candle.symbol,
               strategy.id,
@@ -127,7 +130,10 @@ export class BacktestEngineService {
           continue;
         }
 
-        if (signal.signal === 'CLOSE_SHORT') {
+        if (
+          signal.signal === 'CLOSE_SHORT' &&
+          this.config.exitOnStrategySignal
+        ) {
           trader.tryCloseShort(
             candle.symbol,
             strategy.id,

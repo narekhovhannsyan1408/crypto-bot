@@ -345,7 +345,10 @@ export class BotRunnerService implements OnModuleDestroy {
         }
 
         if (position.side === 'LONG') {
-          if (result.signal === 'CLOSE_LONG') {
+          if (
+            result.signal === 'CLOSE_LONG' &&
+            this.config.exitOnStrategySignal
+          ) {
             tradeHappened =
               this.handleExecutionResult(
                 await this.trader.tryCloseLong(
@@ -379,7 +382,10 @@ export class BotRunnerService implements OnModuleDestroy {
         }
 
         if (position.side === 'SHORT') {
-          if (result.signal === 'CLOSE_SHORT') {
+          if (
+            result.signal === 'CLOSE_SHORT' &&
+            this.config.exitOnStrategySignal
+          ) {
             tradeHappened =
               this.handleExecutionResult(
                 await this.trader.tryCloseShort(
@@ -484,9 +490,7 @@ export class BotRunnerService implements OnModuleDestroy {
         }
       }
 
-      if (!tradeHappened) {
-        this.printPortfolio(candle.symbol);
-      }
+      this.printPortfolio(candle.symbol);
     } catch (error) {
       this.logger.logError('Ошибка обработки свечи', error);
     }
@@ -683,7 +687,12 @@ export class BotRunnerService implements OnModuleDestroy {
           Number(value.toFixed(6)),
         ]),
       ),
-      рискМенеджмент: this.riskManager.getRiskState(),
+      рискМенеджмент: {
+        ...this.riskManager.getRiskState(),
+        режимВыхода: this.config.exitOnStrategySignal
+          ? 'по_сигналу_стратегии'
+          : 'только_по_стопам',
+      },
       свечейБезПозицииПоСимволам: Object.fromEntries(this.candlesWithoutPosition),
     });
   }
@@ -948,8 +957,9 @@ export class BotRunnerService implements OnModuleDestroy {
   getDashboardSnapshot() {
     const snapshot = this.portfolio.getSnapshot();
 
+    const now = Date.now();
     return {
-      generatedAt: Date.now(),
+      generatedAt: now,
       interval: this.activeInterval,
       executionInterval: this.activeInterval,
       confirmationInterval: this.confirmationInterval,
@@ -1033,13 +1043,13 @@ export class BotRunnerService implements OnModuleDestroy {
           стратегия: position.strategyName,
           strategyId: position.strategyId,
           сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
-          ценаВхода: Number(position.entryPrice.toFixed(2)),
+          ценаВхода: Number(position.entryPrice.toFixed(4)),
           количество: Number(position.quantity.toFixed(8)),
-          стопЦена: Number(position.stopPrice.toFixed(2)),
-          тейкЦена: Number(position.takePrice.toFixed(2)),
+          стопЦена: Number(position.stopPrice.toFixed(4)),
+          тейкЦена: Number(position.takePrice.toFixed(4)),
           текущаяЦена: Number(
             (this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice).toFixed(
-              2,
+              4,
             ),
           ),
           плавающийРезультат: Number(
@@ -1055,7 +1065,12 @@ export class BotRunnerService implements OnModuleDestroy {
           ]),
         ),
       },
-      рискМенеджмент: this.riskManager.getRiskState(),
+      рискМенеджмент: {
+        ...this.riskManager.getRiskState(),
+        режимВыхода: this.config.exitOnStrategySignal
+          ? 'по_сигналу_стратегии'
+          : 'только_по_стопам',
+      },
       scannerTop: this.lastScanTop.map((item) => this.translateScannedSymbol(item)),
     };
   }

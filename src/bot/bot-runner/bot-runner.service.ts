@@ -8,6 +8,11 @@ import {
   SymbolScannerService,
 } from '../../scanner/symbol-scanner/symbol-scanner.service';
 import { HigherTimeframeConfirmationService } from '../../strategy/higher-timeframe-confirmation/higher-timeframe-confirmation.service';
+import {
+  StrategyCandidateDecision,
+  StrategyArbitrationService,
+  StrategyOpenCandidate,
+} from '../../strategy/strategy-arbitration/strategy-arbitration.service';
 import { StrategyRegistryService } from '../../strategy/strategy-registry/strategy-registry.service';
 import { StrategyResult, TradingStrategy } from '../../strategy/types';
 import { ExecutionGatewayService } from '../../trader/execution-gateway/execution-gateway.service';
@@ -27,6 +32,18 @@ export class BotRunnerService implements OnModuleDestroy {
       ? this.config.confirmationInterval
       : null;
   private lastScanTop: ScannedSymbol[] = [];
+  private lastStrategySelection:
+    | {
+        timestamp: number;
+        symbol: string;
+        selectedStrategyId: string | null;
+        selectedStrategyName: string | null;
+        selectedSide: 'LONG' | 'SHORT' | null;
+        selectedScore: number | null;
+        reason: string;
+        candidates: StrategyCandidateDecision[];
+      }
+    | null = null;
   private scannerInterval?: NodeJS.Timeout;
   private scannerInProgress = false;
   private marketStarted = false;
@@ -34,6 +51,7 @@ export class BotRunnerService implements OnModuleDestroy {
   constructor(
     private readonly market: BinanceMarketService,
     private readonly strategyRegistry: StrategyRegistryService,
+    private readonly strategyArbitration: StrategyArbitrationService,
     private readonly confirmation: HigherTimeframeConfirmationService,
     private readonly trader: ExecutionGatewayService,
     private readonly portfolio: PortfolioService,
@@ -277,6 +295,7 @@ export class BotRunnerService implements OnModuleDestroy {
       const strategies = this.strategyRegistry.getStrategies();
       let tradeHappened = false;
       const positionsOnSymbol = this.portfolio.getPositionsForSymbol(candle.symbol);
+      const openCandidates: StrategyOpenCandidate[] = [];
 
       if (positionsOnSymbol.length === 0) {
         this.incrementIdleCounter(candle.symbol);
@@ -307,15 +326,19 @@ export class BotRunnerService implements OnModuleDestroy {
 
         if (!position) {
           if (result.signal === 'OPEN_LONG') {
-            tradeHappened =
-              (await this.tryOpenWithRisk(candle, strategy, 'LONG', result.reason)) ||
-              tradeHappened;
+            openCandidates.push({
+              strategy,
+              result,
+              side: 'LONG',
+            });
           }
 
           if (result.signal === 'OPEN_SHORT') {
-            tradeHappened =
-              (await this.tryOpenWithRisk(candle, strategy, 'SHORT', result.reason)) ||
-              tradeHappened;
+            openCandidates.push({
+              strategy,
+              result,
+              side: 'SHORT',
+            });
           }
 
           continue;
@@ -387,6 +410,77 @@ export class BotRunnerService implements OnModuleDestroy {
             );
             tradeHappened = closeExecuted || openExecuted || tradeHappened;
           }
+        }
+      }
+
+      if (openCandidates.length > 0) {
+        const selectionDecision = this.strategyArbitration.selectCandidate(
+          candle,
+          openCandidates,
+          this.trader.getExecutionStatus(),
+        );
+        const selectedCandidate =
+          selectionDecision.selectedStrategyId === null
+            ? null
+            : openCandidates.find(
+                (candidate) =>
+                  candidate.strategy.id === selectionDecision.selectedStrategyId &&
+                  candidate.side === selectionDecision.selectedSide,
+              ) ?? null;
+
+        this.lastStrategySelection = {
+          timestamp: candle.closeTime,
+          symbol: selectionDecision.symbol,
+          selectedStrategyId: selectionDecision.selectedStrategyId,
+          selectedStrategyName: selectionDecision.selectedStrategyName,
+          selectedSide: selectionDecision.selectedSide,
+          selectedScore: selectionDecision.selectedScore,
+          reason: selectionDecision.reason,
+          candidates: selectionDecision.candidates,
+        };
+
+        if (selectedCandidate) {
+          this.logger.logInfo('Автовыбор стратегии для новой сделки', {
+            символ: candle.symbol,
+            стратегия: selectedCandidate.strategy.name,
+            strategyId: selectedCandidate.strategy.id,
+            сторона: selectedCandidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+            режимРынка: selectedCandidate.result.marketRegime ?? 'не определён',
+            оценкаВхода: Number((selectionDecision.selectedScore ?? 0).toFixed(2)),
+            причина: selectionDecision.reason,
+            кандидаты: selectionDecision.candidates.map((candidate) => ({
+              стратегия: candidate.strategyName,
+              strategyId: candidate.strategyId,
+              сторона: candidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+              статус: candidate.status === 'selected' ? 'выбрана' : 'отклонена',
+              режимРынка: candidate.marketRegime ?? 'не определён',
+              entryScore: Number(candidate.entryScore.toFixed(2)),
+              arbitrationScore: Number(candidate.arbitrationScore.toFixed(2)),
+              причина: candidate.reason,
+            })),
+          });
+
+          tradeHappened =
+            (await this.tryOpenWithRisk(
+              candle,
+              selectedCandidate.strategy,
+              selectedCandidate.side,
+              selectedCandidate.result.reason,
+            )) || tradeHappened;
+        } else {
+          this.logger.logInfo('Автовыбор стратегии не нашёл допустимый вход', {
+            символ: candle.symbol,
+            кандидаты: selectionDecision.candidates.map((candidate) => ({
+              стратегия: candidate.strategyName,
+              strategyId: candidate.strategyId,
+              сторона: candidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+              режимРынка: candidate.marketRegime ?? 'не определён',
+              entryScore: Number(candidate.entryScore.toFixed(2)),
+              arbitrationScore: Number(candidate.arbitrationScore.toFixed(2)),
+              причина: candidate.reason,
+            })),
+            причина: selectionDecision.reason,
+          });
         }
       }
 
@@ -860,6 +954,43 @@ export class BotRunnerService implements OnModuleDestroy {
       executionInterval: this.activeInterval,
       confirmationInterval: this.confirmationInterval,
       confirmationMode: this.config.confirmationMode,
+      strategySelectionMode: 'auto_best_signal',
+      activeStrategies: this.strategyRegistry.getStrategies().map((strategy) => ({
+        id: strategy.id,
+        name: strategy.name,
+      })),
+      strategySelection: this.lastStrategySelection
+        ? {
+            время: this.lastStrategySelection.timestamp,
+            символ: this.lastStrategySelection.symbol,
+            выбраннаяСтратегия:
+              this.lastStrategySelection.selectedStrategyName ??
+              this.lastStrategySelection.selectedStrategyId ??
+              'нет',
+            strategyId: this.lastStrategySelection.selectedStrategyId,
+            сторона:
+              this.lastStrategySelection.selectedSide === 'LONG'
+                ? 'ЛОНГ'
+                : this.lastStrategySelection.selectedSide === 'SHORT'
+                  ? 'ШОРТ'
+                  : 'нет',
+            оценка:
+              typeof this.lastStrategySelection.selectedScore === 'number'
+                ? Number(this.lastStrategySelection.selectedScore.toFixed(2))
+                : null,
+            причина: this.lastStrategySelection.reason,
+            кандидаты: this.lastStrategySelection.candidates.map((candidate) => ({
+              стратегия: candidate.strategyName,
+              strategyId: candidate.strategyId,
+              сторона: candidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+              статус: candidate.status === 'selected' ? 'выбрана' : 'отклонена',
+              режимРынка: candidate.marketRegime ?? 'не определён',
+              entryScore: Number(candidate.entryScore.toFixed(2)),
+              arbitrationScore: Number(candidate.arbitrationScore.toFixed(2)),
+              причина: candidate.reason,
+            })),
+          }
+        : null,
       execution: this.trader.getExecutionStatus(),
       watchedSymbols: [...this.watchedSymbols],
       idleCountersBySymbol: Object.fromEntries(this.candlesWithoutPosition),

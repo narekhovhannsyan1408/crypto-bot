@@ -8,6 +8,8 @@ export type StrategyResult = {
   signal: TradeSignal;
   reason: string;
   indicators?: StrategyIndicators;
+  entryScore?: number;
+  marketRegime?: string;
 };
 
 export type TradingStrategy = {

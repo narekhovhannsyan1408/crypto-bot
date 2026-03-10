@@ -2,24 +2,25 @@ import { Injectable } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
 import { Candle } from '../../market/types';
 import { PositionSide } from '../../trader/types';
-import { StrategyResult, TradingStrategy } from '../types';
 import {
   StrategyState,
+  average,
   calculateCoreIndicators,
   pushClosedCandle,
   seedClosedCandles,
 } from '../strategy-utils';
+import { StrategyResult, TradingStrategy } from '../types';
 
 @Injectable()
-export class MeanReversionStrategyService implements TradingStrategy {
-  readonly id = 'mean_reversion';
-  readonly name = 'Mean Reversion';
+export class VolumeSpikeReversalStrategyService implements TradingStrategy {
+  readonly id = 'volume_spike_reversal';
+  readonly name = 'Volume Spike Reversal';
 
   private readonly config = getBotConfig();
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 5, this.config.rsiPeriod + 5, 25);
+    return Math.max(this.config.emaSlowPeriod + 6, this.config.rsiPeriod + 8, 26);
   }
 
   getConfirmationPolicy() {
@@ -28,7 +29,6 @@ export class MeanReversionStrategyService implements TradingStrategy {
 
   seedHistory(symbol: string, interval: string, candles: Candle[]) {
     const closedCandles = seedClosedCandles(candles);
-
     this.states.set(this.makeKey(symbol, interval), {
       candles: closedCandles,
       barsSeen: closedCandles.length,
@@ -57,7 +57,7 @@ export class MeanReversionStrategyService implements TradingStrategy {
     if (state.candles.length < warmupBars) {
       return {
         signal: 'HOLD',
-        reason: `Прогрев индикаторов стратегии mean reversion: ${state.candles.length}/${warmupBars}`,
+        reason: `Прогрев volume spike reversal: ${state.candles.length}/${warmupBars}`,
       };
     }
 
@@ -69,125 +69,120 @@ export class MeanReversionStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы mean reversion ещё не готовы' };
+      return { signal: 'HOLD', reason: 'Индикаторы volume spike reversal ещё не готовы' };
     }
 
-    const { emaSlow, emaFast, rsi, atr, atrPct, trendStrengthPct } = core;
-    const deviationPct = (candle.close - emaSlow) / emaSlow;
+    const averageVolume = average(state.candles.slice(-21, -1).map((item) => item.volume));
+    const volumeRatio = averageVolume > 0 ? candle.volume / averageVolume : 1;
+    const candleRange = Math.max(candle.high - candle.low, 1e-9);
+    const upperWickPct = (candle.high - Math.max(candle.open, candle.close)) / candleRange;
+    const lowerWickPct = (Math.min(candle.open, candle.close) - candle.low) / candleRange;
+    const bodyPct = Math.abs(candle.close - candle.open) / candleRange;
     const indicators = {
-      emaFast,
-      emaSlow,
-      rsi,
-      atr,
-      atrPct,
-      deviationPct,
+      ...core,
+      volumeRatio,
+      upperWickPct,
+      lowerWickPct,
+      bodyPct,
     };
 
     if (!positionSide && this.isInCooldown(state)) {
       return {
         signal: 'HOLD',
-        reason: `Cooldown mean reversion после сделки: ${this.config.cooldownCandles} свечей`,
+        reason: `Cooldown volume spike reversal: ${this.config.cooldownCandles} свечей`,
         indicators,
       };
     }
 
-    if (atrPct < this.config.minAtrPct || atrPct > this.config.maxAtrPct) {
-      return {
-        signal: 'HOLD',
-        reason: 'Mean reversion пропускает рынок из-за неподходящей волатильности',
-        indicators,
-      };
-    }
-
-    const oversoldLong = deviationPct < -0.003 && rsi < 35;
-    const overboughtShort = deviationPct > 0.003 && rsi > 65;
-    const meanRecovered = Math.abs(deviationPct) < 0.0008;
+    const bullishReversal =
+      volumeRatio > 1.8 &&
+      lowerWickPct > 0.38 &&
+      bodyPct < 0.52 &&
+      core.rsi < 42;
+    const bearishReversal =
+      volumeRatio > 1.8 &&
+      upperWickPct > 0.38 &&
+      bodyPct < 0.52 &&
+      core.rsi > 58;
 
     if (!positionSide) {
-      if (oversoldLong) {
+      if (bullishReversal) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Mean reversion long: цена сильно ниже среднего и RSI перепродан',
+          reason: 'Volume spike reversal long: всплеск объёма и выкуп нижней тени',
           indicators,
           entryScore:
-            Math.abs(deviationPct) * 10000 +
-            (35 - rsi) +
-            Math.max(0, 0.006 - trendStrengthPct) * 7000,
-          marketRegime: 'range_oversold',
+            volumeRatio * 15 +
+            lowerWickPct * 100 +
+            Math.max(0, 42 - core.rsi) +
+            Math.max(0, 0.003 - core.trendStrengthPct) * 5000,
+          marketRegime: 'reversal_bullish',
         };
       }
 
-      if (overboughtShort) {
+      if (bearishReversal) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Mean reversion short: цена сильно выше среднего и RSI перекуплен',
+          reason: 'Volume spike reversal short: всплеск объёма и продажа от верхней тени',
           indicators,
           entryScore:
-            Math.abs(deviationPct) * 10000 +
-            (rsi - 65) +
-            Math.max(0, 0.006 - trendStrengthPct) * 7000,
-          marketRegime: 'range_overbought',
+            volumeRatio * 15 +
+            upperWickPct * 100 +
+            Math.max(0, core.rsi - 58) +
+            Math.max(0, 0.003 - core.trendStrengthPct) * 5000,
+          marketRegime: 'reversal_bearish',
         };
       }
 
       return {
         signal: 'HOLD',
-        reason: 'Mean reversion не видит экстремума',
+        reason: 'Volume spike reversal не видит качественную разворотную свечу',
         indicators,
       };
     }
 
     if (positionSide === 'LONG') {
-      if (overboughtShort) {
+      if (bearishReversal && core.rsi > 56) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Mean reversion: long экстремум исчерпан и сформирован short-экстремум',
+          reason: 'Volume spike reversal: рынок показал сильный bearish rejection',
           indicators,
         };
       }
 
-      if (meanRecovered || rsi > 52) {
+      if (core.rsi > 54 || upperWickPct > 0.42) {
         return {
           signal: 'CLOSE_LONG',
-          reason: 'Mean reversion закрывает long после возврата к среднему',
+          reason: 'Volume spike reversal закрывает long: откат реализован',
           indicators,
         };
       }
 
-      return {
-        signal: 'HOLD',
-        reason: 'Mean reversion удерживает long',
-        indicators,
-      };
+      return { signal: 'HOLD', reason: 'Volume spike reversal удерживает long', indicators };
     }
 
-    if (oversoldLong) {
+    if (bullishReversal && core.rsi < 44) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Mean reversion: short экстремум исчерпан и сформирован long-экстремум',
+        reason: 'Volume spike reversal: рынок показал сильный bullish rejection',
         indicators,
       };
     }
 
-    if (meanRecovered || rsi < 48) {
+    if (core.rsi < 46 || lowerWickPct > 0.42) {
       return {
         signal: 'CLOSE_SHORT',
-        reason: 'Mean reversion закрывает short после возврата к среднему',
+        reason: 'Volume spike reversal закрывает short: откат реализован',
         indicators,
       };
     }
 
-    return {
-      signal: 'HOLD',
-      reason: 'Mean reversion удерживает short',
-      indicators,
-    };
+    return { signal: 'HOLD', reason: 'Volume spike reversal удерживает short', indicators };
   }
 
   private getOrCreateState(symbol: string, interval: string) {
     const key = this.makeKey(symbol, interval);
     const existing = this.states.get(key);
-
     if (existing) {
       return existing;
     }

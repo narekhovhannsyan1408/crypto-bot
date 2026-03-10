@@ -71,6 +71,7 @@ export type BotConfig = {
   maxDrawdownStopPct: number;
   maxDailyLossPct: number;
   maxConsecutiveLosses: number;
+  consecutiveLossesCooldownMinutes: number;
   maxPositionsPerSymbol: number;
   maxPositionsPerStrategy: number;
   allowOppositePositionsSameSymbol: boolean;
@@ -153,6 +154,10 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_MAX_CONSECUTIVE_LOSSES,
       4,
     ),
+    consecutiveLossesCooldownMinutes: numberValue(
+      process.env.BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES,
+      60,
+    ),
     maxPositionsPerSymbol: numberValue(process.env.BOT_MAX_POSITIONS_PER_SYMBOL, 2),
     maxPositionsPerStrategy: numberValue(
       process.env.BOT_MAX_POSITIONS_PER_STRATEGY,
@@ -161,7 +166,7 @@ export const getBotConfig = (): BotConfig => {
     allowOppositePositionsSameSymbol:
       process.env.BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL === 'true',
     enabledStrategies: (process.env.BOT_ENABLED_STRATEGIES ||
-      'momentum_trend,mean_reversion')
+      'momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher')
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),

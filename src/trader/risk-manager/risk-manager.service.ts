@@ -90,10 +90,21 @@ export class RiskManagerService {
     }
 
     if (this.portfolio.consecutiveLosses >= this.config.maxConsecutiveLosses) {
-      return {
-        status: 'DENIED',
-        reason: 'Превышен лимит подряд убыточных сделок',
-      };
+      const lastClosed = this.portfolio.getLastClosedTrade();
+      const cooldownMs =
+        this.config.consecutiveLossesCooldownMinutes * 60 * 1000;
+      const now = request.timestamp;
+      const lastClosedAt = lastClosed?.closedAt ?? 0;
+
+      if (now - lastClosedAt >= cooldownMs) {
+        // После cooldown-периода без торговли разрешаем ещё одну попытку
+        // (иначе бот застревает: не может открыть → не может закрыть в плюс → счётчик не сбрасывается)
+      } else {
+        return {
+          status: 'DENIED',
+          reason: 'Превышен лимит подряд убыточных сделок',
+        };
+      }
     }
 
     const dailyRealizedPnl = this.portfolio.getDailyRealizedPnl(request.timestamp);
@@ -209,6 +220,7 @@ export class RiskManagerService {
         (this.config.maxDrawdownStopPct * 100).toFixed(2),
       ),
       лимитПодрядУбыточныхСделок: this.config.maxConsecutiveLosses,
+      cooldownПодрядУбытковМинут: this.config.consecutiveLossesCooldownMinutes,
     };
   }
 

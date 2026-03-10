@@ -16,6 +16,9 @@ const elements = {
   positionsCount: document.getElementById('positions-count'),
   universeList: document.getElementById('universe-list'),
   riskState: document.getElementById('risk-state'),
+  strategySelectionSummary: document.getElementById('strategy-selection-summary'),
+  activeStrategiesList: document.getElementById('active-strategies-list'),
+  strategyCandidatesList: document.getElementById('strategy-candidates-list'),
   tradesTable: document.getElementById('trades-table'),
   logsContainer: document.getElementById('logs-container'),
   logFilterGroup: document.getElementById('log-filter-group'),
@@ -67,6 +70,11 @@ function connect() {
     }
 
     if (message.type === 'command_result') {
+      if (message.payload?.snapshot) {
+        state.runtime = message.payload.snapshot;
+        renderAll();
+      }
+
       alert(
         typeof message.payload === 'object'
           ? JSON.stringify(message.payload, null, 2)
@@ -235,6 +243,7 @@ function renderAll() {
   renderPositions();
   renderUniverse();
   renderRiskState();
+  renderStrategySelection();
   renderTrades();
   renderLogFilters();
   renderLogs();
@@ -368,6 +377,69 @@ function renderRiskState() {
         </div>
       `,
     )
+    .join('');
+}
+
+function renderStrategySelection() {
+  const selection = state.runtime?.strategySelection;
+  const activeStrategies = state.runtime?.activeStrategies || [];
+
+  elements.activeStrategiesList.innerHTML = activeStrategies
+    .map((strategy) => `<li>${escapeHtml(strategy.name || strategy.id || '-')}</li>`)
+    .join('');
+
+  if (!selection) {
+    elements.strategySelectionSummary.innerHTML = `
+      <div class="strategy-summary-card">
+        <div class="muted">Автоподбор ещё не делал выбор. Блок заполнится после первого конфликта кандидатов или первого входа.</div>
+      </div>
+    `;
+    elements.strategyCandidatesList.innerHTML = `
+      <div class="candidate-card">
+        <div class="muted">Пока нет данных по кандидатам.</div>
+      </div>
+    `;
+    return;
+  }
+
+  elements.strategySelectionSummary.innerHTML = `
+    <div class="strategy-summary-card">
+      <div class="strategy-summary-head">
+        <div class="selection-badge ${selection.сторона === 'ЛОНГ' ? 'long' : selection.сторона === 'ШОРТ' ? 'short' : 'neutral'}">
+          ${escapeHtml(selection.сторона || 'нет сигнала')}
+        </div>
+        <div class="muted">${formatDate(selection.время)}</div>
+      </div>
+      <div class="strategy-summary-title">${escapeHtml(selection.выбраннаяСтратегия || 'нет')}</div>
+      <div class="kv-list">
+        <div class="kv-row"><span>Символ</span><strong>${escapeHtml(selection.символ || '-')}</strong></div>
+        <div class="kv-row"><span>Strategy ID</span><strong>${escapeHtml(selection.strategyId || '-')}</strong></div>
+        <div class="kv-row"><span>Итоговая оценка</span><strong>${formatNumber(selection.оценка)}</strong></div>
+        <div class="kv-row"><span>Режим выбора</span><strong>${escapeHtml(state.runtime?.strategySelectionMode || '-')}</strong></div>
+      </div>
+      <div class="strategy-summary-reason">${escapeHtml(selection.причина || '-')}</div>
+    </div>
+  `;
+
+  elements.strategyCandidatesList.innerHTML = (selection.кандидаты || [])
+    .map((candidate) => {
+      const statusClass = candidate.статус === 'выбрана' ? 'selected' : 'rejected';
+      return `
+        <div class="candidate-card ${statusClass}">
+          <div class="candidate-head">
+            <strong>${escapeHtml(candidate.стратегия || candidate.strategyId || '-')}</strong>
+            <span class="candidate-status">${escapeHtml(candidate.статус || '-')}</span>
+          </div>
+          <div class="candidate-grid">
+            <div class="kv-row"><span>Сторона</span><strong>${escapeHtml(candidate.сторона || '-')}</strong></div>
+            <div class="kv-row"><span>Режим рынка</span><strong>${escapeHtml(candidate.режимРынка || '-')}</strong></div>
+            <div class="kv-row"><span>Entry score</span><strong>${formatNumber(candidate.entryScore)}</strong></div>
+            <div class="kv-row"><span>Arbitration score</span><strong>${formatNumber(candidate.arbitrationScore)}</strong></div>
+          </div>
+          <div class="candidate-reason">${escapeHtml(candidate.причина || '-')}</div>
+        </div>
+      `;
+    })
     .join('');
 }
 

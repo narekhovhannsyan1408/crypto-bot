@@ -5,15 +5,25 @@ import { Candle } from '../types';
 @Injectable()
 export class BinanceMarketService {
   private ws?: WebSocket;
+  private reconnectTimeout?: NodeJS.Timeout;
+  private isReconnecting = false;
+  private currentStream?: string;
+  private candleHandler?: (candle: Candle) => void;
+  private manualSwitchInProgress = false;
 
-  connect(onCandle: (candle: Candle) => void) {
-    const stream = process.env.BOT_STREAM || 'btcusdt@kline_1m';
+  connect(stream: string, onCandle: (candle: Candle) => void) {
+    this.currentStream = stream;
+    this.candleHandler = onCandle;
+
     const url = `wss://stream.testnet.binance.vision/ws/${stream}`;
+
+    console.log(`[РЫНОК] Пытаемся подключиться к ${url}`);
 
     this.ws = new WebSocket(url);
 
     this.ws.on('open', () => {
-      console.log(`[РЫНОК] Подключено к ${url}`);
+      this.isReconnecting = false;
+      console.log(`[РЫНОК] Успешное подключение к ${url}`);
     });
 
     this.ws.on('message', (raw: WebSocket.RawData) => {
@@ -43,13 +53,78 @@ export class BinanceMarketService {
       }
     });
 
-    this.ws.on('close', () => {
-      console.log('[РЫНОК] Соединение закрыто. Переподключение через 3 секунды...');
-      setTimeout(() => this.connect(onCandle), 3000);
+    this.ws.on('close', (code: number, reason: Buffer) => {
+      const reasonText = reason?.toString?.() || 'без причины';
+
+      console.log(
+        `[РЫНОК] Соединение закрыто. Код=${code}, причина=${reasonText}`,
+      );
+
+      if (this.manualSwitchInProgress) {
+        this.manualSwitchInProgress = false;
+        return;
+      }
+
+      this.scheduleReconnect();
     });
 
     this.ws.on('error', (error) => {
       console.error('[РЫНОК] Ошибка WebSocket:', error);
     });
+  }
+
+  switchSymbol(symbol: string, interval = '1m') {
+    const nextStream = `${symbol.toLowerCase()}@kline_${interval}`;
+
+    if (this.currentStream === nextStream) {
+      console.log(`[РЫНОК] Символ уже активен: ${symbol}`);
+      return;
+    }
+
+    console.log(`[РЫНОК] Переключение стрима на ${symbol}`);
+
+    this.currentStream = nextStream;
+    this.manualSwitchInProgress = true;
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    if (this.ws) {
+      try {
+        this.ws.removeAllListeners();
+        this.ws.close();
+      } catch (error) {
+        console.error('[РЫНОК] Ошибка при закрытии старого соединения:', error);
+      }
+    }
+
+    if (this.candleHandler) {
+      this.connect(nextStream, this.candleHandler);
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.isReconnecting) {
+      console.log('[РЫНОК] Переподключение уже запланировано');
+      return;
+    }
+
+    if (!this.currentStream || !this.candleHandler) {
+      console.log('[РЫНОК] Нет данных для переподключения');
+      return;
+    }
+
+    this.isReconnecting = true;
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    console.log('[РЫНОК] Переподключение через 3 секунды...');
+
+    this.reconnectTimeout = setTimeout(() => {
+      this.connect(this.currentStream!, this.candleHandler!);
+    }, 3000);
   }
 }

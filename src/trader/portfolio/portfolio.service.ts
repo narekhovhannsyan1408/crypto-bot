@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 
+export type PositionSide = 'LONG' | 'SHORT';
+
 export type Position = {
-  side: 'LONG' | 'SHORT';
+  side: PositionSide;
   entryPrice: number;
   quantity: number;
   investedUsdt: number;
@@ -23,21 +25,24 @@ export class PortfolioService {
   }
 
   getEquity(currentPrice?: number) {
-    if (!this.position || !currentPrice) {
+    if (!this.position || currentPrice === undefined) {
       return this.balance;
     }
 
-    let unrealized = 0;
+    const feePct = Number(process.env.BOT_FEE_PCT || 0.001);
+    const exitFee = currentPrice * this.position.quantity * feePct;
+
+    let gross = 0;
 
     if (this.position.side === 'LONG') {
-      unrealized =
-        (currentPrice - this.position.entryPrice) * this.position.quantity;
+      gross = (currentPrice - this.position.entryPrice) * this.position.quantity;
     } else {
-      unrealized =
-        (this.position.entryPrice - currentPrice) * this.position.quantity;
+      gross = (this.position.entryPrice - currentPrice) * this.position.quantity;
     }
 
-    return this.balance + unrealized;
+    const unrealizedNet = gross - exitFee;
+
+    return this.balance + unrealizedNet;
   }
 
   registerClosedTrade(pnlNet: number) {

@@ -16,4 +16,6 @@ export type TradeSignal =
   | 'CLOSE_LONG'
   | 'OPEN_SHORT'
   | 'CLOSE_SHORT'
+  | 'REVERSE_TO_LONG'
+  | 'REVERSE_TO_SHORT'
   | 'HOLD';

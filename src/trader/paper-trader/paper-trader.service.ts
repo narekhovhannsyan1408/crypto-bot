@@ -17,11 +17,12 @@ export class PaperTraderService {
       return { action: 'SKIP', reason: 'Недостаточно баланса' };
     }
 
-    const fee = positionSizeUsdt * feePct;
-    const netUsdt = positionSizeUsdt - fee;
+    const entryFee = positionSizeUsdt * feePct;
+    const netUsdt = positionSizeUsdt - entryFee;
     const quantity = netUsdt / price;
 
     this.portfolio.balance -= positionSizeUsdt;
+
     this.portfolio.position = {
       side: 'LONG',
       entryPrice: price,
@@ -35,20 +36,24 @@ export class PaperTraderService {
       side: 'LONG',
       price,
       quantity,
-      fee,
+      fee: entryFee,
       reason,
     };
   }
 
   tryCloseLong(price: number, timestamp: number, reason: string) {
     const position = this.portfolio.position;
-    if (!position || position.side !== 'LONG') return null;
+
+    if (!position || position.side !== 'LONG') {
+      return null;
+    }
 
     const feePct = Number(process.env.BOT_FEE_PCT || 0.001);
 
     const grossValue = position.quantity * price;
-    const fee = grossValue * feePct;
-    const netValue = grossValue - fee;
+    const exitFee = grossValue * feePct;
+    const netValue = grossValue - exitFee;
+
     const pnlNet = netValue - position.investedUsdt;
 
     this.portfolio.balance += netValue;
@@ -62,7 +67,7 @@ export class PaperTraderService {
       exitPrice: price,
       quantity: position.quantity,
       pnlNet,
-      fee,
+      fee: exitFee,
       openedAt: position.openedAt,
       closedAt: timestamp,
       reason,
@@ -81,11 +86,12 @@ export class PaperTraderService {
       return { action: 'SKIP', reason: 'Недостаточно баланса' };
     }
 
-    const fee = positionSizeUsdt * feePct;
-    const netUsdt = positionSizeUsdt - fee;
+    const entryFee = positionSizeUsdt * feePct;
+    const netUsdt = positionSizeUsdt - entryFee;
     const quantity = netUsdt / price;
 
     this.portfolio.balance -= positionSizeUsdt;
+
     this.portfolio.position = {
       side: 'SHORT',
       entryPrice: price,
@@ -99,22 +105,25 @@ export class PaperTraderService {
       side: 'SHORT',
       price,
       quantity,
-      fee,
+      fee: entryFee,
       reason,
     };
   }
 
   tryCloseShort(price: number, timestamp: number, reason: string) {
     const position = this.portfolio.position;
-    if (!position || position.side !== 'SHORT') return null;
+
+    if (!position || position.side !== 'SHORT') {
+      return null;
+    }
 
     const feePct = Number(process.env.BOT_FEE_PCT || 0.001);
 
     const grossPnl = (position.entryPrice - price) * position.quantity;
     const exitNotional = position.quantity * price;
-    const fee = exitNotional * feePct;
-    const pnlNet = grossPnl - fee;
+    const exitFee = exitNotional * feePct;
 
+    const pnlNet = grossPnl - exitFee;
     const returnedCapital = position.investedUsdt + pnlNet;
 
     this.portfolio.balance += returnedCapital;
@@ -128,7 +137,7 @@ export class PaperTraderService {
       exitPrice: price,
       quantity: position.quantity,
       pnlNet,
-      fee,
+      fee: exitFee,
       openedAt: position.openedAt,
       closedAt: timestamp,
       reason,
@@ -137,7 +146,10 @@ export class PaperTraderService {
 
   checkStops(price: number, timestamp: number) {
     const position = this.portfolio.position;
-    if (!position) return null;
+
+    if (!position) {
+      return null;
+    }
 
     const stopLossPct = Number(process.env.BOT_STOP_LOSS_PCT || 0.012);
     const takeProfitPct = Number(process.env.BOT_TAKE_PROFIT_PCT || 0.02);

@@ -147,10 +147,16 @@ export class BotRunnerService implements OnModuleDestroy {
         причина: result.reason,
         индикаторы: result.indicators
           ? {
-              быстраяEma: Number(result.indicators.emaFast.toFixed(6)),
-              медленнаяEma: Number(result.indicators.emaSlow.toFixed(6)),
-              индексRsi: Number(result.indicators.rsi.toFixed(2)),
-              atrВПроцентах: Number((result.indicators.atrPct * 100).toFixed(3)),
+              быстраяСкользящаяСредняя: Number(
+                result.indicators.emaFast.toFixed(6),
+              ),
+              медленнаяСкользящаяСредняя: Number(
+                result.indicators.emaSlow.toFixed(6),
+              ),
+              индексОтносительнойСилы: Number(result.indicators.rsi.toFixed(2)),
+              среднийИстинныйДиапазонВПроцентах: Number(
+                (result.indicators.atrPct * 100).toFixed(3),
+              ),
               силаТрендаВПроцентах: Number(
                 (result.indicators.trendStrengthPct * 100).toFixed(3),
               ),
@@ -360,7 +366,9 @@ export class BotRunnerService implements OnModuleDestroy {
       уплаченоКомиссий: Number(this.portfolio.feesPaid.toFixed(6)),
       капитал: Number(equity.toFixed(6)),
       пиковыйКапитал: Number(this.portfolio.peakEquity.toFixed(6)),
-      максимальнаяПросадкаPct: Number(this.portfolio.maxDrawdownPct.toFixed(2)),
+      максимальнаяПросадкаВПроцентах: Number(
+        this.portfolio.maxDrawdownPct.toFixed(2),
+      ),
       естьОткрытаяПозиция: this.portfolio.hasOpenPosition(),
       текущаяЦена: Number(currentPrice.toFixed(2)),
       сторонаПозиции:
@@ -469,7 +477,7 @@ export class BotRunnerService implements OnModuleDestroy {
     return {
       символ: item.symbol,
       оценка: Number(item.score.toFixed(4)),
-      изменениеЗа24ЧасаPct: Number(item.priceChangePercent.toFixed(2)),
+      изменениеЗа24ЧасаВПроцентах: Number(item.priceChangePercent.toFixed(2)),
       объёмВКотируемойВалюте: Number(item.quoteVolume.toFixed(2)),
       недавнееДвижениеВПроцентах: Number((item.recentMovePct * 100).toFixed(2)),
       внутридневнаяВолатильностьВПроцентах: Number(

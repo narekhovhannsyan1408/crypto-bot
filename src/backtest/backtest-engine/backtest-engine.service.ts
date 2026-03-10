@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
 import { Candle } from '../../market/types';
+import { BreakoutVolatilityStrategyService } from '../../strategy/breakout-volatility/breakout-volatility.strategy.service';
+import { MarketRegimeSwitcherStrategyService } from '../../strategy/market-regime-switcher/market-regime-switcher.strategy.service';
 import { MeanReversionStrategyService } from '../../strategy/mean-reversion/mean-reversion.strategy.service';
+import { RangeScalpingStrategyService } from '../../strategy/range-scalping/range-scalping.strategy.service';
+import { StrategyArbitrationService, StrategyOpenCandidate } from '../../strategy/strategy-arbitration/strategy-arbitration.service';
 import { StrategyService } from '../../strategy/strategy/strategy.service';
+import { TrendPullbackStrategyService } from '../../strategy/trend-pullback/trend-pullback.strategy.service';
 import { TradingStrategy } from '../../strategy/types';
+import { VolumeSpikeReversalStrategyService } from '../../strategy/volume-spike-reversal/volume-spike-reversal.strategy.service';
 import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
@@ -16,6 +22,7 @@ export class BacktestEngineService {
   runBacktest(input: BacktestInput): BacktestReport {
     const portfolio = new PortfolioService();
     const strategies = this.buildStrategies();
+    const arbitration = new StrategyArbitrationService();
     const riskManager = new RiskManagerService(portfolio);
     const trader = new PaperTraderService(portfolio);
 
@@ -54,47 +61,19 @@ export class BacktestEngineService {
         }
       }
 
+      const openCandidates: StrategyOpenCandidate[] = [];
+
       for (const strategy of strategies) {
         const position = portfolio.getPosition(candle.symbol, strategy.id);
         const signal = strategy.onNewCandle(candle, position?.side ?? null);
 
         if (!position) {
           if (signal.signal === 'OPEN_LONG' || signal.signal === 'OPEN_SHORT') {
-            const side = signal.signal === 'OPEN_LONG' ? 'LONG' : 'SHORT';
-            const approval = riskManager.approveOpenPosition({
-              symbol: candle.symbol,
-              interval: candle.interval,
-              strategyId: strategy.id,
-              side,
-              entryPrice: candle.close,
-              timestamp: candle.closeTime,
+            openCandidates.push({
+              strategy,
+              result: signal,
+              side: signal.signal === 'OPEN_LONG' ? 'LONG' : 'SHORT',
             });
-
-            if (approval.status === 'APPROVED') {
-              if (side === 'LONG') {
-                trader.tryOpenLong(
-                  candle.symbol,
-                  candle.interval,
-                  strategy.id,
-                  strategy.name,
-                  candle.close,
-                  candle.closeTime,
-                  signal.reason,
-                  approval.approvedSizeUsdt,
-                );
-              } else {
-                trader.tryOpenShort(
-                  candle.symbol,
-                  candle.interval,
-                  strategy.id,
-                  strategy.name,
-                  candle.close,
-                  candle.closeTime,
-                  signal.reason,
-                  approval.approvedSizeUsdt,
-                );
-              }
-            }
           }
 
           continue;
@@ -193,6 +172,69 @@ export class BacktestEngineService {
         }
       }
 
+      const selectionDecision = arbitration.selectCandidate(
+        candle,
+        openCandidates,
+        {
+          mode: 'paper',
+          marketType: 'futures',
+          label: 'PAPER',
+          canTradeShort: true,
+          liveTradingEnabled: false,
+          usingTestnet: false,
+          allowLiveReal: false,
+          apiConfigured: false,
+          accountConnectivity: 'unknown',
+          quoteAsset: 'USDT',
+          warnings: [],
+        },
+      );
+      const selectedCandidate =
+        selectionDecision.selectedStrategyId === null
+          ? null
+          : openCandidates.find(
+              (candidate) =>
+                candidate.strategy.id === selectionDecision.selectedStrategyId &&
+                candidate.side === selectionDecision.selectedSide,
+            ) ?? null;
+
+      if (selectedCandidate) {
+        const approval = riskManager.approveOpenPosition({
+          symbol: candle.symbol,
+          interval: candle.interval,
+          strategyId: selectedCandidate.strategy.id,
+          side: selectedCandidate.side,
+          entryPrice: candle.close,
+          timestamp: candle.closeTime,
+        });
+
+        if (approval.status === 'APPROVED') {
+          if (selectedCandidate.side === 'LONG') {
+            trader.tryOpenLong(
+              candle.symbol,
+              candle.interval,
+              selectedCandidate.strategy.id,
+              selectedCandidate.strategy.name,
+              candle.close,
+              candle.closeTime,
+              selectedCandidate.result.reason,
+              approval.approvedSizeUsdt,
+            );
+          } else {
+            trader.tryOpenShort(
+              candle.symbol,
+              candle.interval,
+              selectedCandidate.strategy.id,
+              selectedCandidate.strategy.name,
+              candle.close,
+              candle.closeTime,
+              selectedCandidate.result.reason,
+              approval.approvedSizeUsdt,
+            );
+          }
+        }
+      }
+
       const equity = portfolio.getEquity();
       portfolio.trackDrawdown(equity);
       equityCurve.push({
@@ -223,6 +265,11 @@ export class BacktestEngineService {
     const strategies: TradingStrategy[] = [
       new StrategyService(),
       new MeanReversionStrategyService(),
+      new BreakoutVolatilityStrategyService(),
+      new TrendPullbackStrategyService(),
+      new RangeScalpingStrategyService(),
+      new VolumeSpikeReversalStrategyService(),
+      new MarketRegimeSwitcherStrategyService(),
     ];
     const enabled = new Set(this.config.enabledStrategies);
 

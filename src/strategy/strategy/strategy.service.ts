@@ -1,15 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { ATR, EMA, RSI } from 'technicalindicators';
 import { getBotConfig } from '../../config/bot-config';
 import { Candle } from '../../market/types';
 import { PositionSide } from '../../trader/types';
 import { TradingStrategy, StrategyResult } from '../types';
-
-type StrategyState = {
-  candles: Candle[];
-  barsSeen: number;
-  lastExitBarIndex: number | null;
-};
+import {
+  StrategyState,
+  calculateCoreIndicators,
+  pushClosedCandle,
+  seedClosedCandles,
+} from '../strategy-utils';
 
 @Injectable()
 export class StrategyService implements TradingStrategy {
@@ -27,7 +26,7 @@ export class StrategyService implements TradingStrategy {
   }
 
   seedHistory(symbol: string, interval: string, candles: Candle[]) {
-    const closedCandles = candles.filter((candle) => candle.isClosed).slice(-500);
+    const closedCandles = seedClosedCandles(candles);
 
     this.states.set(this.makeKey(symbol, interval), {
       candles: closedCandles,
@@ -54,62 +53,29 @@ export class StrategyService implements TradingStrategy {
     }
 
     const state = this.getOrCreateState(candle.symbol, candle.interval);
-    const lastCandle = state.candles.at(-1);
-
-    if (lastCandle?.closeTime === candle.closeTime) {
-      state.candles[state.candles.length - 1] = candle;
-    } else {
-      state.candles.push(candle);
-      state.barsSeen += 1;
-    }
-
-    if (state.candles.length > 500) {
-      state.candles.shift();
-    }
-
-    const closes = state.candles.map((item) => item.close);
-    const highs = state.candles.map((item) => item.high);
-    const lows = state.candles.map((item) => item.low);
+    pushClosedCandle(state, candle);
 
     const warmupBars = this.getRequiredWarmupCandles();
 
-    if (closes.length < warmupBars) {
+    if (state.candles.length < warmupBars) {
       return {
         signal: 'HOLD',
-        reason: `Прогрев индикаторов: ${closes.length}/${warmupBars}`,
+        reason: `Прогрев индикаторов: ${state.candles.length}/${warmupBars}`,
       };
     }
 
-    const emaFast = EMA.calculate({
-      period: this.config.emaFastPeriod,
-      values: closes,
-    }).at(-1);
-    const emaSlow = EMA.calculate({
-      period: this.config.emaSlowPeriod,
-      values: closes,
-    }).at(-1);
-    const rsi = RSI.calculate({
-      period: this.config.rsiPeriod,
-      values: closes,
-    }).at(-1);
-    const atr = ATR.calculate({
-      period: 14,
-      high: highs,
-      low: lows,
-      close: closes,
-    }).at(-1);
+    const core = calculateCoreIndicators(
+      state.candles,
+      this.config.emaFastPeriod,
+      this.config.emaSlowPeriod,
+      this.config.rsiPeriod,
+    );
 
-    if (
-      emaFast === undefined ||
-      emaSlow === undefined ||
-      rsi === undefined ||
-      atr === undefined
-    ) {
+    if (!core) {
       return { signal: 'HOLD', reason: 'Индикаторы ещё не готовы' };
     }
 
-    const atrPct = atr / candle.close;
-    const trendStrengthPct = Math.abs(emaFast - emaSlow) / candle.close;
+    const { emaFast, emaSlow, rsi, atr, atrPct, trendStrengthPct } = core;
     const indicators = {
       emaFast,
       emaSlow,
@@ -162,6 +128,11 @@ export class StrategyService implements TradingStrategy {
           signal: 'OPEN_LONG',
           reason: 'Long: fast EMA выше slow EMA, RSI подтверждает импульс',
           indicators,
+          entryScore:
+            (rsi - this.config.rsiLongThreshold) +
+            trendStrengthPct * 12000 +
+            atrPct * 5000,
+          marketRegime: 'trend_bullish',
         };
       }
 
@@ -170,6 +141,11 @@ export class StrategyService implements TradingStrategy {
           signal: 'OPEN_SHORT',
           reason: 'Short: fast EMA ниже slow EMA, RSI подтверждает импульс',
           indicators,
+          entryScore:
+            (this.config.rsiShortThreshold - rsi) +
+            trendStrengthPct * 12000 +
+            atrPct * 5000,
+          marketRegime: 'trend_bearish',
         };
       }
 

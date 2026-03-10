@@ -47,6 +47,25 @@ describe('RiskManagerService', () => {
 
   it('denies trade after too many consecutive losses', () => {
     portfolio.consecutiveLosses = 3;
+    portfolio.closedTrades.push({
+      key: 'BTCUSDT:momentum_trend',
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum',
+      side: 'LONG',
+      entryPrice: 100,
+      exitPrice: 99,
+      quantity: 1,
+      investedUsdt: 100,
+      grossPnl: -1,
+      pnlNet: -1,
+      totalFees: 0,
+      exitFee: 0,
+      openedAt: Date.now() - 120000,
+      closedAt: Date.now() - 60000,
+      reason: 'stop',
+    });
 
     const approval = service.approveOpenPosition({
       symbol: 'BTCUSDT',
@@ -58,6 +77,52 @@ describe('RiskManagerService', () => {
     });
 
     expect(approval.status).toBe('DENIED');
+  });
+
+  it('allows trade after consecutive losses when cooldown passed', async () => {
+    process.env.BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES = '60';
+    resetBotConfigCache();
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [RiskManagerService, PortfolioService],
+    }).compile();
+    const svc = moduleRef.get<RiskManagerService>(RiskManagerService);
+    const port = moduleRef.get<PortfolioService>(PortfolioService);
+
+    port.consecutiveLosses = 3;
+    port.closedTrades.push({
+      key: 'BTCUSDT:momentum_trend',
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum',
+      side: 'LONG',
+      entryPrice: 100,
+      exitPrice: 99,
+      quantity: 1,
+      investedUsdt: 100,
+      grossPnl: -1,
+      pnlNet: -1,
+      totalFees: 0,
+      exitFee: 0,
+      openedAt: Date.now() - 120 * 60 * 1000,
+      closedAt: Date.now() - 61 * 60 * 1000,
+      reason: 'stop',
+    });
+
+    const approval = svc.approveOpenPosition({
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      strategyId: 'mean_reversion',
+      side: 'LONG',
+      entryPrice: 100,
+      timestamp: Date.now(),
+    });
+
+    expect(approval.status).toBe('APPROVED');
+
+    delete process.env.BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES;
+    resetBotConfigCache();
   });
 
   it('denies trade when approved size is below minimum position size', () => {

@@ -4,6 +4,7 @@ import { BotLoggerService } from '../../logger/bot-logger/bot-logger.service';
 import { BinanceMarketService } from '../../market/binance-market/binance-market.service';
 import { SymbolScannerService } from '../../scanner/symbol-scanner/symbol-scanner.service';
 import { HigherTimeframeConfirmationService } from '../../strategy/higher-timeframe-confirmation/higher-timeframe-confirmation.service';
+import { StrategyArbitrationService } from '../../strategy/strategy-arbitration/strategy-arbitration.service';
 import { StrategyRegistryService } from '../../strategy/strategy-registry/strategy-registry.service';
 import { ExecutionGatewayService } from '../../trader/execution-gateway/execution-gateway.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
@@ -37,6 +38,40 @@ describe('BotRunnerService', () => {
     getStrategies: jest.fn().mockReturnValue([strategyMock]),
     getStrategyById: jest.fn().mockImplementation((id: string) => {
       return id === strategyMock.id ? strategyMock : null;
+    }),
+  };
+  const strategyArbitrationMock = {
+    selectCandidate: jest.fn().mockImplementation((_: unknown, candidates: any[]) => {
+      if (candidates.length === 0) {
+        return {
+          symbol: 'BTCUSDT',
+          selectedStrategyId: null,
+          selectedStrategyName: null,
+          selectedSide: null,
+          selectedScore: null,
+          reason: 'no candidates',
+          candidates: [],
+        };
+      }
+
+      return {
+        symbol: 'BTCUSDT',
+        selectedStrategyId: candidates[0].strategy.id,
+        selectedStrategyName: candidates[0].strategy.name,
+        selectedSide: candidates[0].side,
+        selectedScore: candidates[0].result?.entryScore ?? 0,
+        reason: 'test selection',
+        candidates: candidates.map((candidate: any, index: number) => ({
+          strategyId: candidate.strategy.id,
+          strategyName: candidate.strategy.name,
+          side: candidate.side,
+          entryScore: candidate.result?.entryScore ?? 0,
+          arbitrationScore: candidate.result?.entryScore ?? 0,
+          marketRegime: candidate.result?.marketRegime ?? null,
+          status: index === 0 ? 'selected' : 'rejected',
+          reason: index === 0 ? 'winner' : 'loser',
+        })),
+      };
     }),
   };
   const traderMock = {
@@ -132,6 +167,7 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -173,6 +209,7 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -216,6 +253,7 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,

@@ -240,8 +240,15 @@ Production-oriented алгоритмический крипто-бот на `Nod
 
 - `momentum_trend` - импульсная трендовая логика на EMA/RSI/ATR
 - `mean_reversion` - возврат к среднему после локального экстремума
+- `breakout_volatility` - вход по пробою диапазона с подтверждением объёма и волатильности
+- `trend_pullback` - вход по откату к EMA внутри уже сформированного тренда
+- `range_scalping` - работа от границ диапазона в слаботрендовом рынке
+- `volume_spike_reversal` - разворотные входы по всплеску объёма и rejection-candle
+- `market_regime_switcher` - адаптивная логика, которая переключается между trend/range сценариями
 
 Каждая стратегия использует своё состояние индикаторов и свою историю по каждому символу.
+
+Важно: бот теперь не обязан открывать сделку по каждой стратегии отдельно. Если несколько стратегий одновременно дают сигнал на открытие, runtime собирает все допустимые варианты и автоматически выбирает лучший вход по `entryScore`, режиму рынка и ограничениям execution layer.
 
 Если включён `BOT_CONFIRMATION_INTERVAL`, старший таймфрейм используется как фильтр подтверждения:
 
@@ -383,6 +390,49 @@ Short рассматривается, если:
 - закрытие при нормализации RSI
 - переворот, если вместо возврата к среднему рынок сформировал экстремум в обратную сторону
 
+### `breakout_volatility`
+
+Стратегия для импульсного продолжения движения:
+
+- ищет пробой локального диапазона
+- требует повышенный объём
+- требует подтверждение ATR/волатильности
+- лучше всего чувствует себя в expansion phase после сжатия
+
+### `trend_pullback`
+
+Стратегия для входа по тренду не на вершине импульса, а на откате:
+
+- определяет устойчивый тренд через EMA и силу структуры
+- ждёт возврат цены к fast EMA
+- открывает позицию только если откат выглядит контролируемым, а не как разворот
+
+### `range_scalping`
+
+Стратегия для бокового режима:
+
+- определяет диапазон по локальным high/low
+- избегает выраженного тренда
+- открывает long от нижней границы и short от верхней
+- фиксирует результат ближе к середине диапазона или при сломе флэта
+
+### `volume_spike_reversal`
+
+Стратегия для short-term reversal сценариев:
+
+- отслеживает всплески объёма
+- ищет длинные тени и rejection-свечи
+- лучше подходит для exhaustion move и ложных выносов
+
+### `market_regime_switcher`
+
+Адаптивная meta-style стратегия:
+
+- сначала определяет текущий режим рынка: `trend`, `range` или `mixed`
+- в trend-режиме работает как breakout/trend-following логика
+- в range-режиме работает как controlled mean reversion
+- полезна как универсальная стратегия, когда не хочется жёстко фиксировать один стиль
+
 ## Risk management
 
 Сейчас risk management уже выделен в отдельный слой.
@@ -397,6 +447,7 @@ Short рассматривается, если:
 - `BOT_MAX_DRAWDOWN_STOP_PCT`
 - `BOT_MAX_DAILY_LOSS_PCT`
 - `BOT_MAX_CONSECUTIVE_LOSSES`
+- `BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES` — после этого числа минут без торговли лимит подряд убытков временно снимается (чтобы бот не застревал навсегда)
 - `BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL`
 - `BOT_ENABLED_STRATEGIES`
 
@@ -573,7 +624,7 @@ BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
 BOT_COOLDOWN_CANDLES=2
-BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion
+BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher
 BOT_EXECUTION_MODE=paper
 BOT_EXECUTION_MARKET_TYPE=futures
 BOT_ALLOW_LIVE_REAL=false
@@ -639,7 +690,7 @@ BOT_FEE_PCT=0.001
 BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
-BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion
+BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher
 BOT_EXECUTION_MODE=paper
 BOT_EXECUTION_MARKET_TYPE=futures
 BOT_ALLOW_LIVE_REAL=false
@@ -811,7 +862,7 @@ npm run build
 | `BOT_TAKE_PROFIT_PCT` | Базовый take profit | `0.02` | 2% |
 | `BOT_TRAILING_STOP_PCT` | Трейлинг-стоп | `0.008` | 0.8% |
 | `BOT_COOLDOWN_CANDLES` | Пауза после сделки | `2` | Снижает overtrading |
-| `BOT_ENABLED_STRATEGIES` | Список активных стратегий | `momentum_trend,mean_reversion` | Можно selectively включать стратегии |
+| `BOT_ENABLED_STRATEGIES` | Список активных стратегий | `momentum_trend,mean_reversion,breakout_volatility,...` | Runtime сам выбирает лучший вход из активных стратегий |
 | `BOT_EMA_FAST_PERIOD` | Быстрая EMA | `9` | Базовый импульс |
 | `BOT_EMA_SLOW_PERIOD` | Медленная EMA | `21` | Базовый фильтр тренда |
 | `BOT_RSI_PERIOD` | Период RSI | `14` | Осциллятор импульса |
@@ -827,6 +878,7 @@ npm run build
 | `BOT_MAX_DRAWDOWN_STOP_PCT` | Лимит максимальной просадки | `0.08-0.15` | После достижения новые входы режутся |
 | `BOT_MAX_DAILY_LOSS_PCT` | Дневной лимит убытка | `0.02-0.04` | Важная страховка |
 | `BOT_MAX_CONSECUTIVE_LOSSES` | Лимит подряд убыточных сделок | `3-4` | Защита от плохого режима |
+| `BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES` | Через сколько минут без торговли снять блокировку | `60` | Иначе бот навсегда застревает после серии убытков |
 | `BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL` | Разрешить long/short конфликт по одному символу | `false` | Обычно лучше держать `false` |
 | `BOT_DASHBOARD_ENABLED` | Включить live dashboard | `true` | Можно отключить для headless режима |
 | `BOT_DASHBOARD_HOST` | Хост dashboard-сервера | `127.0.0.1` | Локальный доступ по умолчанию |

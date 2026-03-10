@@ -552,6 +552,7 @@ npm install
 BOT_SYMBOL=BTCUSDT
 BOT_INTERVAL=1m
 BOT_CONFIRMATION_INTERVAL=5m
+BOT_CONFIRMATION_MODE=lenient
 BOT_USE_SCANNER=true
 BOT_SCAN_INTERVAL_MS=60000
 BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH=8
@@ -618,6 +619,7 @@ npm install
 BOT_USE_SCANNER=true
 BOT_INTERVAL=1m
 BOT_CONFIRMATION_INTERVAL=5m
+BOT_CONFIRMATION_MODE=lenient
 BOT_UNIVERSE_SIZE=3
 BOT_ALLOWED_SYMBOLS=BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,LINKUSDT
 
@@ -704,6 +706,9 @@ npm run build
 - `BOT_CONFIRMATION_INTERVAL`
   Старший интервал подтверждения тренда. Если не задан, бот работает только по одному таймфрейму.
 
+- `BOT_CONFIRMATION_MODE`
+  Режим подтверждения старшего таймфрейма: `strict`, `lenient` или `off`.
+
 - `BOT_USE_SCANNER`
   Включает или выключает market scanner.
 
@@ -766,6 +771,7 @@ npm run build
 | `BOT_SYMBOL` | Стартовый символ при отключённом scanner | `BTCUSDT` | Используется как fallback |
 | `BOT_INTERVAL` | Интервал свечей для исполнения | `1m` | Базовый рабочий интервал |
 | `BOT_CONFIRMATION_INTERVAL` | Старший интервал подтверждения | `5m` или пусто | Для higher timeframe filter |
+| `BOT_CONFIRMATION_MODE` | Режим подтверждения старшего ТФ | `strict`, `lenient`, `off` | `lenient` обычно лучше для short |
 | `BOT_USE_SCANNER` | Включить scanner | `true` | Если `false`, используется ручной режим |
 | `BOT_SCAN_INTERVAL_MS` | Частота пересчёта scanner | `60000` | В миллисекундах |
 | `BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH` | Старый порог простоя пары | `8` | Сохраняется для логики idle-state |

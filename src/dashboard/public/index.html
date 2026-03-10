@@ -109,6 +109,23 @@
           <h2>Live-логи</h2>
           <span class="muted">Последние события системы</span>
         </div>
+        <div class="logs-toolbar">
+          <div class="log-filter-group" id="log-filter-group">
+            <button class="log-filter-button active" data-log-filter="ALL">Все</button>
+            <button class="log-filter-button" data-log-filter="RISK">Риск-менеджер</button>
+            <button class="log-filter-button" data-log-filter="СИГНАЛ">Сигнал</button>
+            <button class="log-filter-button" data-log-filter="СДЕЛКА">Сделка</button>
+            <button class="log-filter-button" data-log-filter="ПОРТФЕЛЬ">Портфель</button>
+            <button class="log-filter-button" data-log-filter="ИНФО">Инфо</button>
+            <button class="log-filter-button" data-log-filter="ОШИБКА">Ошибка</button>
+          </div>
+          <input
+            id="log-search-input"
+            class="log-search-input"
+            type="search"
+            placeholder="Поиск по логам, символу, причине..."
+          />
+        </div>
         <div id="logs-container" class="logs-container"></div>
       </section>
     </div>

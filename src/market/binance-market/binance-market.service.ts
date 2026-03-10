@@ -1,32 +1,46 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import axios from 'axios';
 import WebSocket from 'ws';
+import { getBotConfig } from '../../config/bot-config';
 import { Candle } from '../types';
 
 @Injectable()
-export class BinanceMarketService {
+export class BinanceMarketService implements OnModuleDestroy {
+  private readonly config = getBotConfig();
   private ws?: WebSocket;
   private reconnectTimeout?: NodeJS.Timeout;
   private isReconnecting = false;
   private currentStream?: string;
   private candleHandler?: (candle: Candle) => void;
-  private manualSwitchInProgress = false;
+  private manualSwitchTarget?: string;
+  private reconnectAttempts = 0;
 
   connect(stream: string, onCandle: (candle: Candle) => void) {
     this.currentStream = stream;
     this.candleHandler = onCandle;
 
-    const url = `wss://stream.testnet.binance.vision/ws/${stream}`;
+    const url = `${this.config.binanceWsBaseUrl.replace(/\/$/, '')}/${stream}`;
+    const socket = new WebSocket(url);
 
     console.log(`[РЫНОК] Пытаемся подключиться к ${url}`);
 
-    this.ws = new WebSocket(url);
+    this.ws = socket;
 
-    this.ws.on('open', () => {
+    socket.on('open', () => {
+      if (socket !== this.ws) {
+        return;
+      }
+
       this.isReconnecting = false;
+      this.reconnectAttempts = 0;
       console.log(`[РЫНОК] Успешное подключение к ${url}`);
     });
 
-    this.ws.on('message', (raw: WebSocket.RawData) => {
+    socket.on('message', (raw: WebSocket.RawData) => {
+      if (socket !== this.ws) {
+        return;
+      }
+
       try {
         const data = JSON.parse(raw.toString());
 
@@ -53,24 +67,54 @@ export class BinanceMarketService {
       }
     });
 
-    this.ws.on('close', (code: number, reason: Buffer) => {
+    socket.on('close', (code: number, reason: Buffer) => {
       const reasonText = reason?.toString?.() || 'без причины';
 
       console.log(
         `[РЫНОК] Соединение закрыто. Код=${code}, причина=${reasonText}`,
       );
 
-      if (this.manualSwitchInProgress) {
-        this.manualSwitchInProgress = false;
+      if (socket !== this.ws) {
         return;
       }
 
+      if (this.manualSwitchTarget === stream) {
+        this.manualSwitchTarget = undefined;
+        return;
+      }
+
+      this.ws = undefined;
       this.scheduleReconnect();
     });
 
-    this.ws.on('error', (error) => {
+    socket.on('error', (error) => {
+      if (socket !== this.ws) {
+        return;
+      }
+
       console.error('[РЫНОК] Ошибка WebSocket:', error);
     });
+  }
+
+  async loadHistoricalCandles(symbol: string, interval = '1m', limit = 200) {
+    const response = await axios.get(`${this.config.binanceRestBaseUrl}/api/v3/klines`, {
+      params: { symbol, interval, limit },
+    });
+
+    return (response.data as Array<[number, string, string, string, string, string, number]>)
+      .map((item) => ({
+        symbol,
+        interval,
+        openTime: item[0],
+        closeTime: item[6],
+        open: Number(item[1]),
+        high: Number(item[2]),
+        low: Number(item[3]),
+        close: Number(item[4]),
+        volume: Number(item[5]),
+        isClosed: true,
+      }))
+      .filter((candle) => Number.isFinite(candle.close));
   }
 
   switchSymbol(symbol: string, interval = '1m') {
@@ -84,7 +128,7 @@ export class BinanceMarketService {
     console.log(`[РЫНОК] Переключение стрима на ${symbol}`);
 
     this.currentStream = nextStream;
-    this.manualSwitchInProgress = true;
+    this.manualSwitchTarget = nextStream;
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -92,7 +136,6 @@ export class BinanceMarketService {
 
     if (this.ws) {
       try {
-        this.ws.removeAllListeners();
         this.ws.close();
       } catch (error) {
         console.error('[РЫНОК] Ошибка при закрытии старого соединения:', error);
@@ -116,15 +159,35 @@ export class BinanceMarketService {
     }
 
     this.isReconnecting = true;
+    this.reconnectAttempts += 1;
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
 
-    console.log('[РЫНОК] Переподключение через 3 секунды...');
+    const backoffMs = Math.min(3000 * 2 ** (this.reconnectAttempts - 1), 30_000);
+    console.log(`[РЫНОК] Переподключение через ${backoffMs} мс...`);
 
     this.reconnectTimeout = setTimeout(() => {
-      this.connect(this.currentStream!, this.candleHandler!);
-    }, 3000);
+      if (!this.currentStream || !this.candleHandler) {
+        return;
+      }
+
+      this.connect(this.currentStream, this.candleHandler);
+    }, backoffMs);
+  }
+
+  onModuleDestroy() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        // ignore close errors during shutdown
+      }
+    }
   }
 }

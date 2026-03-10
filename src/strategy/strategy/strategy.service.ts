@@ -49,8 +49,11 @@ export class StrategyService {
 
     const indicators = { ema9, ema21, rsi14 };
 
+    const bullishEntry = ema9 > ema21 && rsi14 > 55;
+    const bearishEntry = ema9 < ema21 && rsi14 < 45;
+
     if (!positionSide) {
-      if (ema9 > ema21 && rsi14 > 55) {
+      if (bullishEntry) {
         return {
           signal: 'OPEN_LONG',
           reason: 'Открытие лонга: EMA9 выше EMA21 и RSI14 выше 55',
@@ -58,7 +61,7 @@ export class StrategyService {
         };
       }
 
-      if (ema9 < ema21 && rsi14 < 45) {
+      if (bearishEntry) {
         return {
           signal: 'OPEN_SHORT',
           reason: 'Открытие шорта: EMA9 ниже EMA21 и RSI14 ниже 45',
@@ -74,6 +77,14 @@ export class StrategyService {
     }
 
     if (positionSide === 'LONG') {
+      if (bearishEntry) {
+        return {
+          signal: 'REVERSE_TO_SHORT',
+          reason: 'Переворот из лонга в шорт: рынок стал медвежьим',
+          indicators,
+        };
+      }
+
       if (ema9 < ema21) {
         return {
           signal: 'CLOSE_LONG',
@@ -98,6 +109,14 @@ export class StrategyService {
     }
 
     if (positionSide === 'SHORT') {
+      if (bullishEntry) {
+        return {
+          signal: 'REVERSE_TO_LONG',
+          reason: 'Переворот из шорта в лонг: рынок стал бычьим',
+          indicators,
+        };
+      }
+
       if (ema9 > ema21) {
         return {
           signal: 'CLOSE_SHORT',

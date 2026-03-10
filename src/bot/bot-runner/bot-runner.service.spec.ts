@@ -5,7 +5,7 @@ import { BinanceMarketService } from '../../market/binance-market/binance-market
 import { SymbolScannerService } from '../../scanner/symbol-scanner/symbol-scanner.service';
 import { HigherTimeframeConfirmationService } from '../../strategy/higher-timeframe-confirmation/higher-timeframe-confirmation.service';
 import { StrategyRegistryService } from '../../strategy/strategy-registry/strategy-registry.service';
-import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
+import { ExecutionGatewayService } from '../../trader/execution-gateway/execution-gateway.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
 import { BotRunnerService } from './bot-runner.service';
@@ -45,6 +45,23 @@ describe('BotRunnerService', () => {
     tryOpenShort: jest.fn(),
     tryCloseLong: jest.fn(),
     tryCloseShort: jest.fn(),
+    getExecutionStatus: jest.fn().mockReturnValue({
+      mode: 'paper',
+      marketType: 'spot',
+      label: 'PAPER',
+      canTradeShort: true,
+      liveTradingEnabled: false,
+      usingTestnet: false,
+      allowLiveReal: false,
+      apiConfigured: false,
+      accountConnectivity: 'unknown',
+      quoteAsset: 'USDT',
+      quoteFree: 1000,
+      quoteTotal: 1000,
+      warnings: [],
+    }),
+    refreshExecutionStatus: jest.fn(),
+    setExecutionMode: jest.fn(),
   };
   const confirmationMock = {
     getRequiredWarmupCandles: jest.fn().mockReturnValue(20),
@@ -119,7 +136,7 @@ describe('BotRunnerService', () => {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
         },
-        { provide: PaperTraderService, useValue: traderMock },
+        { provide: ExecutionGatewayService, useValue: traderMock },
         { provide: PortfolioService, useValue: portfolioMock },
         { provide: RiskManagerService, useValue: riskManagerMock },
         { provide: BotLoggerService, useValue: loggerMock },
@@ -160,7 +177,7 @@ describe('BotRunnerService', () => {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
         },
-        { provide: PaperTraderService, useValue: traderMock },
+        { provide: ExecutionGatewayService, useValue: traderMock },
         { provide: PortfolioService, useValue: portfolioMock },
         { provide: RiskManagerService, useValue: riskManagerMock },
         { provide: BotLoggerService, useValue: loggerMock },
@@ -203,7 +220,7 @@ describe('BotRunnerService', () => {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
         },
-        { provide: PaperTraderService, useValue: traderMock },
+        { provide: ExecutionGatewayService, useValue: traderMock },
         { provide: PortfolioService, useValue: portfolioMock },
         { provide: RiskManagerService, useValue: riskManagerMock },
         { provide: BotLoggerService, useValue: loggerMock },
@@ -260,7 +277,7 @@ describe('BotRunnerService', () => {
     expect(nextUniverse).not.toContain('BTCUSDT');
   });
 
-  it('closes one selected position separately', () => {
+  it('closes one selected position separately', async () => {
     portfolioMock.getPosition.mockReturnValueOnce({
       symbol: 'BTCUSDT',
       strategyId: 'momentum_trend',
@@ -283,7 +300,11 @@ describe('BotRunnerService', () => {
       },
     });
 
-    const result = service.closePosition('BTCUSDT', 'momentum_trend', 'manual close');
+    const result = await service.closePosition(
+      'BTCUSDT',
+      'momentum_trend',
+      'manual close',
+    );
 
     expect(traderMock.tryCloseLong).toHaveBeenCalledWith(
       'BTCUSDT',

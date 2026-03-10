@@ -15,11 +15,31 @@ const confirmationModeValue = (
   return 'strict';
 };
 
+const executionModeValue = (
+  value: string | undefined,
+): 'paper' | 'live_testnet' | 'live_real' => {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'live_testnet') return 'live_testnet';
+  if (normalized === 'live_real') return 'live_real';
+  return 'paper';
+};
+
+const executionMarketTypeValue = (
+  value: string | undefined,
+): 'spot' | 'futures' => {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'futures') return 'futures';
+  return 'spot';
+};
+
 export type BotConfig = {
   symbol: string;
   interval: string;
   confirmationInterval: string | null;
   confirmationMode: 'strict' | 'lenient' | 'off';
+  executionMode: 'paper' | 'live_testnet' | 'live_real';
+  executionMarketType: 'spot' | 'futures';
+  allowLiveReal: boolean;
   useScanner: boolean;
   scanIntervalMs: number;
   maxCandlesWithoutPositionBeforeSwitch: number;
@@ -60,6 +80,10 @@ export type BotConfig = {
   dashboardPort: number;
   binanceRestBaseUrl: string;
   binanceWsBaseUrl: string;
+  binanceApiKey: string;
+  binanceApiSecret: string;
+  binanceTestnetApiKey: string;
+  binanceTestnetApiSecret: string;
   allowedSymbols: string[];
 };
 
@@ -75,6 +99,11 @@ export const getBotConfig = (): BotConfig => {
     interval: stringValue(process.env.BOT_INTERVAL, '1m'),
     confirmationInterval: process.env.BOT_CONFIRMATION_INTERVAL?.trim() || null,
     confirmationMode: confirmationModeValue(process.env.BOT_CONFIRMATION_MODE),
+    executionMode: executionModeValue(process.env.BOT_EXECUTION_MODE),
+    executionMarketType: executionMarketTypeValue(
+      process.env.BOT_EXECUTION_MARKET_TYPE,
+    ),
+    allowLiveReal: process.env.BOT_ALLOW_LIVE_REAL === 'true',
     useScanner: process.env.BOT_USE_SCANNER === 'true',
     scanIntervalMs: numberValue(process.env.BOT_SCAN_INTERVAL_MS, 60_000),
     maxCandlesWithoutPositionBeforeSwitch: numberValue(
@@ -147,6 +176,10 @@ export const getBotConfig = (): BotConfig => {
       process.env.BINANCE_WS_BASE_URL,
       'wss://stream.binance.com/ws',
     ),
+    binanceApiKey: stringValue(process.env.BINANCE_API_KEY, ''),
+    binanceApiSecret: stringValue(process.env.BINANCE_API_SECRET, ''),
+    binanceTestnetApiKey: stringValue(process.env.BINANCE_TESTNET_API_KEY, ''),
+    binanceTestnetApiSecret: stringValue(process.env.BINANCE_TESTNET_API_SECRET, ''),
     allowedSymbols: (process.env.BOT_ALLOWED_SYMBOLS || '')
       .split(',')
       .map((value) => value.trim())

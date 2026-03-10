@@ -137,10 +137,13 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
         reason?: string;
         symbol?: string;
         strategyId?: string;
+        mode?: 'paper' | 'live_testnet' | 'live_real';
+        marketType?: 'spot' | 'futures';
+        confirmationPhrase?: string;
       };
 
       if (message.type === 'emergency_close_all') {
-        const result = this.botRunner.emergencyCloseAllPositions(
+        const result = await this.botRunner.emergencyCloseAllPositions(
           message.reason || 'Экстренное закрытие через live dashboard',
         );
 
@@ -175,7 +178,7 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
           return;
         }
 
-        const result = this.botRunner.closePosition(
+        const result = await this.botRunner.closePosition(
           message.symbol,
           message.strategyId,
           message.reason || 'Ручное закрытие позиции через live dashboard',
@@ -188,6 +191,49 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
             сообщение: result.reason,
             symbol: message.symbol,
             strategyId: message.strategyId,
+            snapshot: result.snapshot,
+          },
+        });
+        return;
+      }
+
+      if (message.type === 'set_execution_mode') {
+        if (!message.mode || !message.marketType) {
+          this.sendJson(socket, {
+            type: 'command_result',
+            payload: {
+              статус: 'ошибка',
+              сообщение: 'Для переключения режима нужны mode и marketType',
+            },
+          });
+          return;
+        }
+
+        const result = await this.botRunner.setExecutionMode(
+          message.mode,
+          message.marketType,
+          message.confirmationPhrase,
+        );
+
+        this.sendJson(socket, {
+          type: 'command_result',
+          payload: {
+            статус: result.success ? 'успешно' : 'не выполнено',
+            сообщение: result.message,
+            execution: result.status,
+            snapshot: result.snapshot,
+          },
+        });
+        return;
+      }
+
+      if (message.type === 'refresh_execution_status') {
+        const result = await this.botRunner.refreshExecutionStatus();
+        this.sendJson(socket, {
+          type: 'command_result',
+          payload: {
+            статус: 'успешно',
+            execution: result.status,
             snapshot: result.snapshot,
           },
         });

@@ -126,4 +126,12 @@ describe('PortfolioService', () => {
     expect(service.getOpenPositionsCount()).toBe(2);
     expect(service.getEquity()).toBeCloseTo(999.8, 6);
   });
+
+  it('syncs live wallet total into balance when there are no open positions', () => {
+    service.syncExternalUsdtWallet(980, 1250);
+
+    expect(service.balance).toBe(1250);
+    expect(service.getEquity()).toBe(1250);
+    expect(service.peakEquity).toBe(1250);
+  });
 });

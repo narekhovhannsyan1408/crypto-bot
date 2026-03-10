@@ -81,6 +81,33 @@ export class PortfolioService {
     this.positions.delete(makePositionKey(symbol, strategyId));
   }
 
+  syncExternalUsdtWallet(quoteFree?: number | null, quoteTotal?: number | null) {
+    const hasOpenPositions = this.getOpenPositionsCount() > 0;
+    const nextBalance = hasOpenPositions
+      ? typeof quoteFree === 'number'
+        ? quoteFree
+        : null
+      : typeof quoteTotal === 'number'
+        ? quoteTotal
+        : typeof quoteFree === 'number'
+          ? quoteFree
+          : null;
+
+    if (nextBalance === null || !Number.isFinite(nextBalance)) {
+      return;
+    }
+
+    this.balance = nextBalance;
+
+    if (!hasOpenPositions) {
+      this.peakEquity = nextBalance;
+      this.maxDrawdownPct = 0;
+      return;
+    }
+
+    this.trackDrawdown(this.getEquity());
+  }
+
   updateMark(symbol: string, price: number) {
     if (!Number.isFinite(price)) {
       return;

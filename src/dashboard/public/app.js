@@ -10,6 +10,7 @@ const state = {
 
 const elements = {
   connectionStatus: document.getElementById('connection-status'),
+  dataFreshness: document.getElementById('data-freshness'),
   metricsGrid: document.getElementById('metrics-grid'),
   executionStatus: document.getElementById('execution-status'),
   positionsTable: document.getElementById('positions-table'),
@@ -238,6 +239,13 @@ function handleLiveEvent(event) {
 }
 
 function renderAll() {
+  const ts = state.runtime?.generatedAt;
+  if (elements.dataFreshness) {
+    elements.dataFreshness.textContent = ts
+      ? 'Обновлено: ' + new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      : '—';
+  }
+
   renderMetrics();
   renderExecution();
   renderPositions();

@@ -1,62 +1,172 @@
 import { Injectable } from '@nestjs/common';
-import { EMA, RSI } from 'technicalindicators';
+import { ATR, EMA, RSI } from 'technicalindicators';
+import { getBotConfig } from '../../config/bot-config';
 import { Candle, TradeSignal } from '../../market/types';
+import { PositionSide } from '../../trader/types';
 
-type PositionSide = 'LONG' | 'SHORT' | null;
+type StrategyState = {
+  candles: Candle[];
+  barsSeen: number;
+  lastExitBarIndex: number | null;
+};
+
+type StrategyIndicators = {
+  emaFast: number;
+  emaSlow: number;
+  rsi: number;
+  atr: number;
+  atrPct: number;
+  trendStrengthPct: number;
+};
 
 @Injectable()
 export class StrategyService {
-  private candles: Candle[] = [];
+  private readonly config = getBotConfig();
+  private readonly states = new Map<string, StrategyState>();
+
+  seedHistory(symbol: string, interval: string, candles: Candle[]) {
+    const closedCandles = candles.filter((candle) => candle.isClosed).slice(-500);
+
+    this.states.set(this.makeKey(symbol, interval), {
+      candles: closedCandles,
+      barsSeen: closedCandles.length,
+      lastExitBarIndex: null,
+    });
+  }
+
+  resetSymbol(symbol: string, interval: string) {
+    this.states.delete(this.makeKey(symbol, interval));
+  }
+
+  registerTradeClosed(symbol: string, interval: string) {
+    const state = this.getOrCreateState(symbol, interval);
+    state.lastExitBarIndex = state.barsSeen;
+  }
 
   onNewCandle(
     candle: Candle,
-    positionSide: PositionSide,
+    positionSide: PositionSide | null,
   ): {
     signal: TradeSignal;
     reason: string;
-    indicators?: { ema9: number; ema21: number; rsi14: number };
+    indicators?: StrategyIndicators;
   } {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
 
-    this.candles.push(candle);
+    const state = this.getOrCreateState(candle.symbol, candle.interval);
+    const lastCandle = state.candles.at(-1);
 
-    if (this.candles.length > 300) {
-      this.candles.shift();
+    if (lastCandle?.closeTime === candle.closeTime) {
+      state.candles[state.candles.length - 1] = candle;
+    } else {
+      state.candles.push(candle);
+      state.barsSeen += 1;
     }
 
-    const closes = this.candles.map((c) => c.close);
+    if (state.candles.length > 500) {
+      state.candles.shift();
+    }
 
-    if (closes.length < 22) {
+    const closes = state.candles.map((item) => item.close);
+    const highs = state.candles.map((item) => item.high);
+    const lows = state.candles.map((item) => item.low);
+
+    const warmupBars = Math.max(
+      this.config.emaSlowPeriod + 1,
+      this.config.rsiPeriod + 1,
+      15,
+    );
+
+    if (closes.length < warmupBars) {
       return {
         signal: 'HOLD',
-        reason: `Прогрев индикаторов: ${closes.length}/22`,
+        reason: `Прогрев индикаторов: ${closes.length}/${warmupBars}`,
       };
     }
 
-    const ema9Arr = EMA.calculate({ period: 9, values: closes });
-    const ema21Arr = EMA.calculate({ period: 21, values: closes });
-    const rsi14Arr = RSI.calculate({ period: 14, values: closes });
+    const emaFast = EMA.calculate({
+      period: this.config.emaFastPeriod,
+      values: closes,
+    }).at(-1);
+    const emaSlow = EMA.calculate({
+      period: this.config.emaSlowPeriod,
+      values: closes,
+    }).at(-1);
+    const rsi = RSI.calculate({
+      period: this.config.rsiPeriod,
+      values: closes,
+    }).at(-1);
+    const atr = ATR.calculate({
+      period: 14,
+      high: highs,
+      low: lows,
+      close: closes,
+    }).at(-1);
 
-    const ema9 = ema9Arr.at(-1);
-    const ema21 = ema21Arr.at(-1);
-    const rsi14 = rsi14Arr.at(-1);
-
-    if (ema9 === undefined || ema21 === undefined || rsi14 === undefined) {
+    if (
+      emaFast === undefined ||
+      emaSlow === undefined ||
+      rsi === undefined ||
+      atr === undefined
+    ) {
       return { signal: 'HOLD', reason: 'Индикаторы ещё не готовы' };
     }
 
-    const indicators = { ema9, ema21, rsi14 };
+    const atrPct = atr / candle.close;
+    const trendStrengthPct = Math.abs(emaFast - emaSlow) / candle.close;
+    const indicators: StrategyIndicators = {
+      emaFast,
+      emaSlow,
+      rsi,
+      atr,
+      atrPct,
+      trendStrengthPct,
+    };
 
-    const bullishEntry = ema9 > ema21 && rsi14 > 55;
-    const bearishEntry = ema9 < ema21 && rsi14 < 45;
+    if (!positionSide && this.isInCooldown(state)) {
+      return {
+        signal: 'HOLD',
+        reason: `Cooldown после сделки: ${this.config.cooldownCandles} свечей`,
+        indicators,
+      };
+    }
+
+    if (atrPct < this.config.minAtrPct) {
+      return {
+        signal: 'HOLD',
+        reason: 'Слишком низкая волатильность для входа',
+        indicators,
+      };
+    }
+
+    if (atrPct > this.config.maxAtrPct) {
+      return {
+        signal: 'HOLD',
+        reason: 'Слишком высокая волатильность, пропускаем вход',
+        indicators,
+      };
+    }
+
+    if (trendStrengthPct < this.config.minTrendStrengthPct) {
+      return {
+        signal: 'HOLD',
+        reason: 'Тренд слишком слабый',
+        indicators,
+      };
+    }
+
+    const bullishEntry =
+      emaFast > emaSlow && rsi > this.config.rsiLongThreshold;
+    const bearishEntry =
+      emaFast < emaSlow && rsi < this.config.rsiShortThreshold;
 
     if (!positionSide) {
       if (bullishEntry) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Открытие лонга: EMA9 выше EMA21 и RSI14 выше 55',
+          reason: 'Long: fast EMA выше slow EMA, RSI подтверждает импульс',
           indicators,
         };
       }
@@ -64,7 +174,7 @@ export class StrategyService {
       if (bearishEntry) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Открытие шорта: EMA9 ниже EMA21 и RSI14 ниже 45',
+          reason: 'Short: fast EMA ниже slow EMA, RSI подтверждает импульс',
           indicators,
         };
       }
@@ -80,23 +190,15 @@ export class StrategyService {
       if (bearishEntry) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Переворот из лонга в шорт: рынок стал медвежьим',
+          reason: 'Переворот: bullish regime сломан и сформирован bearish impulse',
           indicators,
         };
       }
 
-      if (ema9 < ema21) {
+      if (emaFast < emaSlow || rsi < this.config.rsiShortThreshold) {
         return {
           signal: 'CLOSE_LONG',
-          reason: 'Закрытие лонга: EMA9 пересекла EMA21 сверху вниз',
-          indicators,
-        };
-      }
-
-      if (rsi14 < 45) {
-        return {
-          signal: 'CLOSE_LONG',
-          reason: 'Закрытие лонга: RSI14 опустился ниже 45',
+          reason: 'Закрытие лонга: импульс ослаб и структура стала bearish',
           indicators,
         };
       }
@@ -108,42 +210,56 @@ export class StrategyService {
       };
     }
 
-    if (positionSide === 'SHORT') {
-      if (bullishEntry) {
-        return {
-          signal: 'REVERSE_TO_LONG',
-          reason: 'Переворот из шорта в лонг: рынок стал бычьим',
-          indicators,
-        };
-      }
-
-      if (ema9 > ema21) {
-        return {
-          signal: 'CLOSE_SHORT',
-          reason: 'Закрытие шорта: EMA9 пересекла EMA21 снизу вверх',
-          indicators,
-        };
-      }
-
-      if (rsi14 > 55) {
-        return {
-          signal: 'CLOSE_SHORT',
-          reason: 'Закрытие шорта: RSI14 поднялся выше 55',
-          indicators,
-        };
-      }
-
+    if (bullishEntry) {
       return {
-        signal: 'HOLD',
-        reason: 'Держим шорт',
+        signal: 'REVERSE_TO_LONG',
+        reason: 'Переворот: bearish regime сломан и сформирован bullish impulse',
+        indicators,
+      };
+    }
+
+    if (emaFast > emaSlow || rsi > this.config.rsiLongThreshold) {
+      return {
+        signal: 'CLOSE_SHORT',
+        reason: 'Закрытие шорта: импульс ослаб и структура стала bullish',
         indicators,
       };
     }
 
     return {
       signal: 'HOLD',
-      reason: 'Нет сигнала',
+      reason: 'Держим шорт',
       indicators,
     };
+  }
+
+  private getOrCreateState(symbol: string, interval: string) {
+    const key = this.makeKey(symbol, interval);
+    const existing = this.states.get(key);
+
+    if (existing) {
+      return existing;
+    }
+
+    const state: StrategyState = {
+      candles: [],
+      barsSeen: 0,
+      lastExitBarIndex: null,
+    };
+
+    this.states.set(key, state);
+    return state;
+  }
+
+  private isInCooldown(state: StrategyState) {
+    if (state.lastExitBarIndex === null) {
+      return false;
+    }
+
+    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+  }
+
+  private makeKey(symbol: string, interval: string) {
+    return `${symbol}:${interval}`;
   }
 }

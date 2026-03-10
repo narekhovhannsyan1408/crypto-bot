@@ -15,6 +15,7 @@ async function bootstrap() {
   console.log('[СИСТЕМА] Запуск приложения...');
 
   const app = await NestFactory.createApplicationContext(AppModule);
+  app.enableShutdownHooks();
   const runner = app.get(BotRunnerService);
 
   console.log('[СИСТЕМА] Контекст NestJS успешно создан');

@@ -3,6 +3,7 @@ const state = {
   recentTrades: [],
   equityHistory: [],
   runtime: null,
+  socket: null,
 };
 
 const elements = {
@@ -22,6 +23,7 @@ const elements = {
 function connect() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  state.socket = socket;
 
   socket.addEventListener('open', () => {
     elements.connectionStatus.textContent = 'Подключено';
@@ -29,6 +31,7 @@ function connect() {
   });
 
   socket.addEventListener('close', () => {
+    state.socket = null;
     elements.connectionStatus.textContent = 'Нет соединения';
     elements.connectionStatus.style.borderColor = 'rgba(239, 68, 68, 0.4)';
     setTimeout(connect, 1500);
@@ -86,6 +89,49 @@ function connect() {
   elements.refreshButton.onclick = () => {
     socket.send(JSON.stringify({ type: 'request_snapshot' }));
   };
+
+  elements.positionsTable.onclick = (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const button = target.closest('[data-close-position]');
+    if (!button) {
+      return;
+    }
+
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+      window.alert('Нет активного WebSocket-соединения с dashboard');
+      return;
+    }
+
+    const symbol = button.dataset.symbol;
+    const strategyId = button.dataset.strategyId;
+    const strategyName = button.dataset.strategyName || strategyId || 'неизвестная стратегия';
+
+    if (!symbol || !strategyId) {
+      window.alert('Не удалось определить, какую позицию закрыть');
+      return;
+    }
+
+    const isConfirmed = window.confirm(
+      `Закрыть позицию ${symbol} (${strategyName}) отдельно?`,
+    );
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    state.socket.send(
+      JSON.stringify({
+        type: 'close_position',
+        symbol,
+        strategyId,
+        reason: `Ручное закрытие позиции ${symbol} (${strategyName}) из web dashboard`,
+      }),
+    );
+  };
 }
 
 function handleLiveEvent(event) {
@@ -136,6 +182,10 @@ function renderMetrics() {
     ['Уплачено комиссий', portfolio.уплаченоКомиссий],
     ['Макс. просадка %', portfolio.максимальнаяПросадкаВПроцентах],
     ['Открытых позиций', portfolio.открытыхПозиций],
+    [
+      'Активных стратегий',
+      Object.keys(portfolio.экспозицияПоСтратегиям || {}).length,
+    ],
     ['Винрейт %', portfolio.винрейт],
   ];
 
@@ -168,12 +218,26 @@ function renderPositions() {
       return `
         <tr>
           <td>${escapeHtml(position.символ)}</td>
+          <td>${escapeHtml(position.стратегия || position.strategyId || '-')}</td>
           <td>${escapeHtml(position.сторона)}</td>
           <td>${formatNumber(position.ценаВхода)}</td>
           <td>${formatNumber(position.текущаяЦена)}</td>
           <td class="${pnlClass}">${formatNumber(position.плавающийРезультат)}</td>
           <td>${formatNumber(position.стопЦена)}</td>
           <td>${formatNumber(position.тейкЦена)}</td>
+          <td>
+            <button
+              class="table-action-button"
+              data-close-position="true"
+              data-symbol="${escapeHtml(position.символ)}"
+              data-strategy-id="${escapeHtml(position.strategyId || '')}"
+              data-strategy-name="${escapeHtml(
+                position.стратегия || position.strategyId || '-',
+              )}"
+            >
+              Закрыть
+            </button>
+          </td>
         </tr>
       `;
     })
@@ -194,7 +258,7 @@ function renderRiskState() {
       ([key, value]) => `
         <div class="kv-row">
           <span>${escapeHtml(key)}</span>
-          <strong>${formatNumber(value)}</strong>
+          <strong>${formatValue(value)}</strong>
         </div>
       `,
     )
@@ -213,6 +277,7 @@ function renderTrades() {
         <tr>
           <td>${formatDate(entry.timestamp)}</td>
           <td>${escapeHtml(trade.символ || '-')}</td>
+          <td>${escapeHtml(trade.стратегия || trade.strategyId || '-')}</td>
           <td>${escapeHtml(trade.действие || '-')}</td>
           <td>${escapeHtml(trade.сторона || '-')}</td>
           <td>${formatNumber(trade.ценаВхода ?? trade.цена)}</td>
@@ -301,6 +366,14 @@ function formatNumber(value) {
   }
 
   return String(value);
+}
+
+function formatValue(value) {
+  if (value && typeof value === 'object') {
+    return escapeHtml(JSON.stringify(value));
+  }
+
+  return escapeHtml(formatNumber(value));
 }
 
 function escapeHtml(value) {

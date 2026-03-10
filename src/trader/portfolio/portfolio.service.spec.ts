@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { resetBotConfigCache } from '../../config/bot-config';
+import { makePositionKey } from '../types';
 import { PortfolioService } from './portfolio.service';
 
 describe('PortfolioService', () => {
@@ -24,8 +25,11 @@ describe('PortfolioService', () => {
   it('calculates long equity using liquidation value', () => {
     service.balance = 900;
     service.registerOpenedPosition({
+      key: makePositionKey('BTCUSDT', 'momentum_trend'),
       symbol: 'BTCUSDT',
       interval: '1m',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum Trend',
       side: 'LONG',
       entryPrice: 100,
       quantity: 0.999,
@@ -48,8 +52,11 @@ describe('PortfolioService', () => {
   it('calculates short equity including both entry and exit fees', () => {
     service.balance = 900;
     service.registerOpenedPosition({
+      key: makePositionKey('BTCUSDT', 'momentum_trend'),
       symbol: 'BTCUSDT',
       interval: '1m',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum Trend',
       side: 'SHORT',
       entryPrice: 100,
       quantity: 0.999,
@@ -73,8 +80,11 @@ describe('PortfolioService', () => {
     service.balance = 800;
 
     service.registerOpenedPosition({
+      key: makePositionKey('BTCUSDT', 'momentum_trend'),
       symbol: 'BTCUSDT',
       interval: '1m',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum Trend',
       side: 'LONG',
       entryPrice: 100,
       quantity: 1,
@@ -90,8 +100,11 @@ describe('PortfolioService', () => {
       lowestPrice: 100,
     });
     service.registerOpenedPosition({
+      key: makePositionKey('ETHUSDT', 'mean_reversion'),
       symbol: 'ETHUSDT',
       interval: '1m',
+      strategyId: 'mean_reversion',
+      strategyName: 'Mean Reversion',
       side: 'LONG',
       entryPrice: 200,
       quantity: 0.5,

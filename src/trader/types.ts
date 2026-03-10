@@ -3,8 +3,11 @@ export type PositionSide = 'LONG' | 'SHORT';
 export type PositionKey = string;
 
 export type Position = {
+  key: PositionKey;
   symbol: string;
   interval: string;
+  strategyId: string;
+  strategyName: string;
   side: PositionSide;
   entryPrice: number;
   quantity: number;
@@ -21,8 +24,11 @@ export type Position = {
 };
 
 export type ClosedTrade = {
+  key: PositionKey;
   symbol: string;
   interval: string;
+  strategyId: string;
+  strategyName: string;
   side: PositionSide;
   entryPrice: number;
   exitPrice: number;
@@ -39,8 +45,11 @@ export type ClosedTrade = {
 
 export type ExecutedTrade = {
   action: 'OPEN_LONG' | 'CLOSE_LONG' | 'OPEN_SHORT' | 'CLOSE_SHORT';
+  key?: PositionKey;
   symbol: string;
   interval: string;
+  strategyId: string;
+  strategyName: string;
   side: PositionSide;
   price?: number;
   entryPrice?: number;
@@ -68,8 +77,11 @@ export type ExecutionResult =
         | 'OPEN_SHORT'
         | 'CLOSE_SHORT'
         | 'CHECK_STOPS';
+      key?: PositionKey;
       symbol?: string;
       interval?: string;
+      strategyId?: string;
+      strategyName?: string;
       reason: string;
     };
 
@@ -94,8 +106,12 @@ export type PortfolioSnapshot = {
   maxDrawdownPct: number;
   openPositions: Position[];
   openPositionsCount: number;
+  exposureByStrategy: Record<string, number>;
   totalTrades: number;
   wins: number;
   losses: number;
   consecutiveLosses: number;
 };
+
+export const makePositionKey = (symbol: string, strategyId: string) =>
+  `${symbol}::${strategyId}`;

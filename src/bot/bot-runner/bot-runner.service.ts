@@ -7,7 +7,9 @@ import {
   ScannedSymbol,
   SymbolScannerService,
 } from '../../scanner/symbol-scanner/symbol-scanner.service';
-import { StrategyService } from '../../strategy/strategy/strategy.service';
+import { HigherTimeframeConfirmationService } from '../../strategy/higher-timeframe-confirmation/higher-timeframe-confirmation.service';
+import { StrategyRegistryService } from '../../strategy/strategy-registry/strategy-registry.service';
+import { StrategyResult, TradingStrategy } from '../../strategy/types';
 import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
@@ -19,6 +21,11 @@ export class BotRunnerService implements OnModuleDestroy {
   private readonly watchedSymbols = new Set<string>();
   private readonly candlesWithoutPosition = new Map<string, number>();
   private activeInterval = this.config.interval;
+  private confirmationInterval =
+    this.config.confirmationInterval &&
+    this.config.confirmationInterval !== this.config.interval
+      ? this.config.confirmationInterval
+      : null;
   private lastScanTop: ScannedSymbol[] = [];
   private scannerInterval?: NodeJS.Timeout;
   private scannerInProgress = false;
@@ -26,7 +33,8 @@ export class BotRunnerService implements OnModuleDestroy {
 
   constructor(
     private readonly market: BinanceMarketService,
-    private readonly strategy: StrategyService,
+    private readonly strategyRegistry: StrategyRegistryService,
+    private readonly confirmation: HigherTimeframeConfirmationService,
     private readonly trader: PaperTraderService,
     private readonly portfolio: PortfolioService,
     private readonly riskManager: RiskManagerService,
@@ -40,9 +48,7 @@ export class BotRunnerService implements OnModuleDestroy {
     const initialUniverse = await this.resolveInitialUniverse();
     await this.syncUniverse(initialUniverse);
 
-    this.market.connectSymbols([...this.watchedSymbols], this.activeInterval, (candle) => {
-      void this.handleCandle(candle);
-    });
+    this.connectMarketStreams();
     this.marketStarted = true;
 
     if (this.config.useScanner) {
@@ -118,12 +124,34 @@ export class BotRunnerService implements OnModuleDestroy {
   }
 
   private buildTargetUniverse(top: ScannedSymbol[]) {
-    const desired = new Set<string>(
-      top.slice(0, this.config.universeSize).map((item) => item.symbol),
+    const protectedSymbols = new Set(
+      this.portfolio.getOpenPositions().map((position) => position.symbol),
     );
+    const desired = new Set<string>(protectedSymbols);
+    const targetSize = Math.max(this.config.universeSize, protectedSymbols.size);
 
-    for (const position of this.portfolio.getOpenPositions()) {
-      desired.add(position.symbol);
+    // Keep non-idle watched symbols for a while to avoid unnecessary churn.
+    for (const symbol of this.watchedSymbols) {
+      if (desired.size >= targetSize) {
+        break;
+      }
+
+      if (protectedSymbols.has(symbol)) {
+        continue;
+      }
+
+      const idleCandles = this.candlesWithoutPosition.get(symbol) ?? 0;
+      if (idleCandles < this.config.maxCandlesWithoutPositionBeforeSwitch) {
+        desired.add(symbol);
+      }
+    }
+
+    for (const item of top) {
+      if (desired.size >= targetSize) {
+        break;
+      }
+
+      desired.add(item.symbol);
     }
 
     if (desired.size === 0) {
@@ -152,7 +180,12 @@ export class BotRunnerService implements OnModuleDestroy {
     for (const symbol of removedSymbols) {
       this.watchedSymbols.delete(symbol);
       this.candlesWithoutPosition.delete(symbol);
-      this.strategy.resetSymbol(symbol, this.activeInterval);
+      for (const strategy of this.strategyRegistry.getStrategies()) {
+        strategy.resetSymbol(symbol, this.activeInterval);
+      }
+      if (this.confirmationInterval) {
+        this.confirmation.resetSymbol(symbol, this.confirmationInterval);
+      }
     }
 
     if (!this.marketStarted) {
@@ -167,8 +200,40 @@ export class BotRunnerService implements OnModuleDestroy {
         символовВСлежении: this.watchedSymbols.size,
         списокСимволов: [...this.watchedSymbols],
       });
-      this.market.replaceSymbols([...this.watchedSymbols], this.activeInterval);
+      this.replaceMarketStreams();
     }
+  }
+
+  private connectMarketStreams() {
+    const symbols = [...this.watchedSymbols];
+    const onCandle = (candle: Candle) => {
+      void this.handleCandle(candle);
+    };
+
+    if (this.confirmationInterval) {
+      this.market.connectSymbolIntervals(
+        symbols,
+        [this.activeInterval, this.confirmationInterval],
+        onCandle,
+      );
+      return;
+    }
+
+    this.market.connectSymbols(symbols, this.activeInterval, onCandle);
+  }
+
+  private replaceMarketStreams() {
+    const symbols = [...this.watchedSymbols];
+
+    if (this.confirmationInterval) {
+      this.market.replaceSymbolIntervals(symbols, [
+        this.activeInterval,
+        this.confirmationInterval,
+      ]);
+      return;
+    }
+
+    this.market.replaceSymbols(symbols, this.activeInterval);
   }
 
   private async handleCandle(candle: Candle) {
@@ -176,7 +241,24 @@ export class BotRunnerService implements OnModuleDestroy {
       if (!candle.isClosed) return;
       if (!this.watchedSymbols.has(candle.symbol)) return;
 
-      this.portfolio.updateMark(candle.symbol, candle.close);
+      if (this.confirmationInterval && candle.interval === this.confirmationInterval) {
+        const confirmation = this.confirmation.onNewCandle(candle);
+        this.logger.logInfo('Обновлён тренд подтверждения по старшему таймфрейму', {
+          символ: candle.symbol,
+          интервалПодтверждения: candle.interval,
+          направление: this.translateConfirmationTrend(confirmation.trend),
+          готовность: confirmation.isReady ? 'готов' : 'не готов',
+          силаТрендаВПроцентах:
+            typeof confirmation.trendStrengthPct === 'number'
+              ? Number((confirmation.trendStrengthPct * 100).toFixed(3))
+              : null,
+        });
+        return;
+      }
+
+      if (candle.interval !== this.activeInterval) {
+        return;
+      }
 
       this.logger.logCandle({
         символ: candle.symbol,
@@ -187,103 +269,122 @@ export class BotRunnerService implements OnModuleDestroy {
       });
 
       const stopAction = this.trader.checkStops(candle);
-      if (stopAction?.status === 'EXECUTED') {
-        this.handleExecutionResult(stopAction);
-        this.printPortfolio(candle.symbol);
-        return;
+      for (const action of stopAction) {
+        this.handleExecutionResult(action);
       }
 
-      const position = this.portfolio.getPosition(candle.symbol);
-      const result = this.strategy.onNewCandle(candle, position?.side ?? null);
-
-      this.logger.logSignal({
-        символ: candle.symbol,
-        цена: candle.close,
-        сигнал: this.translateSignal(result.signal),
-        причина: result.reason,
-        индикаторы: result.indicators
-          ? {
-              быстраяСкользящаяСредняя: Number(
-                result.indicators.emaFast.toFixed(6),
-              ),
-              медленнаяСкользящаяСредняя: Number(
-                result.indicators.emaSlow.toFixed(6),
-              ),
-              индексОтносительнойСилы: Number(result.indicators.rsi.toFixed(2)),
-              среднийИстинныйДиапазонВПроцентах: Number(
-                (result.indicators.atrPct * 100).toFixed(3),
-              ),
-              силаТрендаВПроцентах: Number(
-                (result.indicators.trendStrengthPct * 100).toFixed(3),
-              ),
-            }
-          : null,
-      });
-
+      const strategies = this.strategyRegistry.getStrategies();
       let tradeHappened = false;
+      const positionsOnSymbol = this.portfolio.getPositionsForSymbol(candle.symbol);
 
-      if (!position) {
+      if (positionsOnSymbol.length === 0) {
         this.incrementIdleCounter(candle.symbol);
-
-        if (result.signal === 'OPEN_LONG') {
-          tradeHappened = this.tryOpenWithRisk(candle, 'LONG', result.reason);
-        }
-
-        if (result.signal === 'OPEN_SHORT') {
-          tradeHappened = this.tryOpenWithRisk(candle, 'SHORT', result.reason);
-        }
       } else {
         this.candlesWithoutPosition.set(candle.symbol, 0);
+      }
+
+      this.portfolio.updateMark(candle.symbol, candle.close);
+
+      for (const strategy of strategies) {
+        const position = this.portfolio.getPosition(candle.symbol, strategy.id);
+        const strategyResult = strategy.onNewCandle(candle, position?.side ?? null);
+        const result = this.applyConfirmationFilter(
+          candle.symbol,
+          strategy,
+          strategyResult,
+        );
+
+        this.logger.logSignal({
+          символ: candle.symbol,
+          стратегия: strategy.name,
+          strategyId: strategy.id,
+          цена: candle.close,
+          сигнал: this.translateSignal(result.signal),
+          причина: result.reason,
+          индикаторы: this.translateIndicators(result.indicators),
+        });
+
+        if (!position) {
+          if (result.signal === 'OPEN_LONG') {
+            tradeHappened =
+              this.tryOpenWithRisk(candle, strategy, 'LONG', result.reason) ||
+              tradeHappened;
+          }
+
+          if (result.signal === 'OPEN_SHORT') {
+            tradeHappened =
+              this.tryOpenWithRisk(candle, strategy, 'SHORT', result.reason) ||
+              tradeHappened;
+          }
+
+          continue;
+        }
 
         if (position.side === 'LONG') {
           if (result.signal === 'CLOSE_LONG') {
-            tradeHappened = this.handleExecutionResult(
-              this.trader.tryCloseLong(
-                candle.symbol,
-                candle.close,
-                candle.closeTime,
-                result.reason,
-              ),
-            );
+            tradeHappened =
+              this.handleExecutionResult(
+                this.trader.tryCloseLong(
+                  candle.symbol,
+                  strategy.id,
+                  candle.close,
+                  candle.closeTime,
+                  result.reason,
+                ),
+              ) || tradeHappened;
           }
 
           if (result.signal === 'REVERSE_TO_SHORT') {
             const closeExecuted = this.handleExecutionResult(
               this.trader.tryCloseLong(
                 candle.symbol,
+                strategy.id,
                 candle.close,
                 candle.closeTime,
                 'Переворот: закрываем лонг перед открытием шорта',
               ),
             );
-            const openExecuted = this.tryOpenWithRisk(candle, 'SHORT', result.reason);
-            tradeHappened = closeExecuted || openExecuted;
+            const openExecuted = this.tryOpenWithRisk(
+              candle,
+              strategy,
+              'SHORT',
+              result.reason,
+            );
+            tradeHappened = closeExecuted || openExecuted || tradeHappened;
           }
         }
 
         if (position.side === 'SHORT') {
           if (result.signal === 'CLOSE_SHORT') {
-            tradeHappened = this.handleExecutionResult(
-              this.trader.tryCloseShort(
-                candle.symbol,
-                candle.close,
-                candle.closeTime,
-                result.reason,
-              ),
-            );
+            tradeHappened =
+              this.handleExecutionResult(
+                this.trader.tryCloseShort(
+                  candle.symbol,
+                  strategy.id,
+                  candle.close,
+                  candle.closeTime,
+                  result.reason,
+                ),
+              ) || tradeHappened;
           }
 
           if (result.signal === 'REVERSE_TO_LONG') {
             const closeExecuted = this.handleExecutionResult(
               this.trader.tryCloseShort(
                 candle.symbol,
+                strategy.id,
                 candle.close,
                 candle.closeTime,
                 'Переворот: закрываем шорт перед открытием лонга',
               ),
             );
-            const openExecuted = this.tryOpenWithRisk(candle, 'LONG', result.reason);
-            tradeHappened = closeExecuted || openExecuted;
+            const openExecuted = this.tryOpenWithRisk(
+              candle,
+              strategy,
+              'LONG',
+              result.reason,
+            );
+            tradeHappened = closeExecuted || openExecuted || tradeHappened;
           }
         }
       }
@@ -298,12 +399,14 @@ export class BotRunnerService implements OnModuleDestroy {
 
   private tryOpenWithRisk(
     candle: Candle,
+    strategy: TradingStrategy,
     side: 'LONG' | 'SHORT',
     reason: string,
   ) {
     const approval = this.riskManager.approveOpenPosition({
       symbol: candle.symbol,
       interval: candle.interval,
+      strategyId: strategy.id,
       side,
       entryPrice: candle.close,
       timestamp: candle.closeTime,
@@ -312,6 +415,8 @@ export class BotRunnerService implements OnModuleDestroy {
     if (approval.status === 'DENIED') {
       this.logger.logInfo('Риск-менеджер отклонил сделку', {
         символ: candle.symbol,
+        стратегия: strategy.name,
+        strategyId: strategy.id,
         сторона: side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
         причина: approval.reason,
       });
@@ -323,6 +428,8 @@ export class BotRunnerService implements OnModuleDestroy {
         ? this.trader.tryOpenLong(
             candle.symbol,
             candle.interval,
+            strategy.id,
+            strategy.name,
             candle.close,
             candle.closeTime,
             reason,
@@ -331,6 +438,8 @@ export class BotRunnerService implements OnModuleDestroy {
         : this.trader.tryOpenShort(
             candle.symbol,
             candle.interval,
+            strategy.id,
+            strategy.name,
             candle.close,
             candle.closeTime,
             reason,
@@ -349,6 +458,7 @@ export class BotRunnerService implements OnModuleDestroy {
       this.logger.logInfo('Сделка отклонена', {
         действие: this.translateAction(execution.action),
         символ: execution.symbol ?? 'НЕИЗВЕСТНО',
+        стратегия: execution.strategyName ?? execution.strategyId ?? 'НЕИЗВЕСТНО',
         причина: execution.reason,
       });
       return false;
@@ -360,10 +470,9 @@ export class BotRunnerService implements OnModuleDestroy {
       execution.trade.action === 'CLOSE_LONG' ||
       execution.trade.action === 'CLOSE_SHORT'
     ) {
-      this.strategy.registerTradeClosed(
-        execution.trade.symbol,
-        execution.trade.interval,
-      );
+      this.strategyRegistry
+        .getStrategyById(execution.trade.strategyId)
+        ?.registerTradeClosed(execution.trade.symbol, execution.trade.interval);
     }
 
     this.candlesWithoutPosition.set(execution.trade.symbol, 0);
@@ -372,23 +481,68 @@ export class BotRunnerService implements OnModuleDestroy {
 
   private async preloadSymbolHistory(symbol: string) {
     try {
+      const requiredWarmupCandles = this.getRequiredWarmupCandles();
+      const preloadCandles = Math.max(requiredWarmupCandles + 30, 60);
       const candles = await this.market.loadHistoricalCandles(
         symbol,
         this.activeInterval,
-        250,
+        preloadCandles,
       );
-      this.strategy.seedHistory(symbol, this.activeInterval, candles);
+      for (const strategy of this.strategyRegistry.getStrategies()) {
+        strategy.seedHistory(symbol, this.activeInterval, candles);
+      }
       this.logger.logInfo('Прогрели историю по символу', {
         символ: symbol,
         свечей: candles.length,
+        минимальноНужноСвечей: requiredWarmupCandles,
+        запасСвечейДляСтарта: Math.max(candles.length - requiredWarmupCandles, 0),
       });
+
+      if (this.confirmationInterval) {
+        const confirmationWarmupCandles = this.confirmation.getRequiredWarmupCandles();
+        const confirmationPreloadCandles = Math.max(
+          confirmationWarmupCandles + 20,
+          40,
+        );
+        const confirmationCandles = await this.market.loadHistoricalCandles(
+          symbol,
+          this.confirmationInterval,
+          confirmationPreloadCandles,
+        );
+        this.confirmation.seedHistory(
+          symbol,
+          this.confirmationInterval,
+          confirmationCandles,
+        );
+        this.logger.logInfo('Прогрели старший таймфрейм для подтверждения', {
+          символ: symbol,
+          интервалПодтверждения: this.confirmationInterval,
+          свечей: confirmationCandles.length,
+          минимальноНужноСвечей: confirmationWarmupCandles,
+        });
+      }
     } catch (error) {
       this.logger.logError('Не удалось прогреть историю по символу', {
         символ: symbol,
         error,
       });
-      this.strategy.resetSymbol(symbol, this.activeInterval);
+      for (const strategy of this.strategyRegistry.getStrategies()) {
+        strategy.resetSymbol(symbol, this.activeInterval);
+      }
+      if (this.confirmationInterval) {
+        this.confirmation.resetSymbol(symbol, this.confirmationInterval);
+      }
     }
+  }
+
+  private getRequiredWarmupCandles() {
+    const strategies = this.strategyRegistry.getStrategies();
+
+    if (strategies.length === 0) {
+      return 0;
+    }
+
+    return Math.max(...strategies.map((strategy) => strategy.getRequiredWarmupCandles()));
   }
 
   private printPortfolio(symbol: string) {
@@ -410,13 +564,17 @@ export class BotRunnerService implements OnModuleDestroy {
       symbolsUniverse: [...this.watchedSymbols],
       позиций: snapshot.openPositions.map((position) => ({
         символ: position.symbol,
+        стратегия: position.strategyName,
+        strategyId: position.strategyId,
         сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
         ценаВхода: Number(position.entryPrice.toFixed(2)),
         количество: Number(position.quantity.toFixed(8)),
         стопЦена: Number(position.stopPrice.toFixed(2)),
         тейкЦена: Number(position.takePrice.toFixed(2)),
         плавающийРезультат: Number(
-          this.portfolio.getUnrealizedPnl(position.symbol).toFixed(6),
+          this.portfolio
+            .getPositionUnrealizedPnl(position.symbol, position.strategyId)
+            .toFixed(6),
         ),
       })),
       всегоСделок: snapshot.totalTrades,
@@ -424,6 +582,12 @@ export class BotRunnerService implements OnModuleDestroy {
       убыточныхСделок: snapshot.losses,
       подрядУбыточныхСделок: snapshot.consecutiveLosses,
       винрейт: Number(this.portfolio.getWinRate().toFixed(2)),
+      экспозицияПоСтратегиям: Object.fromEntries(
+        Object.entries(snapshot.exposureByStrategy).map(([strategyId, value]) => [
+          strategyId,
+          Number(value.toFixed(6)),
+        ]),
+      ),
       рискМенеджмент: this.riskManager.getRiskState(),
       свечейБезПозицииПоСимволам: Object.fromEntries(this.candlesWithoutPosition),
     });
@@ -450,6 +614,8 @@ export class BotRunnerService implements OnModuleDestroy {
     return {
       действие: actionMap[trade.action] ?? trade.action,
       символ: trade.symbol,
+      стратегия: trade.strategyName,
+      strategyId: trade.strategyId,
       интервал: trade.interval,
       сторона: sideMap[trade.side] ?? trade.side,
       ценаВхода:
@@ -532,6 +698,123 @@ export class BotRunnerService implements OnModuleDestroy {
     };
   }
 
+  private translateIndicators(indicators?: Record<string, number>) {
+    if (!indicators) {
+      return null;
+    }
+
+    const translated: Record<string, number> = {};
+
+    for (const [key, value] of Object.entries(indicators)) {
+      const mappedKey =
+        {
+          emaFast: 'быстраяСкользящаяСредняя',
+          emaSlow: 'медленнаяСкользящаяСредняя',
+          rsi: 'индексОтносительнойСилы',
+          atr: 'среднийИстинныйДиапазон',
+          atrPct: 'среднийИстинныйДиапазонВПроцентах',
+          trendStrengthPct: 'силаТрендаВПроцентах',
+          deviationPct: 'отклонениеОтСреднейВПроцентах',
+        }[key] ?? key;
+
+      translated[mappedKey] =
+        key.toLowerCase().includes('pct') || key.toLowerCase().includes('deviation')
+          ? Number((value * 100).toFixed(3))
+          : Number(value.toFixed(6));
+    }
+
+    return translated;
+  }
+
+  private applyConfirmationFilter(
+    symbol: string,
+    strategy: TradingStrategy,
+    result: StrategyResult,
+  ): StrategyResult {
+    if (!this.confirmationInterval) {
+      return result;
+    }
+
+    if (strategy.getConfirmationPolicy() === 'none') {
+      return result;
+    }
+
+    const confirmation = this.confirmation.getTrend(symbol, this.confirmationInterval);
+    const signal = result.signal;
+    const needsLongConfirmation =
+      signal === 'OPEN_LONG' || signal === 'REVERSE_TO_LONG';
+    const needsShortConfirmation =
+      signal === 'OPEN_SHORT' || signal === 'REVERSE_TO_SHORT';
+
+    if (!needsLongConfirmation && !needsShortConfirmation) {
+      return result;
+    }
+
+    if (!confirmation.isReady) {
+      if (signal === 'REVERSE_TO_LONG') {
+        return {
+          ...result,
+          signal: 'CLOSE_SHORT',
+          reason: `${result.reason}. Старший таймфрейм ещё не готов подтвердить long, поэтому закрываем шорт без переворота`,
+        };
+      }
+
+      if (signal === 'REVERSE_TO_SHORT') {
+        return {
+          ...result,
+          signal: 'CLOSE_LONG',
+          reason: `${result.reason}. Старший таймфрейм ещё не готов подтвердить short, поэтому закрываем лонг без переворота`,
+        };
+      }
+
+      return {
+        ...result,
+        signal: 'HOLD',
+        reason: `${result.reason}. Ожидаем готовности подтверждения на старшем таймфрейме ${this.confirmationInterval}`,
+      };
+    }
+
+    if (needsLongConfirmation && confirmation.trend !== 'BULLISH') {
+      if (signal === 'REVERSE_TO_LONG') {
+        return {
+          ...result,
+          signal: 'CLOSE_SHORT',
+          reason: `${result.reason}. Старший таймфрейм не подтверждает long, поэтому выполняем только закрытие short`,
+        };
+      }
+
+      return {
+        ...result,
+        signal: 'HOLD',
+        reason: `${result.reason}. Старший таймфрейм ${this.confirmationInterval} не подтверждает long`,
+      };
+    }
+
+    if (needsShortConfirmation && confirmation.trend !== 'BEARISH') {
+      if (signal === 'REVERSE_TO_SHORT') {
+        return {
+          ...result,
+          signal: 'CLOSE_LONG',
+          reason: `${result.reason}. Старший таймфрейм не подтверждает short, поэтому выполняем только закрытие long`,
+        };
+      }
+
+      return {
+        ...result,
+        signal: 'HOLD',
+        reason: `${result.reason}. Старший таймфрейм ${this.confirmationInterval} не подтверждает short`,
+      };
+    }
+
+    return result;
+  }
+
+  private translateConfirmationTrend(trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL') {
+    if (trend === 'BULLISH') return 'БЫЧИЙ';
+    if (trend === 'BEARISH') return 'МЕДВЕЖИЙ';
+    return 'НЕЙТРАЛЬНЫЙ';
+  }
+
   onModuleDestroy() {
     if (this.scannerInterval) {
       clearInterval(this.scannerInterval);
@@ -544,8 +827,28 @@ export class BotRunnerService implements OnModuleDestroy {
     return {
       generatedAt: Date.now(),
       interval: this.activeInterval,
+      executionInterval: this.activeInterval,
+      confirmationInterval: this.confirmationInterval,
       watchedSymbols: [...this.watchedSymbols],
       idleCountersBySymbol: Object.fromEntries(this.candlesWithoutPosition),
+      confirmationBySymbol: this.confirmationInterval
+        ? Object.fromEntries(
+            [...this.watchedSymbols].map((symbol) => [
+              symbol,
+              (() => {
+                const state = this.confirmation.getTrend(symbol, this.confirmationInterval!);
+                return {
+                  готовность: state.isReady ? 'готов' : 'не готов',
+                  направление: this.translateConfirmationTrend(state.trend),
+                  силаТрендаВПроцентах:
+                    typeof state.trendStrengthPct === 'number'
+                      ? Number((state.trendStrengthPct * 100).toFixed(3))
+                      : null,
+                };
+              })(),
+            ]),
+          )
+        : {},
       portfolio: {
         баланс: Number(snapshot.balance.toFixed(6)),
         реализованныйРезультат: Number(snapshot.realizedPnl.toFixed(6)),
@@ -564,6 +867,8 @@ export class BotRunnerService implements OnModuleDestroy {
         винрейт: Number(this.portfolio.getWinRate().toFixed(2)),
         позиций: snapshot.openPositions.map((position) => ({
           символ: position.symbol,
+          стратегия: position.strategyName,
+          strategyId: position.strategyId,
           сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
           ценаВхода: Number(position.entryPrice.toFixed(2)),
           количество: Number(position.quantity.toFixed(8)),
@@ -575,12 +880,82 @@ export class BotRunnerService implements OnModuleDestroy {
             ),
           ),
           плавающийРезультат: Number(
-            this.portfolio.getUnrealizedPnl(position.symbol).toFixed(6),
+            this.portfolio
+              .getPositionUnrealizedPnl(position.symbol, position.strategyId)
+              .toFixed(6),
           ),
         })),
+        экспозицияПоСтратегиям: Object.fromEntries(
+          Object.entries(snapshot.exposureByStrategy).map(([strategyId, value]) => [
+            strategyId,
+            Number(value.toFixed(6)),
+          ]),
+        ),
       },
       рискМенеджмент: this.riskManager.getRiskState(),
       scannerTop: this.lastScanTop.map((item) => this.translateScannedSymbol(item)),
+    };
+  }
+
+  closePosition(
+    symbol: string,
+    strategyId: string,
+    reason = 'Ручное закрытие позиции через dashboard',
+  ) {
+    const position = this.portfolio.getPosition(symbol, strategyId);
+
+    if (!position) {
+      return {
+        closed: false,
+        reason: 'Позиция не найдена',
+        snapshot: this.getDashboardSnapshot(),
+      };
+    }
+
+    this.logger.logInfo('Получена команда закрытия одной позиции', {
+      символ: symbol,
+      стратегия: position.strategyName,
+      strategyId,
+      сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+      причина: reason,
+    });
+
+    const price = this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
+    const execution =
+      position.side === 'LONG'
+        ? this.trader.tryCloseLong(
+            position.symbol,
+            position.strategyId,
+            price,
+            Date.now(),
+            reason,
+          )
+        : this.trader.tryCloseShort(
+            position.symbol,
+            position.strategyId,
+            price,
+            Date.now(),
+            reason,
+          );
+
+    const closed = this.handleExecutionResult(execution);
+    const snapshot = this.getDashboardSnapshot();
+
+    this.logger.logInfo(
+      closed ? 'Позиция закрыта вручную' : 'Не удалось закрыть позицию вручную',
+      {
+        символ: symbol,
+        стратегия: position.strategyName,
+        strategyId,
+        итоговыйБаланс: snapshot.portfolio.баланс,
+        итоговыйКапитал: snapshot.portfolio.капитал,
+      },
+    );
+
+    return {
+      closed,
+      reason: closed ? 'Позиция успешно закрыта' : 'Закрытие позиции не выполнено',
+      snapshot,
     };
   }
 
@@ -599,12 +974,14 @@ export class BotRunnerService implements OnModuleDestroy {
         position.side === 'LONG'
           ? this.trader.tryCloseLong(
               position.symbol,
+              position.strategyId,
               price,
               Date.now(),
               reason,
             )
           : this.trader.tryCloseShort(
               position.symbol,
+              position.strategyId,
               price,
               Date.now(),
               reason,

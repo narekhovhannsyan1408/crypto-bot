@@ -2,7 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { Candle } from '../../market/types';
 import { getBotConfig } from '../../config/bot-config';
 import { PortfolioService } from '../portfolio/portfolio.service';
-import { ClosedTrade, ExecutionResult, Position, PositionSide } from '../types';
+import {
+  ClosedTrade,
+  ExecutionResult,
+  makePositionKey,
+  Position,
+  PositionSide,
+} from '../types';
 
 @Injectable()
 export class PaperTraderService {
@@ -13,6 +19,8 @@ export class PaperTraderService {
   tryOpenLong(
     symbol: string,
     interval: string,
+    strategyId: string,
+    strategyName: string,
     price: number,
     timestamp: number,
     reason: string,
@@ -22,6 +30,8 @@ export class PaperTraderService {
       'LONG',
       symbol,
       interval,
+      strategyId,
+      strategyName,
       price,
       timestamp,
       reason,
@@ -31,16 +41,26 @@ export class PaperTraderService {
 
   tryCloseLong(
     symbol: string,
+    strategyId: string,
     price: number,
     timestamp: number,
     reason: string,
   ): ExecutionResult | null {
-    return this.tryClosePosition('LONG', symbol, price, timestamp, reason);
+    return this.tryClosePosition(
+      'LONG',
+      symbol,
+      strategyId,
+      price,
+      timestamp,
+      reason,
+    );
   }
 
   tryOpenShort(
     symbol: string,
     interval: string,
+    strategyId: string,
+    strategyName: string,
     price: number,
     timestamp: number,
     reason: string,
@@ -50,6 +70,8 @@ export class PaperTraderService {
       'SHORT',
       symbol,
       interval,
+      strategyId,
+      strategyName,
       price,
       timestamp,
       reason,
@@ -59,80 +81,105 @@ export class PaperTraderService {
 
   tryCloseShort(
     symbol: string,
+    strategyId: string,
     price: number,
     timestamp: number,
     reason: string,
   ): ExecutionResult | null {
-    return this.tryClosePosition('SHORT', symbol, price, timestamp, reason);
+    return this.tryClosePosition(
+      'SHORT',
+      symbol,
+      strategyId,
+      price,
+      timestamp,
+      reason,
+    );
   }
 
-  checkStops(candle: Candle): ExecutionResult | null {
-    const position = this.portfolio.getPosition(candle.symbol);
+  checkStops(candle: Candle): ExecutionResult[] {
+    const positions = this.portfolio.getPositionsForSymbol(candle.symbol);
+    const actions: ExecutionResult[] = [];
 
-    if (!position) {
-      return null;
-    }
+    for (const position of positions) {
+      if (position.side === 'LONG') {
+        if (candle.low <= position.stopPrice) {
+          const action = this.tryCloseLong(
+            candle.symbol,
+            position.strategyId,
+            position.stopPrice,
+            candle.closeTime,
+            'Стоп-лосс/трейлинг по лонгу',
+          );
+          if (action) actions.push(action);
+          continue;
+        }
 
-    if (position.side === 'LONG') {
-      if (candle.low <= position.stopPrice) {
-        return this.tryCloseLong(
-          candle.symbol,
-          position.stopPrice,
-          candle.closeTime,
-          'Стоп-лосс/трейлинг по лонгу',
-        );
+        if (candle.high >= position.takePrice) {
+          const action = this.tryCloseLong(
+            candle.symbol,
+            position.strategyId,
+            position.takePrice,
+            candle.closeTime,
+            'Тейк-профит по лонгу',
+          );
+          if (action) actions.push(action);
+          continue;
+        }
+
+        this.updateTrailingLevels(position, candle);
+        continue;
       }
 
-      if (candle.high >= position.takePrice) {
-        return this.tryCloseLong(
+      if (candle.high >= position.stopPrice) {
+        const action = this.tryCloseShort(
           candle.symbol,
+          position.strategyId,
+          position.stopPrice,
+          candle.closeTime,
+          'Стоп-лосс/трейлинг по шорту',
+        );
+        if (action) actions.push(action);
+        continue;
+      }
+
+      if (candle.low <= position.takePrice) {
+        const action = this.tryCloseShort(
+          candle.symbol,
+          position.strategyId,
           position.takePrice,
           candle.closeTime,
-          'Тейк-профит по лонгу',
+          'Тейк-профит по шорту',
         );
+        if (action) actions.push(action);
+        continue;
       }
 
       this.updateTrailingLevels(position, candle);
-      return null;
     }
 
-    if (candle.high >= position.stopPrice) {
-      return this.tryCloseShort(
-        candle.symbol,
-        position.stopPrice,
-        candle.closeTime,
-        'Стоп-лосс/трейлинг по шорту',
-      );
-    }
-
-    if (candle.low <= position.takePrice) {
-      return this.tryCloseShort(
-        candle.symbol,
-        position.takePrice,
-        candle.closeTime,
-        'Тейк-профит по шорту',
-      );
-    }
-
-    this.updateTrailingLevels(position, candle);
-    return null;
+    return actions;
   }
 
   private tryOpenPosition(
     side: PositionSide,
     symbol: string,
     interval: string,
+    strategyId: string,
+    strategyName: string,
     price: number,
     timestamp: number,
     reason: string,
     positionSizeUsdt: number,
   ): ExecutionResult {
-    if (this.portfolio.hasOpenPosition(symbol)) {
+    if (this.portfolio.hasOpenPosition(symbol, strategyId)) {
       return {
         status: 'REJECTED',
         action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
         symbol,
         interval,
+        strategyId,
+        strategyName,
         reason: 'Позиция уже открыта',
       };
     }
@@ -151,8 +198,11 @@ export class PaperTraderService {
       return {
         status: 'REJECTED',
         action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
         symbol,
         interval,
+        strategyId,
+        strategyName,
         reason: 'Размер позиции рассчитался как ноль',
       };
     }
@@ -161,8 +211,11 @@ export class PaperTraderService {
       return {
         status: 'REJECTED',
         action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
         symbol,
         interval,
+        strategyId,
+        strategyName,
         reason: 'Недостаточно свободного баланса',
       };
     }
@@ -175,16 +228,22 @@ export class PaperTraderService {
       return {
         status: 'REJECTED',
         action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
         symbol,
         interval,
+        strategyId,
+        strategyName,
         reason: 'Количество позиции получилось некорректным',
       };
     }
 
     this.portfolio.balance -= positionSizeUsdt;
     this.portfolio.registerOpenedPosition({
+      key: makePositionKey(symbol, strategyId),
       symbol,
       interval,
+      strategyId,
+      strategyName,
       side,
       entryPrice: price,
       quantity,
@@ -204,8 +263,11 @@ export class PaperTraderService {
       status: 'EXECUTED',
       trade: {
         action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
         symbol,
         interval,
+        strategyId,
+        strategyName,
         side,
         price,
         quantity,
@@ -219,11 +281,12 @@ export class PaperTraderService {
   private tryClosePosition(
     expectedSide: PositionSide,
     symbol: string,
+    strategyId: string,
     price: number,
     timestamp: number,
     reason: string,
   ): ExecutionResult | null {
-    const position = this.portfolio.getPosition(symbol);
+    const position = this.portfolio.getPosition(symbol, strategyId);
 
     if (!position || position.side !== expectedSide) {
       return null;
@@ -245,11 +308,14 @@ export class PaperTraderService {
     const totalFees = position.entryFeePaid + exitFee;
 
     this.portfolio.balance += returnedCapital;
-    this.portfolio.clearPosition(symbol);
+    this.portfolio.clearPosition(symbol, strategyId);
 
     const closedTrade: ClosedTrade = {
+      key: position.key,
       symbol: position.symbol,
       interval: position.interval,
+      strategyId: position.strategyId,
+      strategyName: position.strategyName,
       side: position.side,
       entryPrice: position.entryPrice,
       exitPrice: price,
@@ -270,8 +336,11 @@ export class PaperTraderService {
       status: 'EXECUTED',
       trade: {
         action: position.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
+        key: position.key,
         symbol: position.symbol,
         interval: position.interval,
+        strategyId: position.strategyId,
+        strategyName: position.strategyName,
         side: position.side,
         entryPrice: position.entryPrice,
         exitPrice: price,

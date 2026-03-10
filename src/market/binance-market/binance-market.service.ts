@@ -117,33 +117,68 @@ export class BinanceMarketService implements OnModuleDestroy {
   }
 
   async loadHistoricalCandles(symbol: string, interval = '1m', limit = 200) {
-    const response = await axios.get(`${this.config.binanceRestBaseUrl}/api/v3/klines`, {
-      params: { symbol, interval, limit },
-    });
+    let lastError: unknown;
 
-    return (response.data as Array<[number, string, string, string, string, string, number]>)
-      .map((item) => ({
-        symbol,
-        interval,
-        openTime: item[0],
-        closeTime: item[6],
-        open: Number(item[1]),
-        high: Number(item[2]),
-        low: Number(item[3]),
-        close: Number(item[4]),
-        volume: Number(item[5]),
-        isClosed: true,
-      }))
-      .filter((candle) => Number.isFinite(candle.close));
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await axios.get(
+          `${this.config.binanceRestBaseUrl}/api/v3/klines`,
+          {
+            params: { symbol, interval, limit },
+            timeout: 10_000,
+          },
+        );
+
+        return (
+          response.data as Array<[number, string, string, string, string, string, number]>
+        )
+          .map((item) => ({
+            symbol,
+            interval,
+            openTime: item[0],
+            closeTime: item[6],
+            open: Number(item[1]),
+            high: Number(item[2]),
+            low: Number(item[3]),
+            close: Number(item[4]),
+            volume: Number(item[5]),
+            isClosed: true,
+          }))
+          .filter((candle) => Number.isFinite(candle.close));
+      } catch (error) {
+        lastError = error;
+
+        if (attempt < 3) {
+          const retryDelayMs = attempt * 750;
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        }
+      }
+    }
+
+    throw lastError;
   }
 
   connectSymbols(symbols: string[], interval = '1m', onCandle: (candle: Candle) => void) {
-    const streams = symbols.map((symbol) => `${symbol.toLowerCase()}@kline_${interval}`);
+    const streams = this.buildKlineStreams(symbols, [interval]);
     this.connect(streams, onCandle);
   }
 
   replaceSymbols(symbols: string[], interval = '1m') {
-    const streams = symbols.map((symbol) => `${symbol.toLowerCase()}@kline_${interval}`);
+    const streams = this.buildKlineStreams(symbols, [interval]);
+    this.replaceSubscriptions(streams);
+  }
+
+  connectSymbolIntervals(
+    symbols: string[],
+    intervals: string[],
+    onCandle: (candle: Candle) => void,
+  ) {
+    const streams = this.buildKlineStreams(symbols, intervals);
+    this.connect(streams, onCandle);
+  }
+
+  replaceSymbolIntervals(symbols: string[], intervals: string[]) {
+    const streams = this.buildKlineStreams(symbols, intervals);
     this.replaceSubscriptions(streams);
   }
 
@@ -194,6 +229,22 @@ export class BinanceMarketService implements OnModuleDestroy {
       .filter(Boolean);
 
     return [...new Set(normalized)];
+  }
+
+  private buildKlineStreams(symbols: string[], intervals: string[]) {
+    const normalizedSymbols = [...new Set(symbols.map((symbol) => symbol.trim()).filter(Boolean))];
+    const normalizedIntervals = [
+      ...new Set(intervals.map((interval) => interval.trim()).filter(Boolean)),
+    ];
+
+    const streams: string[] = [];
+    for (const symbol of normalizedSymbols) {
+      for (const interval of normalizedIntervals) {
+        streams.push(`${symbol.toLowerCase()}@kline_${interval}`);
+      }
+    }
+
+    return streams;
   }
 
   onModuleDestroy() {

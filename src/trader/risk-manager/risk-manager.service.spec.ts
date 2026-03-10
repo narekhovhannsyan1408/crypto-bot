@@ -14,7 +14,9 @@ describe('RiskManagerService', () => {
     process.env.BOT_MAX_DRAWDOWN_STOP_PCT = '0.15';
     process.env.BOT_MAX_DAILY_LOSS_PCT = '0.04';
     process.env.BOT_MAX_CONSECUTIVE_LOSSES = '3';
-    process.env.BOT_POSITION_SIZE_USDT = '100';
+    process.env.BOT_MIN_POSITION_SIZE_USDT = '25';
+    process.env.BOT_POSITION_SIZE_USDT = '0';
+    process.env.BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY = '0.05';
     process.env.BOT_RISK_PER_TRADE_PCT = '0.01';
     process.env.BOT_STOP_LOSS_PCT = '0.01';
     resetBotConfigCache();
@@ -31,12 +33,16 @@ describe('RiskManagerService', () => {
     const approval = service.approveOpenPosition({
       symbol: 'BTCUSDT',
       interval: '1m',
+      strategyId: 'momentum_trend',
       side: 'LONG',
       entryPrice: 100,
       timestamp: Date.now(),
     });
 
     expect(approval.status).toBe('APPROVED');
+    if (approval.status === 'APPROVED') {
+      expect(approval.approvedSizeUsdt).toBeCloseTo(50, 8);
+    }
   });
 
   it('denies trade after too many consecutive losses', () => {
@@ -45,6 +51,22 @@ describe('RiskManagerService', () => {
     const approval = service.approveOpenPosition({
       symbol: 'BTCUSDT',
       interval: '1m',
+      strategyId: 'momentum_trend',
+      side: 'LONG',
+      entryPrice: 100,
+      timestamp: Date.now(),
+    });
+
+    expect(approval.status).toBe('DENIED');
+  });
+
+  it('denies trade when approved size is below minimum position size', () => {
+    portfolio.balance = 10;
+
+    const approval = service.approveOpenPosition({
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      strategyId: 'momentum_trend',
       side: 'LONG',
       entryPrice: 100,
       timestamp: Date.now(),

@@ -30,17 +30,41 @@ describe('PaperTraderService', () => {
   });
 
   it('charges both entry and exit fees for a flat short trade', () => {
-    const open = service.tryOpenShort('BTCUSDT', '1m', 100, 1, 'test short', 100);
+    const open = service.tryOpenShort(
+      'BTCUSDT',
+      '1m',
+      'momentum_trend',
+      'Momentum Trend',
+      100,
+      1,
+      'test short',
+      100,
+    );
     expect(open.status).toBe('EXECUTED');
 
-    const close = service.tryCloseShort('BTCUSDT', 100, 2, 'flat close');
+    const close = service.tryCloseShort(
+      'BTCUSDT',
+      'momentum_trend',
+      100,
+      2,
+      'flat close',
+    );
     expect(close?.status).toBe('EXECUTED');
     expect(portfolio.balance).toBeCloseTo(999.8001, 6);
     expect(portfolio.realizedPnl).toBeCloseTo(-0.1999, 6);
   });
 
   it('moves trailing stop after a favorable candle', () => {
-    const open = service.tryOpenLong('BTCUSDT', '1m', 100, 1, 'test long', 100);
+    const open = service.tryOpenLong(
+      'BTCUSDT',
+      '1m',
+      'momentum_trend',
+      'Momentum Trend',
+      100,
+      1,
+      'test long',
+      100,
+    );
     expect(open.status).toBe('EXECUTED');
 
     service.checkStops({
@@ -56,6 +80,6 @@ describe('PaperTraderService', () => {
       isClosed: true,
     });
 
-    expect(portfolio.getPosition('BTCUSDT')?.stopPrice).toBeGreaterThan(100);
+    expect(portfolio.getPosition('BTCUSDT', 'momentum_trend')?.stopPrice).toBeGreaterThan(100);
   });
 });

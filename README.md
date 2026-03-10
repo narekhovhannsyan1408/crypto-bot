@@ -198,11 +198,14 @@ Production-oriented алгоритмический крипто-бот на `Nod
 При запуске бот:
 
 - читает конфигурацию из переменных окружения
-- определяет интервал торговли
+- определяет рабочий интервал торговли
+- при необходимости включает старший интервал подтверждения
 - строит стартовый universe
 - загружает исторические свечи по каждому символу
 - прогревает индикаторы стратегии
 - подписывается на рыночные потоки
+
+Важно: бот не должен ждать десятки новых `1m` свечей только для прогрева индикаторов. На старте он заранее скачивает историю Binance через REST и уже после этого переходит в live-режим.
 
 ### 2. Получение свечей
 
@@ -213,6 +216,11 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - обновляется mark price по символу
 - логируется новая свеча
 - проверяется открытая позиция по этому символу
+
+Если включён `BOT_CONFIRMATION_INTERVAL`, бот слушает сразу два потока:
+
+- `BOT_INTERVAL` как execution timeframe
+- `BOT_CONFIRMATION_INTERVAL` как higher timeframe confirmation
 
 ### 3. Проверка stop / take / trailing
 
@@ -226,9 +234,22 @@ Production-oriented алгоритмический крипто-бот на `Nod
 
 ### 4. Анализ стратегии
 
-Если позиция не была закрыта защитными условиями, бот рассчитывает сигнал.
+Если позиция не была закрыта защитными условиями, бот рассчитывает сигналы активных стратегий.
 
-Стратегия использует:
+Сейчас в runtime могут одновременно работать несколько стратегий:
+
+- `momentum_trend` - импульсная трендовая логика на EMA/RSI/ATR
+- `mean_reversion` - возврат к среднему после локального экстремума
+
+Каждая стратегия использует своё состояние индикаторов и свою историю по каждому символу.
+
+Если включён `BOT_CONFIRMATION_INTERVAL`, старший таймфрейм используется как фильтр подтверждения:
+
+- для `momentum_trend` входы в long разрешаются только при бычьем подтверждении сверху
+- для `momentum_trend` входы в short разрешаются только при медвежьем подтверждении сверху
+- для `mean_reversion` подтверждение сверху по умолчанию не обязательно
+
+Momentum / trend стратегия использует:
 
 - быструю EMA
 - медленную EMA
@@ -237,7 +258,7 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - оценку силы тренда
 - cooldown после закрытия сделки
 
-После этого стратегия отдаёт одно из решений:
+После этого каждая стратегия отдаёт одно из решений:
 
 - `OPEN_LONG`
 - `OPEN_SHORT`
@@ -253,7 +274,10 @@ Production-oriented алгоритмический крипто-бот на `Nod
 
 `RiskManager` проверяет:
 
-- нет ли уже позиции по символу
+- нет ли уже позиции по тому же `symbol + strategyId`
+- не превышен ли лимит числа стратегий на одном символе
+- не конфликтует ли новая позиция с уже открытой противоположной позицией по этому же символу
+- не превышен ли лимит позиций на одну стратегию
 - не превышен ли лимит позиций
 - не превышен ли лимит загрузки капитала
 - не превышен ли лимит дневного убытка
@@ -297,9 +321,13 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - добавляет новые интересные пары
 - удаляет слабые пары, если по ним нет открытых позиций
 
-## Стратегия
+## Стратегии
 
-Текущая стратегия ближе к краткосрочному `trend-following / momentum intraday` подходу.
+В текущей версии бот умеет одновременно исполнять несколько стратегий и вести отдельные позиции, сделки и PnL по каждой из них.
+
+### `momentum_trend`
+
+Эта стратегия ближе к краткосрочному `trend-following / momentum intraday` подходу.
 
 ### Вход в long
 
@@ -339,6 +367,22 @@ Short рассматривается, если:
 - хуже чувствует себя в пилящем боковике
 - зависит от качества фильтра волатильности и режима рынка
 
+### `mean_reversion`
+
+Эта стратегия ищет краткосрочные экстремумы относительно медленной EMA и пытается забирать возврат цены к среднему.
+
+Логика входа:
+
+- long, если цена заметно ниже средней и RSI в зоне перепроданности
+- short, если цена заметно выше средней и RSI в зоне перекупленности
+- рынок должен оставаться в допустимом диапазоне волатильности
+
+Логика выхода:
+
+- закрытие после возврата к средней
+- закрытие при нормализации RSI
+- переворот, если вместо возврата к среднему рынок сформировал экстремум в обратную сторону
+
 ## Risk management
 
 Сейчас risk management уже выделен в отдельный слой.
@@ -347,19 +391,27 @@ Short рассматривается, если:
 
 - `BOT_RISK_PER_TRADE_PCT`
 - `BOT_MAX_CONCURRENT_POSITIONS`
+- `BOT_MAX_POSITIONS_PER_SYMBOL`
+- `BOT_MAX_POSITIONS_PER_STRATEGY`
 - `BOT_MAX_PORTFOLIO_EXPOSURE_PCT`
 - `BOT_MAX_DRAWDOWN_STOP_PCT`
 - `BOT_MAX_DAILY_LOSS_PCT`
 - `BOT_MAX_CONSECUTIVE_LOSSES`
+- `BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL`
+- `BOT_ENABLED_STRATEGIES`
 
 ### Логика размера позиции
 
 Размер позиции рассчитывается не просто как фиксированная сумма, а как ограниченный риск-бюджетом размер с дополнительными капами:
 
-- max position size
+- minimum position size
+- max position size в USDT, если он включён
+- max position size как процент от equity
 - free balance
 - remaining portfolio exposure
 - risk-per-trade budget
+
+Если `BOT_POSITION_SIZE_USDT=0`, жёсткий USDT-cap отключается, и размер позиции начинает естественно расти или уменьшаться вместе с капиталом.
 
 ### Что это даёт
 
@@ -499,6 +551,7 @@ npm install
 ```env
 BOT_SYMBOL=BTCUSDT
 BOT_INTERVAL=1m
+BOT_CONFIRMATION_INTERVAL=5m
 BOT_USE_SCANNER=true
 BOT_SCAN_INTERVAL_MS=60000
 BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH=8
@@ -510,13 +563,16 @@ BOT_SCANNER_SHORTLIST_SIZE=8
 BOT_SCANNER_KLINE_LOOKBACK=30
 
 BOT_INITIAL_BALANCE=1000
-BOT_POSITION_SIZE_USDT=100
+BOT_MIN_POSITION_SIZE_USDT=25
+BOT_POSITION_SIZE_USDT=0
+BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY=0.10
 BOT_RISK_PER_TRADE_PCT=0.005
 BOT_FEE_PCT=0.001
 BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
 BOT_COOLDOWN_CANDLES=2
+BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion
 
 BOT_MIN_TREND_STRENGTH_PCT=0.0015
 BOT_MIN_ATR_PCT=0.001
@@ -528,10 +584,13 @@ BOT_RSI_LONG_THRESHOLD=55
 BOT_RSI_SHORT_THRESHOLD=45
 
 BOT_MAX_CONCURRENT_POSITIONS=3
+BOT_MAX_POSITIONS_PER_SYMBOL=2
+BOT_MAX_POSITIONS_PER_STRATEGY=3
 BOT_MAX_PORTFOLIO_EXPOSURE_PCT=0.8
 BOT_MAX_DRAWDOWN_STOP_PCT=0.15
 BOT_MAX_DAILY_LOSS_PCT=0.04
 BOT_MAX_CONSECUTIVE_LOSSES=4
+BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL=false
 
 BOT_DASHBOARD_ENABLED=true
 BOT_DASHBOARD_HOST=127.0.0.1
@@ -558,22 +617,29 @@ npm install
 ```env
 BOT_USE_SCANNER=true
 BOT_INTERVAL=1m
+BOT_CONFIRMATION_INTERVAL=5m
 BOT_UNIVERSE_SIZE=3
 BOT_ALLOWED_SYMBOLS=BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,LINKUSDT
 
 BOT_INITIAL_BALANCE=1000
-BOT_POSITION_SIZE_USDT=75
+BOT_MIN_POSITION_SIZE_USDT=25
+BOT_POSITION_SIZE_USDT=0
+BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY=0.08
 BOT_RISK_PER_TRADE_PCT=0.0025
 BOT_FEE_PCT=0.001
 BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
+BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion
 
 BOT_MAX_CONCURRENT_POSITIONS=2
+BOT_MAX_POSITIONS_PER_SYMBOL=2
+BOT_MAX_POSITIONS_PER_STRATEGY=2
 BOT_MAX_PORTFOLIO_EXPOSURE_PCT=0.5
 BOT_MAX_DRAWDOWN_STOP_PCT=0.08
 BOT_MAX_DAILY_LOSS_PCT=0.02
 BOT_MAX_CONSECUTIVE_LOSSES=3
+BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL=false
 
 BOT_DASHBOARD_ENABLED=true
 BOT_DASHBOARD_HOST=127.0.0.1
@@ -635,6 +701,9 @@ npm run build
 - `BOT_INTERVAL`
   Торговый интервал свечей.
 
+- `BOT_CONFIRMATION_INTERVAL`
+  Старший интервал подтверждения тренда. Если не задан, бот работает только по одному таймфрейму.
+
 - `BOT_USE_SCANNER`
   Включает или выключает market scanner.
 
@@ -655,7 +724,9 @@ npm run build
 
 ### Параметры исполнения
 
+- `BOT_MIN_POSITION_SIZE_USDT`
 - `BOT_POSITION_SIZE_USDT`
+- `BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY`
 - `BOT_FEE_PCT`
 - `BOT_STOP_LOSS_PCT`
 - `BOT_TAKE_PROFIT_PCT`
@@ -693,7 +764,8 @@ npm run build
 | Переменная | Назначение | Типичное значение | Комментарий |
 | --- | --- | --- | --- |
 | `BOT_SYMBOL` | Стартовый символ при отключённом scanner | `BTCUSDT` | Используется как fallback |
-| `BOT_INTERVAL` | Интервал свечей | `1m` | Базовый рабочий интервал |
+| `BOT_INTERVAL` | Интервал свечей для исполнения | `1m` | Базовый рабочий интервал |
+| `BOT_CONFIRMATION_INTERVAL` | Старший интервал подтверждения | `5m` или пусто | Для higher timeframe filter |
 | `BOT_USE_SCANNER` | Включить scanner | `true` | Если `false`, используется ручной режим |
 | `BOT_SCAN_INTERVAL_MS` | Частота пересчёта scanner | `60000` | В миллисекундах |
 | `BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH` | Старый порог простоя пары | `8` | Сохраняется для логики idle-state |
@@ -703,13 +775,16 @@ npm run build
 | `BOT_SCANNER_SHORTLIST_SIZE` | Сколько кандидатов анализирует scanner | `8` | Обычно больше universe |
 | `BOT_SCANNER_KLINE_LOOKBACK` | Сколько свечей брать для scanner enrichment | `30` | Влияет на short-horizon score |
 | `BOT_INITIAL_BALANCE` | Стартовый paper balance | `1000` | Баланс симуляции |
-| `BOT_POSITION_SIZE_USDT` | Верхний cap размера позиции | `100` | Не единственный фактор размера позиции |
+| `BOT_MIN_POSITION_SIZE_USDT` | Минимальный размер позиции | `10-25` | Защита от слишком маленьких входов |
+| `BOT_POSITION_SIZE_USDT` | Жёсткий cap размера позиции в USDT | `0` или `100` | `0` отключает жёсткий cap |
+| `BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY` | Cap позиции как доля equity | `0.05-0.12` | Основной dynamic sizing cap |
 | `BOT_RISK_PER_TRADE_PCT` | Риск на сделку | `0.0025-0.01` | Доля от капитала |
 | `BOT_FEE_PCT` | Комиссия на сделку | `0.001` | В расчётах входа и выхода |
 | `BOT_STOP_LOSS_PCT` | Базовый stop loss | `0.012` | 1.2% |
 | `BOT_TAKE_PROFIT_PCT` | Базовый take profit | `0.02` | 2% |
 | `BOT_TRAILING_STOP_PCT` | Трейлинг-стоп | `0.008` | 0.8% |
 | `BOT_COOLDOWN_CANDLES` | Пауза после сделки | `2` | Снижает overtrading |
+| `BOT_ENABLED_STRATEGIES` | Список активных стратегий | `momentum_trend,mean_reversion` | Можно selectively включать стратегии |
 | `BOT_EMA_FAST_PERIOD` | Быстрая EMA | `9` | Базовый импульс |
 | `BOT_EMA_SLOW_PERIOD` | Медленная EMA | `21` | Базовый фильтр тренда |
 | `BOT_RSI_PERIOD` | Период RSI | `14` | Осциллятор импульса |
@@ -719,10 +794,13 @@ npm run build
 | `BOT_MIN_ATR_PCT` | Минимальная волатильность | `0.001` | Не торговать мёртвый рынок |
 | `BOT_MAX_ATR_PCT` | Максимальная волатильность | `0.03` | Не торговать слишком хаотичный рынок |
 | `BOT_MAX_CONCURRENT_POSITIONS` | Максимум открытых позиций | `2-4` | Ограничение multi-pair нагрузки |
+| `BOT_MAX_POSITIONS_PER_SYMBOL` | Сколько стратегий могут держать один символ | `1-2` | Защита от перегруза одним активом |
+| `BOT_MAX_POSITIONS_PER_STRATEGY` | Сколько позиций может держать одна стратегия | `2-4` | Не даёт одной логике занять весь портфель |
 | `BOT_MAX_PORTFOLIO_EXPOSURE_PCT` | Максимальная загрузка капитала | `0.5-0.8` | Доля equity |
 | `BOT_MAX_DRAWDOWN_STOP_PCT` | Лимит максимальной просадки | `0.08-0.15` | После достижения новые входы режутся |
 | `BOT_MAX_DAILY_LOSS_PCT` | Дневной лимит убытка | `0.02-0.04` | Важная страховка |
 | `BOT_MAX_CONSECUTIVE_LOSSES` | Лимит подряд убыточных сделок | `3-4` | Защита от плохого режима |
+| `BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL` | Разрешить long/short конфликт по одному символу | `false` | Обычно лучше держать `false` |
 | `BOT_DASHBOARD_ENABLED` | Включить live dashboard | `true` | Можно отключить для headless режима |
 | `BOT_DASHBOARD_HOST` | Хост dashboard-сервера | `127.0.0.1` | Локальный доступ по умолчанию |
 | `BOT_DASHBOARD_PORT` | Порт dashboard-сервера | `3200` | Открой в браузере |

@@ -135,6 +135,8 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
       const message = JSON.parse(rawMessage) as {
         type?: string;
         reason?: string;
+        symbol?: string;
+        strategyId?: string;
       };
 
       if (message.type === 'emergency_close_all') {
@@ -157,6 +159,37 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
         this.sendJson(socket, {
           type: 'runtime_snapshot',
           payload: this.botRunner.getDashboardSnapshot(),
+        });
+        return;
+      }
+
+      if (message.type === 'close_position') {
+        if (!message.symbol || !message.strategyId) {
+          this.sendJson(socket, {
+            type: 'command_result',
+            payload: {
+              статус: 'ошибка',
+              сообщение: 'Для закрытия позиции нужны symbol и strategyId',
+            },
+          });
+          return;
+        }
+
+        const result = this.botRunner.closePosition(
+          message.symbol,
+          message.strategyId,
+          message.reason || 'Ручное закрытие позиции через live dashboard',
+        );
+
+        this.sendJson(socket, {
+          type: 'command_result',
+          payload: {
+            статус: result.closed ? 'успешно' : 'не выполнено',
+            сообщение: result.reason,
+            symbol: message.symbol,
+            strategyId: message.strategyId,
+            snapshot: result.snapshot,
+          },
         });
       }
     } catch (error) {

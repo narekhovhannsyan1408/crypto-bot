@@ -6,9 +6,12 @@ import { TraderModule } from './trader/trader.module';
 import { LoggerModule } from './logger/logger.module';
 import { ScannerModule } from './scanner/scanner.module';
 import { BacktestModule } from './backtest/backtest.module';
+import { StreamingModule } from './streaming/streaming.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
+    StreamingModule,
     BotModule,
     MarketModule,
     StrategyModule,
@@ -16,6 +19,7 @@ import { BacktestModule } from './backtest/backtest.module';
     LoggerModule,
     ScannerModule,
     BacktestModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

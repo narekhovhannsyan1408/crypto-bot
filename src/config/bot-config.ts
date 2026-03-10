@@ -38,6 +38,9 @@ export type BotConfig = {
   maxDrawdownStopPct: number;
   maxDailyLossPct: number;
   maxConsecutiveLosses: number;
+  dashboardEnabled: boolean;
+  dashboardHost: string;
+  dashboardPort: number;
   binanceRestBaseUrl: string;
   binanceWsBaseUrl: string;
   allowedSymbols: string[];
@@ -97,6 +100,9 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_MAX_CONSECUTIVE_LOSSES,
       4,
     ),
+    dashboardEnabled: process.env.BOT_DASHBOARD_ENABLED !== 'false',
+    dashboardHost: stringValue(process.env.BOT_DASHBOARD_HOST, '127.0.0.1'),
+    dashboardPort: numberValue(process.env.BOT_DASHBOARD_PORT, 3200),
     binanceRestBaseUrl: stringValue(
       process.env.BINANCE_REST_BASE_URL,
       'https://api.binance.com',

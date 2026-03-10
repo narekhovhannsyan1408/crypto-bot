@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LiveStreamService } from '../../streaming/live-stream/live-stream.service';
 
 @Injectable()
 export class BotLoggerService {
@@ -11,6 +12,8 @@ export class BotLoggerService {
     info: '\x1b[34m',
     error: '\x1b[31m',
   };
+
+  constructor(private readonly liveStream: LiveStreamService) {}
 
   private normalizePayload(payload: unknown): unknown {
     if (payload instanceof Error) {
@@ -55,6 +58,7 @@ export class BotLoggerService {
     colorKey: keyof BotLoggerService['colors'],
     isError = false,
   ) {
+    const normalized = payload !== undefined ? this.normalizePayload(payload) : undefined;
     const divider = this.colorize(
       colorKey,
       '============================================================',
@@ -65,7 +69,6 @@ export class BotLoggerService {
     ];
 
     if (payload !== undefined) {
-      const normalized = this.normalizePayload(payload);
       const formatted = this.formatValue(normalized, 0);
 
       if (formatted.length > 0) {
@@ -79,10 +82,16 @@ export class BotLoggerService {
 
     if (isError) {
       console.error(output);
-      return;
+    } else {
+      console.log(output);
     }
 
-    console.log(output);
+    this.liveStream.publish({
+      type: this.mapTagToEventType(tag),
+      tag,
+      title,
+      payload: normalized,
+    });
   }
 
   private formatValue(value: unknown, indentLevel: number): string[] {
@@ -175,5 +184,12 @@ export class BotLoggerService {
 
   private colorize(colorKey: keyof BotLoggerService['colors'], text: string) {
     return `${this.colors[colorKey]}${text}${this.reset}`;
+  }
+
+  private mapTagToEventType(tag: string) {
+    if (tag === 'СДЕЛКА') return 'trade' as const;
+    if (tag === 'ПОРТФЕЛЬ') return 'portfolio' as const;
+    if (tag === 'ИНФО') return 'system' as const;
+    return 'log' as const;
   }
 }

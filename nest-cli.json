@@ -3,6 +3,12 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
+    "assets": [
+      {
+        "include": "dashboard/public/**/*",
+        "outDir": "dist"
+      }
+    ],
     "deleteOutDir": true
   }
 }

@@ -55,7 +55,12 @@ export class BotLoggerService {
     colorKey: keyof BotLoggerService['colors'],
     isError = false,
   ) {
+    const divider = this.colorize(
+      colorKey,
+      '============================================================',
+    );
     const lines = [
+      divider,
       `${this.colorize(colorKey, `[${this.getTimestamp()}] [${tag}]`)} ${title}`,
     ];
 
@@ -68,7 +73,9 @@ export class BotLoggerService {
       }
     }
 
-    const output = lines.join('\n');
+    lines.push(divider);
+
+    const output = `${lines.join('\n')}\n`;
 
     if (isError) {
       console.error(output);

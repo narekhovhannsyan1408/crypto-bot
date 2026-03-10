@@ -239,6 +239,44 @@ th {
   padding-bottom: 8px;
 }
 
+.logs-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.log-filter-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.log-filter-button {
+  padding: 8px 12px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: var(--text);
+}
+
+.log-filter-button.active {
+  background: rgba(29, 78, 216, 0.9);
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.log-search-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.65);
+  color: var(--text);
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.log-search-input::placeholder {
+  color: var(--muted);
+}
+
 .logs-container {
   display: grid;
   gap: 10px;

@@ -183,6 +183,51 @@ describe('BotRunnerService', () => {
     resetBotConfigCache();
   });
 
+  it('allows short signal on neutral confirmation in lenient mode', async () => {
+    process.env.BOT_CONFIRMATION_INTERVAL = '5m';
+    process.env.BOT_CONFIRMATION_MODE = 'lenient';
+    resetBotConfigCache();
+
+    confirmationMock.getTrend.mockReturnValueOnce({
+      isReady: true,
+      trend: 'NEUTRAL',
+      trendStrengthPct: 0.0005,
+    });
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BotRunnerService,
+        { provide: BinanceMarketService, useValue: marketMock },
+        { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        {
+          provide: HigherTimeframeConfirmationService,
+          useValue: confirmationMock,
+        },
+        { provide: PaperTraderService, useValue: traderMock },
+        { provide: PortfolioService, useValue: portfolioMock },
+        { provide: RiskManagerService, useValue: riskManagerMock },
+        { provide: BotLoggerService, useValue: loggerMock },
+        { provide: SymbolScannerService, useValue: scannerMock },
+      ],
+    }).compile();
+
+    const serviceWithLenientMode = module.get<BotRunnerService>(BotRunnerService);
+    const filtered = (serviceWithLenientMode as any).applyConfirmationFilter(
+      'BTCUSDT',
+      strategyMock,
+      {
+        signal: 'OPEN_SHORT',
+        reason: 'test short',
+      },
+    );
+
+    expect(filtered.signal).toBe('OPEN_SHORT');
+
+    delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_CONFIRMATION_MODE;
+    resetBotConfigCache();
+  });
+
   it('rotates out idle symbols when scanner provides new candidates', () => {
     (service as any).watchedSymbols.add('BTCUSDT');
     (service as any).watchedSymbols.add('ETHUSDT');

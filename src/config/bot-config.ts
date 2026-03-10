@@ -6,10 +6,20 @@ const numberValue = (value: string | undefined, fallback: number) => {
 const stringValue = (value: string | undefined, fallback: string) =>
   value?.trim() ? value.trim() : fallback;
 
+const confirmationModeValue = (
+  value: string | undefined,
+): 'strict' | 'lenient' | 'off' => {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'lenient') return 'lenient';
+  if (normalized === 'off') return 'off';
+  return 'strict';
+};
+
 export type BotConfig = {
   symbol: string;
   interval: string;
   confirmationInterval: string | null;
+  confirmationMode: 'strict' | 'lenient' | 'off';
   useScanner: boolean;
   scanIntervalMs: number;
   maxCandlesWithoutPositionBeforeSwitch: number;
@@ -64,6 +74,7 @@ export const getBotConfig = (): BotConfig => {
     symbol: stringValue(process.env.BOT_SYMBOL, 'BTCUSDT'),
     interval: stringValue(process.env.BOT_INTERVAL, '1m'),
     confirmationInterval: process.env.BOT_CONFIRMATION_INTERVAL?.trim() || null,
+    confirmationMode: confirmationModeValue(process.env.BOT_CONFIRMATION_MODE),
     useScanner: process.env.BOT_USE_SCANNER === 'true',
     scanIntervalMs: numberValue(process.env.BOT_SCAN_INTERVAL_MS, 60_000),
     maxCandlesWithoutPositionBeforeSwitch: numberValue(

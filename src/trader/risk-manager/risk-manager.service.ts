@@ -204,6 +204,7 @@ export class RiskManagerService {
       ),
       активныеСтратегии: this.config.enabledStrategies,
       открытыеПозицииПоСтратегиям: positionsByStrategy,
+      режимПодтвержденияСтаршегоТаймфрейма: this.config.confirmationMode,
       лимитПросадкиВПроцентах: Number(
         (this.config.maxDrawdownStopPct * 100).toFixed(2),
       ),

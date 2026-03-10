@@ -735,6 +735,10 @@ export class BotRunnerService implements OnModuleDestroy {
       return result;
     }
 
+    if (this.config.confirmationMode === 'off') {
+      return result;
+    }
+
     if (strategy.getConfirmationPolicy() === 'none') {
       return result;
     }
@@ -751,6 +755,10 @@ export class BotRunnerService implements OnModuleDestroy {
     }
 
     if (!confirmation.isReady) {
+      if (this.config.confirmationMode === 'lenient') {
+        return result;
+      }
+
       if (signal === 'REVERSE_TO_LONG') {
         return {
           ...result,
@@ -774,7 +782,10 @@ export class BotRunnerService implements OnModuleDestroy {
       };
     }
 
-    if (needsLongConfirmation && confirmation.trend !== 'BULLISH') {
+    if (
+      needsLongConfirmation &&
+      !this.isConfirmationAllowed('LONG', confirmation.trend)
+    ) {
       if (signal === 'REVERSE_TO_LONG') {
         return {
           ...result,
@@ -790,7 +801,10 @@ export class BotRunnerService implements OnModuleDestroy {
       };
     }
 
-    if (needsShortConfirmation && confirmation.trend !== 'BEARISH') {
+    if (
+      needsShortConfirmation &&
+      !this.isConfirmationAllowed('SHORT', confirmation.trend)
+    ) {
       if (signal === 'REVERSE_TO_SHORT') {
         return {
           ...result,
@@ -807,6 +821,21 @@ export class BotRunnerService implements OnModuleDestroy {
     }
 
     return result;
+  }
+
+  private isConfirmationAllowed(
+    direction: 'LONG' | 'SHORT',
+    trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL',
+  ) {
+    if (this.config.confirmationMode === 'strict') {
+      return direction === 'LONG' ? trend === 'BULLISH' : trend === 'BEARISH';
+    }
+
+    if (this.config.confirmationMode === 'lenient') {
+      return direction === 'LONG' ? trend !== 'BEARISH' : trend !== 'BULLISH';
+    }
+
+    return true;
   }
 
   private translateConfirmationTrend(trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL') {
@@ -829,6 +858,7 @@ export class BotRunnerService implements OnModuleDestroy {
       interval: this.activeInterval,
       executionInterval: this.activeInterval,
       confirmationInterval: this.confirmationInterval,
+      confirmationMode: this.config.confirmationMode,
       watchedSymbols: [...this.watchedSymbols],
       idleCountersBySymbol: Object.fromEntries(this.candlesWithoutPosition),
       confirmationBySymbol: this.confirmationInterval

@@ -4,6 +4,8 @@ const state = {
   equityHistory: [],
   runtime: null,
   socket: null,
+  logFilter: 'ALL',
+  logSearch: '',
 };
 
 const elements = {
@@ -15,6 +17,8 @@ const elements = {
   riskState: document.getElementById('risk-state'),
   tradesTable: document.getElementById('trades-table'),
   logsContainer: document.getElementById('logs-container'),
+  logFilterGroup: document.getElementById('log-filter-group'),
+  logSearchInput: document.getElementById('log-search-input'),
   chart: document.getElementById('equity-chart'),
   panicButton: document.getElementById('panic-button'),
   refreshButton: document.getElementById('refresh-button'),
@@ -90,6 +94,28 @@ function connect() {
     socket.send(JSON.stringify({ type: 'request_snapshot' }));
   };
 
+  elements.logFilterGroup.onclick = (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const button = target.closest('[data-log-filter]');
+    if (!button) {
+      return;
+    }
+
+    state.logFilter = button.dataset.logFilter || 'ALL';
+    renderLogs();
+    renderLogFilters();
+  };
+
+  elements.logSearchInput.oninput = (event) => {
+    const target = event.target;
+    state.logSearch = target instanceof HTMLInputElement ? target.value : '';
+    renderLogs();
+  };
+
   elements.positionsTable.onclick = (event) => {
     const target = event.target;
     if (!(target instanceof Element)) {
@@ -163,6 +189,7 @@ function renderAll() {
   renderUniverse();
   renderRiskState();
   renderTrades();
+  renderLogFilters();
   renderLogs();
   renderChart();
 }
@@ -293,8 +320,25 @@ function renderTrades() {
 }
 
 function renderLogs() {
+  const search = state.logSearch.trim().toLowerCase();
   elements.logsContainer.innerHTML = state.recentEvents
     .slice(0, 80)
+    .filter((entry) => matchesLogFilter(entry, state.logFilter))
+    .filter((entry) => {
+      if (!search) {
+        return true;
+      }
+
+      const haystack = [
+        entry.tag,
+        entry.title,
+        safeStringify(entry.payload),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(search);
+    })
     .map((entry) => {
       return `
         <div class="log-entry">
@@ -307,6 +351,14 @@ function renderLogs() {
       `;
     })
     .join('');
+}
+
+function renderLogFilters() {
+  const buttons = elements.logFilterGroup.querySelectorAll('[data-log-filter]');
+  for (const button of buttons) {
+    const isActive = button.dataset.logFilter === state.logFilter;
+    button.classList.toggle('active', isActive);
+  }
 }
 
 function renderChart() {
@@ -374,6 +426,32 @@ function formatValue(value) {
   }
 
   return escapeHtml(formatNumber(value));
+}
+
+function matchesLogFilter(entry, filter) {
+  if (filter === 'ALL') {
+    return true;
+  }
+
+  if (filter === 'RISK') {
+    const haystack = `${entry.tag} ${entry.title} ${safeStringify(entry.payload)}`.toLowerCase();
+    return (
+      haystack.includes('риск') ||
+      haystack.includes('risk') ||
+      haystack.includes('лимит') ||
+      haystack.includes('отклонил сделку')
+    );
+  }
+
+  return entry.tag === filter;
+}
+
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function escapeHtml(value) {

@@ -533,6 +533,10 @@ BOT_MAX_DRAWDOWN_STOP_PCT=0.15
 BOT_MAX_DAILY_LOSS_PCT=0.04
 BOT_MAX_CONSECUTIVE_LOSSES=4
 
+BOT_DASHBOARD_ENABLED=true
+BOT_DASHBOARD_HOST=127.0.0.1
+BOT_DASHBOARD_PORT=3200
+
 BINANCE_REST_BASE_URL=https://api.binance.com
 BINANCE_WS_BASE_URL=wss://stream.binance.com/ws
 ```
@@ -570,6 +574,10 @@ BOT_MAX_PORTFOLIO_EXPOSURE_PCT=0.5
 BOT_MAX_DRAWDOWN_STOP_PCT=0.08
 BOT_MAX_DAILY_LOSS_PCT=0.02
 BOT_MAX_CONSECUTIVE_LOSSES=3
+
+BOT_DASHBOARD_ENABLED=true
+BOT_DASHBOARD_HOST=127.0.0.1
+BOT_DASHBOARD_PORT=3200
 
 BOT_EMA_FAST_PERIOD=9
 BOT_EMA_SLOW_PERIOD=21
@@ -674,6 +682,9 @@ npm run build
 
 - `BINANCE_REST_BASE_URL`
 - `BINANCE_WS_BASE_URL`
+- `BOT_DASHBOARD_ENABLED`
+- `BOT_DASHBOARD_HOST`
+- `BOT_DASHBOARD_PORT`
 
 ## Таблица переменных окружения
 
@@ -712,6 +723,9 @@ npm run build
 | `BOT_MAX_DRAWDOWN_STOP_PCT` | Лимит максимальной просадки | `0.08-0.15` | После достижения новые входы режутся |
 | `BOT_MAX_DAILY_LOSS_PCT` | Дневной лимит убытка | `0.02-0.04` | Важная страховка |
 | `BOT_MAX_CONSECUTIVE_LOSSES` | Лимит подряд убыточных сделок | `3-4` | Защита от плохого режима |
+| `BOT_DASHBOARD_ENABLED` | Включить live dashboard | `true` | Можно отключить для headless режима |
+| `BOT_DASHBOARD_HOST` | Хост dashboard-сервера | `127.0.0.1` | Локальный доступ по умолчанию |
+| `BOT_DASHBOARD_PORT` | Порт dashboard-сервера | `3200` | Открой в браузере |
 | `BINANCE_REST_BASE_URL` | REST endpoint Binance | `https://api.binance.com` | Можно заменить на test/testnet endpoint |
 | `BINANCE_WS_BASE_URL` | WebSocket endpoint Binance | `wss://stream.binance.com/ws` | База для stream subscriptions |
 
@@ -754,6 +768,12 @@ npm run build
 
 ```bash
 npm run start:dev
+```
+
+Если dashboard включён, открой в браузере:
+
+```text
+http://127.0.0.1:3200
 ```
 
 Смотри на:
@@ -848,6 +868,15 @@ npm run lint
 - текущее состояние портфеля
 - состояние риск-менеджера
 - состав universe
+
+Дополнительно доступен live web dashboard:
+
+- график капитала в реальном времени
+- таблица открытых позиций
+- таблица сделок с прибылью и убытком
+- live-лента логов
+- состояние risk manager
+- кнопка экстренного закрытия всех позиций
 
 ## Пример реального лога
 

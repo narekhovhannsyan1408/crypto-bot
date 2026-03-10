@@ -537,4 +537,94 @@ export class BotRunnerService implements OnModuleDestroy {
       clearInterval(this.scannerInterval);
     }
   }
+
+  getDashboardSnapshot() {
+    const snapshot = this.portfolio.getSnapshot();
+
+    return {
+      generatedAt: Date.now(),
+      interval: this.activeInterval,
+      watchedSymbols: [...this.watchedSymbols],
+      idleCountersBySymbol: Object.fromEntries(this.candlesWithoutPosition),
+      portfolio: {
+        баланс: Number(snapshot.balance.toFixed(6)),
+        реализованныйРезультат: Number(snapshot.realizedPnl.toFixed(6)),
+        плавающийРезультат: Number(snapshot.unrealizedPnl.toFixed(6)),
+        капитал: Number(snapshot.equity.toFixed(6)),
+        пиковыйКапитал: Number(snapshot.peakEquity.toFixed(6)),
+        максимальнаяПросадкаВПроцентах: Number(
+          snapshot.maxDrawdownPct.toFixed(2),
+        ),
+        уплаченоКомиссий: Number(snapshot.feesPaid.toFixed(6)),
+        открытыхПозиций: snapshot.openPositionsCount,
+        всегоСделок: snapshot.totalTrades,
+        прибыльныхСделок: snapshot.wins,
+        убыточныхСделок: snapshot.losses,
+        подрядУбыточныхСделок: snapshot.consecutiveLosses,
+        винрейт: Number(this.portfolio.getWinRate().toFixed(2)),
+        позиций: snapshot.openPositions.map((position) => ({
+          символ: position.symbol,
+          сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+          ценаВхода: Number(position.entryPrice.toFixed(2)),
+          количество: Number(position.quantity.toFixed(8)),
+          стопЦена: Number(position.stopPrice.toFixed(2)),
+          тейкЦена: Number(position.takePrice.toFixed(2)),
+          текущаяЦена: Number(
+            (this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice).toFixed(
+              2,
+            ),
+          ),
+          плавающийРезультат: Number(
+            this.portfolio.getUnrealizedPnl(position.symbol).toFixed(6),
+          ),
+        })),
+      },
+      рискМенеджмент: this.riskManager.getRiskState(),
+      scannerTop: this.lastScanTop.map((item) => this.translateScannedSymbol(item)),
+    };
+  }
+
+  emergencyCloseAllPositions(reason = 'Экстренное закрытие всех позиций через dashboard') {
+    const openPositions = this.portfolio.getOpenPositions();
+    let closedPositions = 0;
+
+    this.logger.logInfo('Получена команда экстренного закрытия всех позиций', {
+      открытыхПозицийДоЗакрытия: openPositions.length,
+      причина: reason,
+    });
+
+    for (const position of openPositions) {
+      const price = this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
+      const execution =
+        position.side === 'LONG'
+          ? this.trader.tryCloseLong(
+              position.symbol,
+              price,
+              Date.now(),
+              reason,
+            )
+          : this.trader.tryCloseShort(
+              position.symbol,
+              price,
+              Date.now(),
+              reason,
+            );
+
+      if (this.handleExecutionResult(execution)) {
+        closedPositions += 1;
+      }
+    }
+
+    const snapshot = this.getDashboardSnapshot();
+    this.logger.logInfo('Экстренное закрытие завершено', {
+      закрытоПозиций: closedPositions,
+      итоговыйБаланс: snapshot.portfolio.баланс,
+      итоговыйКапитал: snapshot.portfolio.капитал,
+    });
+
+    return {
+      closedPositions,
+      snapshot,
+    };
+  }
 }

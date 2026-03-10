@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto Bot Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="topbar">
+        <div>
+          <h1>Crypto Bot Live Dashboard</h1>
+          <p class="muted">Живой мониторинг стратегии, сделок, капитала и риска</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="status-chip" id="connection-status">Подключение...</div>
+          <button id="refresh-button" class="secondary-button">Обновить snapshot</button>
+          <button id="panic-button" class="danger-button">
+            Экстренно закрыть все позиции
+          </button>
+        </div>
+      </header>
+
+      <section class="cards-grid" id="metrics-grid"></section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>График капитала</h2>
+          <span class="muted">Live equity curve</span>
+        </div>
+        <div class="chart-wrapper">
+          <svg id="equity-chart" viewBox="0 0 1000 320" preserveAspectRatio="none"></svg>
+        </div>
+      </section>
+
+      <section class="two-column">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Открытые позиции</h2>
+            <span class="muted" id="positions-count">0</span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Символ</th>
+                  <th>Сторона</th>
+                  <th>Вход</th>
+                  <th>Текущая</th>
+                  <th>Плавающий результат</th>
+                  <th>Стоп</th>
+                  <th>Тейк</th>
+                </tr>
+              </thead>
+              <tbody id="positions-table"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Риск и runtime</h2>
+            <span class="muted">Universe, лимиты, загрузка</span>
+          </div>
+          <div class="runtime-columns">
+            <div>
+              <h3>Universe</h3>
+              <ul id="universe-list" class="tag-list"></ul>
+            </div>
+            <div>
+              <h3>Риск-менеджмент</h3>
+              <div id="risk-state" class="kv-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Сделки</h2>
+          <span class="muted">Последние операции и результат</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Время</th>
+                <th>Символ</th>
+                <th>Действие</th>
+                <th>Сторона</th>
+                <th>Вход</th>
+                <th>Выход</th>
+                <th>Чистый результат</th>
+                <th>Комиссии</th>
+                <th>Причина</th>
+              </tr>
+            </thead>
+            <tbody id="trades-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Live-логи</h2>
+          <span class="muted">Последние события системы</span>
+        </div>
+        <div id="logs-container" class="logs-container"></div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

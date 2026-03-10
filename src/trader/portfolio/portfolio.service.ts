@@ -37,6 +37,10 @@ export class PortfolioService {
     return this.positions.get(symbol) ?? null;
   }
 
+  getMarkPrice(symbol: string) {
+    return this.marks.get(symbol);
+  }
+
   getOpenPositions() {
     return [...this.positions.values()];
   }

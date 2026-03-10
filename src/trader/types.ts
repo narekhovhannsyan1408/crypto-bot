@@ -1,5 +1,7 @@
 export type PositionSide = 'LONG' | 'SHORT';
 
+export type PositionKey = string;
+
 export type Position = {
   symbol: string;
   interval: string;
@@ -70,3 +72,30 @@ export type ExecutionResult =
       interval?: string;
       reason: string;
     };
+
+export type RiskApproval =
+  | {
+      status: 'APPROVED';
+      approvedSizeUsdt: number;
+      reason: string;
+    }
+  | {
+      status: 'DENIED';
+      reason: string;
+    };
+
+export type PortfolioSnapshot = {
+  balance: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  equity: number;
+  feesPaid: number;
+  peakEquity: number;
+  maxDrawdownPct: number;
+  openPositions: Position[];
+  openPositionsCount: number;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  consecutiveLosses: number;
+};

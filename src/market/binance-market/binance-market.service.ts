@@ -10,16 +10,40 @@ export class BinanceMarketService implements OnModuleDestroy {
   private ws?: WebSocket;
   private reconnectTimeout?: NodeJS.Timeout;
   private isReconnecting = false;
-  private currentStream?: string;
+  private currentStreams: string[] = [];
   private candleHandler?: (candle: Candle) => void;
-  private manualSwitchTarget?: string;
   private reconnectAttempts = 0;
 
-  connect(stream: string, onCandle: (candle: Candle) => void) {
-    this.currentStream = stream;
+  connect(streams: string[] | string, onCandle: (candle: Candle) => void) {
+    this.currentStreams = this.normalizeStreams(streams);
     this.candleHandler = onCandle;
+    this.openConnection();
+  }
 
-    const url = `${this.config.binanceWsBaseUrl.replace(/\/$/, '')}/${stream}`;
+  replaceSubscriptions(streams: string[] | string) {
+    this.currentStreams = this.normalizeStreams(streams);
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch (error) {
+        console.error('[РЫНОК] Ошибка при закрытии соединения:', error);
+      }
+    } else {
+      this.openConnection();
+    }
+  }
+
+  private openConnection() {
+    if (!this.candleHandler || this.currentStreams.length === 0) {
+      return;
+    }
+
+    const url = this.buildWsUrl(this.currentStreams);
     const socket = new WebSocket(url);
 
     console.log(`[РЫНОК] Пытаемся подключиться к ${url}`);
@@ -42,7 +66,8 @@ export class BinanceMarketService implements OnModuleDestroy {
       }
 
       try {
-        const data = JSON.parse(raw.toString());
+        const payload = JSON.parse(raw.toString());
+        const data = payload.data ?? payload;
 
         if (!data.k) return;
 
@@ -61,7 +86,7 @@ export class BinanceMarketService implements OnModuleDestroy {
           isClosed: Boolean(k.x),
         };
 
-        onCandle(candle);
+        this.candleHandler?.(candle);
       } catch (error) {
         console.error('[РЫНОК] Ошибка парсинга сообщения:', error);
       }
@@ -75,11 +100,6 @@ export class BinanceMarketService implements OnModuleDestroy {
       );
 
       if (socket !== this.ws) {
-        return;
-      }
-
-      if (this.manualSwitchTarget === stream) {
-        this.manualSwitchTarget = undefined;
         return;
       }
 
@@ -117,34 +137,14 @@ export class BinanceMarketService implements OnModuleDestroy {
       .filter((candle) => Number.isFinite(candle.close));
   }
 
-  switchSymbol(symbol: string, interval = '1m') {
-    const nextStream = `${symbol.toLowerCase()}@kline_${interval}`;
+  connectSymbols(symbols: string[], interval = '1m', onCandle: (candle: Candle) => void) {
+    const streams = symbols.map((symbol) => `${symbol.toLowerCase()}@kline_${interval}`);
+    this.connect(streams, onCandle);
+  }
 
-    if (this.currentStream === nextStream) {
-      console.log(`[РЫНОК] Символ уже активен: ${symbol}`);
-      return;
-    }
-
-    console.log(`[РЫНОК] Переключение стрима на ${symbol}`);
-
-    this.currentStream = nextStream;
-    this.manualSwitchTarget = nextStream;
-
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
-
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch (error) {
-        console.error('[РЫНОК] Ошибка при закрытии старого соединения:', error);
-      }
-    }
-
-    if (this.candleHandler) {
-      this.connect(nextStream, this.candleHandler);
-    }
+  replaceSymbols(symbols: string[], interval = '1m') {
+    const streams = symbols.map((symbol) => `${symbol.toLowerCase()}@kline_${interval}`);
+    this.replaceSubscriptions(streams);
   }
 
   private scheduleReconnect() {
@@ -153,7 +153,7 @@ export class BinanceMarketService implements OnModuleDestroy {
       return;
     }
 
-    if (!this.currentStream || !this.candleHandler) {
+    if (this.currentStreams.length === 0 || !this.candleHandler) {
       console.log('[РЫНОК] Нет данных для переподключения');
       return;
     }
@@ -169,12 +169,31 @@ export class BinanceMarketService implements OnModuleDestroy {
     console.log(`[РЫНОК] Переподключение через ${backoffMs} мс...`);
 
     this.reconnectTimeout = setTimeout(() => {
-      if (!this.currentStream || !this.candleHandler) {
+      if (this.currentStreams.length === 0 || !this.candleHandler) {
         return;
       }
 
-      this.connect(this.currentStream, this.candleHandler);
+      this.openConnection();
     }, backoffMs);
+  }
+
+  private buildWsUrl(streams: string[]) {
+    const baseUrl = this.config.binanceWsBaseUrl.replace(/\/$/, '');
+
+    if (streams.length === 1) {
+      return `${baseUrl}/${streams[0]}`;
+    }
+
+    const rootUrl = baseUrl.replace(/\/ws$/, '');
+    return `${rootUrl}/stream?streams=${streams.join('/')}`;
+  }
+
+  private normalizeStreams(streams: string[] | string) {
+    const normalized = (Array.isArray(streams) ? streams : [streams])
+      .map((stream) => stream.trim())
+      .filter(Boolean);
+
+    return [...new Set(normalized)];
   }
 
   onModuleDestroy() {

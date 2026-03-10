@@ -13,6 +13,7 @@ export type BotConfig = {
   scanIntervalMs: number;
   maxCandlesWithoutPositionBeforeSwitch: number;
   maxScannerCandidates: number;
+  universeSize: number;
   initialBalance: number;
   maxPositionSizeUsdt: number;
   riskPerTradePct: number;
@@ -32,6 +33,11 @@ export type BotConfig = {
   scannerMinQuoteVolume: number;
   scannerShortlistSize: number;
   scannerKlineLookback: number;
+  maxConcurrentPositions: number;
+  maxPortfolioExposurePct: number;
+  maxDrawdownStopPct: number;
+  maxDailyLossPct: number;
+  maxConsecutiveLosses: number;
   binanceRestBaseUrl: string;
   binanceWsBaseUrl: string;
   allowedSymbols: string[];
@@ -54,6 +60,7 @@ export const getBotConfig = (): BotConfig => {
       8,
     ),
     maxScannerCandidates: numberValue(process.env.BOT_SCANNER_SHORTLIST_SIZE, 8),
+    universeSize: numberValue(process.env.BOT_UNIVERSE_SIZE, 5),
     initialBalance: numberValue(process.env.BOT_INITIAL_BALANCE, 1_000),
     maxPositionSizeUsdt: numberValue(process.env.BOT_POSITION_SIZE_USDT, 100),
     riskPerTradePct: numberValue(process.env.BOT_RISK_PER_TRADE_PCT, 0.005),
@@ -79,6 +86,17 @@ export const getBotConfig = (): BotConfig => {
     ),
     scannerShortlistSize: numberValue(process.env.BOT_SCANNER_SHORTLIST_SIZE, 8),
     scannerKlineLookback: numberValue(process.env.BOT_SCANNER_KLINE_LOOKBACK, 30),
+    maxConcurrentPositions: numberValue(process.env.BOT_MAX_CONCURRENT_POSITIONS, 3),
+    maxPortfolioExposurePct: numberValue(
+      process.env.BOT_MAX_PORTFOLIO_EXPOSURE_PCT,
+      0.8,
+    ),
+    maxDrawdownStopPct: numberValue(process.env.BOT_MAX_DRAWDOWN_STOP_PCT, 0.15),
+    maxDailyLossPct: numberValue(process.env.BOT_MAX_DAILY_LOSS_PCT, 0.04),
+    maxConsecutiveLosses: numberValue(
+      process.env.BOT_MAX_CONSECUTIVE_LOSSES,
+      4,
+    ),
     binanceRestBaseUrl: stringValue(
       process.env.BINANCE_REST_BASE_URL,
       'https://api.binance.com',

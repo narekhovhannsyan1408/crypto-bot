@@ -16,16 +16,26 @@ export class PaperTraderService {
     price: number,
     timestamp: number,
     reason: string,
+    positionSizeUsdt: number,
   ): ExecutionResult {
-    return this.tryOpenPosition('LONG', symbol, interval, price, timestamp, reason);
+    return this.tryOpenPosition(
+      'LONG',
+      symbol,
+      interval,
+      price,
+      timestamp,
+      reason,
+      positionSizeUsdt,
+    );
   }
 
   tryCloseLong(
+    symbol: string,
     price: number,
     timestamp: number,
     reason: string,
   ): ExecutionResult | null {
-    return this.tryClosePosition('LONG', price, timestamp, reason);
+    return this.tryClosePosition('LONG', symbol, price, timestamp, reason);
   }
 
   tryOpenShort(
@@ -34,6 +44,7 @@ export class PaperTraderService {
     price: number,
     timestamp: number,
     reason: string,
+    positionSizeUsdt: number,
   ): ExecutionResult {
     return this.tryOpenPosition(
       'SHORT',
@@ -42,19 +53,21 @@ export class PaperTraderService {
       price,
       timestamp,
       reason,
+      positionSizeUsdt,
     );
   }
 
   tryCloseShort(
+    symbol: string,
     price: number,
     timestamp: number,
     reason: string,
   ): ExecutionResult | null {
-    return this.tryClosePosition('SHORT', price, timestamp, reason);
+    return this.tryClosePosition('SHORT', symbol, price, timestamp, reason);
   }
 
   checkStops(candle: Candle): ExecutionResult | null {
-    const position = this.portfolio.position;
+    const position = this.portfolio.getPosition(candle.symbol);
 
     if (!position) {
       return null;
@@ -63,6 +76,7 @@ export class PaperTraderService {
     if (position.side === 'LONG') {
       if (candle.low <= position.stopPrice) {
         return this.tryCloseLong(
+          candle.symbol,
           position.stopPrice,
           candle.closeTime,
           'Стоп-лосс/трейлинг по лонгу',
@@ -71,6 +85,7 @@ export class PaperTraderService {
 
       if (candle.high >= position.takePrice) {
         return this.tryCloseLong(
+          candle.symbol,
           position.takePrice,
           candle.closeTime,
           'Тейк-профит по лонгу',
@@ -83,6 +98,7 @@ export class PaperTraderService {
 
     if (candle.high >= position.stopPrice) {
       return this.tryCloseShort(
+        candle.symbol,
         position.stopPrice,
         candle.closeTime,
         'Стоп-лосс/трейлинг по шорту',
@@ -91,6 +107,7 @@ export class PaperTraderService {
 
     if (candle.low <= position.takePrice) {
       return this.tryCloseShort(
+        candle.symbol,
         position.takePrice,
         candle.closeTime,
         'Тейк-профит по шорту',
@@ -108,8 +125,9 @@ export class PaperTraderService {
     price: number,
     timestamp: number,
     reason: string,
+    positionSizeUsdt: number,
   ): ExecutionResult {
-    if (this.portfolio.position) {
+    if (this.portfolio.hasOpenPosition(symbol)) {
       return {
         status: 'REJECTED',
         action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
@@ -128,8 +146,6 @@ export class PaperTraderService {
       side === 'LONG'
         ? price * (1 + this.config.takeProfitPct)
         : price * (1 - this.config.takeProfitPct);
-
-    const positionSizeUsdt = this.computePositionSizeUsdt(price, stopPrice);
 
     if (positionSizeUsdt <= 0) {
       return {
@@ -166,7 +182,7 @@ export class PaperTraderService {
     }
 
     this.portfolio.balance -= positionSizeUsdt;
-    this.portfolio.position = {
+    this.portfolio.registerOpenedPosition({
       symbol,
       interval,
       side,
@@ -182,7 +198,7 @@ export class PaperTraderService {
       takePrice,
       highestPrice: price,
       lowestPrice: price,
-    };
+    });
 
     return {
       status: 'EXECUTED',
@@ -202,11 +218,12 @@ export class PaperTraderService {
 
   private tryClosePosition(
     expectedSide: PositionSide,
+    symbol: string,
     price: number,
     timestamp: number,
     reason: string,
   ): ExecutionResult | null {
-    const position = this.portfolio.position;
+    const position = this.portfolio.getPosition(symbol);
 
     if (!position || position.side !== expectedSide) {
       return null;
@@ -228,7 +245,7 @@ export class PaperTraderService {
     const totalFees = position.entryFeePaid + exitFee;
 
     this.portfolio.balance += returnedCapital;
-    this.portfolio.position = null;
+    this.portfolio.clearPosition(symbol);
 
     const closedTrade: ClosedTrade = {
       symbol: position.symbol,
@@ -268,24 +285,6 @@ export class PaperTraderService {
         reason,
       },
     };
-  }
-
-  private computePositionSizeUsdt(entryPrice: number, stopPrice: number) {
-    const stopDistancePct = Math.abs(entryPrice - stopPrice) / entryPrice;
-    const riskBudget = this.portfolio.getEquity() * this.config.riskPerTradePct;
-
-    if (stopDistancePct <= 0 || riskBudget <= 0) {
-      return Math.min(this.config.maxPositionSizeUsdt, this.portfolio.balance);
-    }
-
-    const riskSizedUsdt = riskBudget / stopDistancePct;
-    const cappedSize = Math.min(
-      this.config.maxPositionSizeUsdt,
-      riskSizedUsdt,
-      this.portfolio.balance,
-    );
-
-    return Number(Math.max(cappedSize, 0).toFixed(8));
   }
 
   private updateTrailingLevels(position: Position, candle: Candle) {

@@ -335,6 +335,26 @@ function renderPositions() {
   const positions = state.runtime?.portfolio?.позиций || [];
   elements.positionsCount.textContent = String(positions.length);
 
+  if (positions.length === 0) {
+    const portfolio = state.runtime?.portfolio || {};
+    const riskState = state.runtime?.рискМенеджмент || {};
+    const selection = state.runtime?.strategySelection;
+    const consecutiveLosses = portfolio.подрядУбыточныхСделок ?? 0;
+    const maxLosses = riskState.лимитПодрядУбыточныхСделок ?? 4;
+    const lastReason = selection?.причина || (consecutiveLosses >= maxLosses
+      ? `Подряд убытков: ${consecutiveLosses}/${maxLosses} — блокировка новых входов до cooldown`
+      : '');
+    elements.positionsTable.innerHTML = `
+      <tr>
+        <td colspan="9" class="muted" style="padding: 1.5rem; text-align: center;">
+          Нет открытых позиций.
+          ${lastReason ? `<br><small>${escapeHtml(lastReason)}</small>` : ''}
+          <br><small>Проверь блок «Автоподбор стратегии» и «Риск-менеджмент» ниже.</small>
+        </td>
+      </tr>`;
+    return;
+  }
+
   elements.positionsTable.innerHTML = positions
     .map((position) => {
       const pnlClass = position.плавающийРезультат >= 0 ? 'profit' : 'loss';

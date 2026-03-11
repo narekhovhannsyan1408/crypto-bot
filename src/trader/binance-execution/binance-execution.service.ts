@@ -83,6 +83,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
       const quoteAsset = 'USDT';
       const quoteWallet =
         (balance[quoteAsset] as { free?: number; total?: number } | undefined) ?? {};
+      const warnings: string[] = [];
+
+      if (mode === 'live_testnet' && marketType === 'futures') {
+        warnings.push('Binance Futures testnet работает через demo trading endpoint');
+      }
 
       return this.buildStatus(mode, marketType, {
         apiConfigured: true,
@@ -96,6 +101,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
             ? quoteWallet.total
             : null,
         lastError: null,
+        warnings,
       });
     } catch (error) {
       return this.buildStatus(mode, marketType, {
@@ -922,7 +928,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
     });
 
     if (mode === 'live_testnet') {
-      client.setSandboxMode(true);
+      if (marketType === 'futures') {
+        client.enableDemoTrading(true);
+      } else {
+        client.setSandboxMode(true);
+      }
     }
 
     await client.loadMarkets();

@@ -158,7 +158,7 @@ export const getBotConfig = (): BotConfig => {
     ),
     consecutiveLossesCooldownMinutes: numberValue(
       process.env.BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES,
-      60,
+      30,
     ),
     maxPositionsPerSymbol: numberValue(process.env.BOT_MAX_POSITIONS_PER_SYMBOL, 2),
     maxPositionsPerStrategy: numberValue(

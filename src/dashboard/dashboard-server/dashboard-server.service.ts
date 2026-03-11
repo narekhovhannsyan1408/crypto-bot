@@ -17,6 +17,7 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
   private httpServer?: ReturnType<typeof createServer>;
   private wsServer?: WebSocketServer;
   private unsubscribe?: () => void;
+  private snapshotInterval?: NodeJS.Timeout;
   private readonly clients = new Set<WebSocket>();
 
   constructor(
@@ -34,6 +35,9 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.unsubscribe?.();
+    if (this.snapshotInterval) {
+      clearInterval(this.snapshotInterval);
+    }
 
     for (const client of this.clients) {
       try {
@@ -89,6 +93,15 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
         });
       }
     });
+
+    this.snapshotInterval = setInterval(() => {
+      if (this.clients.size > 0) {
+        this.broadcast({
+          type: 'runtime_snapshot',
+          payload: this.botRunner.getDashboardSnapshot(),
+        });
+      }
+    }, 30_000);
 
     this.httpServer.listen(this.config.dashboardPort, this.config.dashboardHost, () => {
       // eslint-disable-next-line no-console

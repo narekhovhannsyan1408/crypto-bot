@@ -21,6 +21,7 @@ export type Position = {
   takePrice: number;
   highestPrice: number;
   lowestPrice: number;
+  breakevenArmed: boolean;
 };
 
 export type ClosedTrade = {

@@ -17,6 +17,9 @@
           <div class="status-chip" id="connection-status">Подключение...</div>
           <div class="muted" id="data-freshness" style="font-size: 12px; align-self: center;">—</div>
           <button id="refresh-button" class="secondary-button">Обновить snapshot</button>
+          <button id="liquidate-spot-assets-button" class="danger-button">
+            Продать все spot-активы
+          </button>
           <button id="panic-button" class="danger-button">
             Экстренно закрыть все позиции
           </button>
@@ -92,9 +95,11 @@
                   <th>Сторона</th>
                   <th>Вход</th>
                   <th>Текущая</th>
+                  <th>Возраст, мин</th>
                   <th>Плавающий результат</th>
                   <th>Стоп</th>
                   <th>Тейк</th>
+                  <th>Защита</th>
                   <th>Действие</th>
                 </tr>
               </thead>

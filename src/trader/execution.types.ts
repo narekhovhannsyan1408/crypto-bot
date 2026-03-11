@@ -19,6 +19,12 @@ export type ExecutionStatus = {
   quoteTotal?: number | null;
   lastSyncAt?: number;
   lastError?: string | null;
+  userDataStreamStatus?: 'unknown' | 'connected' | 'disconnected' | 'error';
+  userDataStreamLastEventAt?: number | null;
+  userDataStreamLastExecutionReportAt?: number | null;
+  openSpotOrdersCount?: number;
+  spotAssetsCount?: number;
+  spotAssetsPreview?: string[];
   warnings: string[];
 };
 

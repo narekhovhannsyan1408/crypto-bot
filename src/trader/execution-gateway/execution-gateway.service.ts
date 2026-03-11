@@ -192,6 +192,23 @@ export class ExecutionGatewayService implements TraderService {
     return this.executionControl.getStatus();
   }
 
+  async liquidateAllSpotAssets(reason: string) {
+    if (this.executionControl.getMode() === 'paper') {
+      return {
+        success: false,
+        message: 'В режиме paper внешние spot-активы отсутствуют',
+        soldAssets: [] as string[],
+        skippedAssets: [] as Array<{ asset: string; reason: string }>,
+      };
+    }
+
+    return this.liveTrader.liquidateAllSpotAssets(
+      this.executionControl.getMode(),
+      this.executionControl.getMarketType(),
+      reason,
+    );
+  }
+
   async setExecutionMode(
     mode: ExecutionMode,
     marketType: ExecutionMarketType,

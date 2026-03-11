@@ -26,6 +26,7 @@ const elements = {
   logSearchInput: document.getElementById('log-search-input'),
   chart: document.getElementById('equity-chart'),
   panicButton: document.getElementById('panic-button'),
+  liquidateSpotAssetsButton: document.getElementById('liquidate-spot-assets-button'),
   refreshButton: document.getElementById('refresh-button'),
   refreshExecutionButton: document.getElementById('refresh-execution-button'),
 };
@@ -97,6 +98,44 @@ function connect() {
       JSON.stringify({
         type: 'emergency_close_all',
         reason: 'Экстренное закрытие всех позиций из web dashboard',
+      }),
+    );
+  };
+
+  elements.liquidateSpotAssetsButton.onclick = () => {
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+      window.alert('Нет активного WebSocket-соединения с dashboard');
+      return;
+    }
+
+    const execution = state.runtime?.execution;
+    if (!execution || execution.marketType !== 'spot' || execution.mode === 'paper') {
+      window.alert('Команда доступна только для live spot режима');
+      return;
+    }
+
+    const isConfirmed = window.confirm(
+      'Продать все внешние non-USDT spot-активы в USDT market-ордерами?',
+    );
+    if (!isConfirmed) {
+      return;
+    }
+
+    const confirmationPhrase = window.prompt(
+      'Для подтверждения введи фразу LIQUIDATE SPOT',
+      '',
+    );
+
+    if (confirmationPhrase !== 'LIQUIDATE SPOT') {
+      window.alert('Подтверждение не прошло. Команда отменена.');
+      return;
+    }
+
+    state.socket.send(
+      JSON.stringify({
+        type: 'liquidate_spot_assets',
+        confirmationPhrase,
+        reason: 'Ликвидация всех внешних spot-активов из web dashboard',
       }),
     );
   };
@@ -265,6 +304,18 @@ function renderExecution() {
     return;
   }
 
+  const streamStatusMap = {
+    connected: 'подключён',
+    disconnected: 'не подтверждён',
+    error: 'ошибка',
+    unknown: 'неизвестно',
+  };
+  const spotAssetsPreview =
+    execution.spotAssetsPreview && execution.spotAssetsPreview.length > 0
+      ? execution.spotAssetsPreview.join(', ') +
+        (execution.spotAssetsCount > execution.spotAssetsPreview.length ? ' ...' : '')
+      : '-';
+
   const chipClass =
     execution.mode === 'paper'
       ? 'paper'
@@ -284,6 +335,12 @@ function renderExecution() {
       <div class="kv-row"><span>Свободный USDT</span><strong>${formatNumber(execution.quoteFree)}</strong></div>
       <div class="kv-row"><span>Всего USDT</span><strong>${formatNumber(execution.quoteTotal)}</strong></div>
       <div class="kv-row"><span>Источник total</span><strong>USDT wallet Binance</strong></div>
+      <div class="kv-row"><span>Private stream</span><strong>${escapeHtml(streamStatusMap[execution.userDataStreamStatus || 'unknown'] || 'неизвестно')}</strong></div>
+      <div class="kv-row"><span>Последнее user-data событие</span><strong>${execution.userDataStreamLastEventAt ? escapeHtml(formatDate(execution.userDataStreamLastEventAt)) : '-'}</strong></div>
+      <div class="kv-row"><span>Последний execution report</span><strong>${execution.userDataStreamLastExecutionReportAt ? escapeHtml(formatDate(execution.userDataStreamLastExecutionReportAt)) : '-'}</strong></div>
+      <div class="kv-row"><span>Открытых spot-ордеров</span><strong>${formatNumber(execution.openSpotOrdersCount)}</strong></div>
+      <div class="kv-row"><span>Non-USDT активов</span><strong>${formatNumber(execution.spotAssetsCount)}</strong></div>
+      <div class="kv-row"><span>Превью активов</span><strong>${escapeHtml(spotAssetsPreview)}</strong></div>
       <div class="kv-row"><span>Последняя ошибка</span><strong>${escapeHtml(execution.lastError || '-')}</strong></div>
       <div class="kv-row"><span>Предупреждения</span><strong>${escapeHtml((execution.warnings || []).join(' | ') || '-')}</strong></div>
     </div>
@@ -346,7 +403,7 @@ function renderPositions() {
       : '');
     elements.positionsTable.innerHTML = `
       <tr>
-        <td colspan="9" class="muted" style="padding: 1.5rem; text-align: center;">
+        <td colspan="11" class="muted" style="padding: 1.5rem; text-align: center;">
           Нет открытых позиций.
           ${lastReason ? `<br><small>${escapeHtml(lastReason)}</small>` : ''}
           <br><small>Проверь блок «Автоподбор стратегии» и «Риск-менеджмент» ниже.</small>
@@ -365,9 +422,11 @@ function renderPositions() {
           <td>${escapeHtml(position.сторона)}</td>
           <td>${formatNumber(position.ценаВхода)}</td>
           <td>${formatNumber(position.текущаяЦена)}</td>
+          <td>${formatNumber(position.времяВПозицииМинут)}</td>
           <td class="${pnlClass}">${formatNumber(position.плавающийРезультат)}</td>
           <td>${formatNumber(position.стопЦена)}</td>
           <td>${formatNumber(position.тейкЦена)}</td>
+          <td>${escapeHtml(position.breakevenАктивен === 'да' ? 'Breakeven' : 'Стандарт')}</td>
           <td>
             <button
               class="table-action-button"

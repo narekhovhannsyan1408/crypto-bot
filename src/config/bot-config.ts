@@ -54,6 +54,9 @@ export type BotConfig = {
   stopLossPct: number;
   takeProfitPct: number;
   trailingStopPct: number;
+  breakevenTriggerPct: number;
+  breakevenOffsetPct: number;
+  maxPositionHoldMinutes: number;
   exitOnStrategySignal: boolean;
   cooldownCandles: number;
   minTrendStrengthPct: number;
@@ -126,6 +129,12 @@ export const getBotConfig = (): BotConfig => {
     stopLossPct: numberValue(process.env.BOT_STOP_LOSS_PCT, 0.012),
     takeProfitPct: numberValue(process.env.BOT_TAKE_PROFIT_PCT, 0.02),
     trailingStopPct: numberValue(process.env.BOT_TRAILING_STOP_PCT, 0.008),
+    breakevenTriggerPct: numberValue(process.env.BOT_BREAKEVEN_TRIGGER_PCT, 0),
+    breakevenOffsetPct: numberValue(process.env.BOT_BREAKEVEN_OFFSET_PCT, 0),
+    maxPositionHoldMinutes: numberValue(
+      process.env.BOT_MAX_POSITION_HOLD_MINUTES,
+      0,
+    ),
     exitOnStrategySignal: process.env.BOT_EXIT_ON_STRATEGY_SIGNAL === 'true',
     cooldownCandles: numberValue(process.env.BOT_COOLDOWN_CANDLES, 2),
     minTrendStrengthPct: numberValue(

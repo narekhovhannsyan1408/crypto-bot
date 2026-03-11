@@ -221,6 +221,16 @@ export class RiskManagerService {
       ),
       лимитПодрядУбыточныхСделок: this.config.maxConsecutiveLosses,
       cooldownПодрядУбытковМинут: this.config.consecutiveLossesCooldownMinutes,
+      breakevenТриггерВПроцентах: Number(
+        (this.config.breakevenTriggerPct * 100).toFixed(2),
+      ),
+      breakevenСмещениеВПроцентах: Number(
+        (this.config.breakevenOffsetPct * 100).toFixed(2),
+      ),
+      максимальноеВремяПозицииМинут:
+        this.config.maxPositionHoldMinutes > 0
+          ? this.config.maxPositionHoldMinutes
+          : 'отключено',
     };
   }
 

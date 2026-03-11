@@ -670,6 +670,12 @@ export class BotRunnerService implements OnModuleDestroy {
         количество: Number(position.quantity.toFixed(8)),
         стопЦена: Number(position.stopPrice.toFixed(2)),
         тейкЦена: Number(position.takePrice.toFixed(2)),
+        времяВПозицииМинут: Number(
+          ((Date.now() - position.openedAt) / 60_000).toFixed(1),
+        ),
+        breakevenАктивен: position.breakevenArmed ? 'да' : 'нет',
+        максимумПослеВхода: Number(position.highestPrice.toFixed(2)),
+        минимумПослеВхода: Number(position.lowestPrice.toFixed(2)),
         плавающийРезультат: Number(
           this.portfolio
             .getPositionUnrealizedPnl(position.symbol, position.strategyId)
@@ -1057,6 +1063,12 @@ export class BotRunnerService implements OnModuleDestroy {
               .getPositionUnrealizedPnl(position.symbol, position.strategyId)
               .toFixed(6),
           ),
+          времяВПозицииМинут: Number(
+            ((Date.now() - position.openedAt) / 60_000).toFixed(1),
+          ),
+          breakevenАктивен: position.breakevenArmed ? 'да' : 'нет',
+          максимумПослеВхода: Number(position.highestPrice.toFixed(4)),
+          минимумПослеВхода: Number(position.lowestPrice.toFixed(4)),
         })),
         экспозицияПоСтратегиям: Object.fromEntries(
           Object.entries(snapshot.exposureByStrategy).map(([strategyId, value]) => [
@@ -1222,6 +1234,32 @@ export class BotRunnerService implements OnModuleDestroy {
 
     return {
       closedPositions,
+      snapshot,
+    };
+  }
+
+  async liquidateAllSpotAssets(
+    reason = 'Ликвидация всех внешних spot-активов через dashboard',
+  ) {
+    this.logger.logInfo('Получена команда ликвидации всех внешних spot-активов', {
+      причина: reason,
+      execution: this.trader.getExecutionStatus().label,
+    });
+
+    const result = await this.trader.liquidateAllSpotAssets(reason);
+    const refreshedStatus = await this.trader.refreshExecutionStatus();
+    const snapshot = this.getDashboardSnapshot();
+
+    this.logger.logInfo('Ликвидация внешних spot-активов завершена', {
+      успех: result.success,
+      проданоАктивов: result.soldAssets.length,
+      пропущеноАктивов: result.skippedAssets.length,
+      executionLabel: refreshedStatus.label,
+    });
+
+    return {
+      ...result,
+      status: refreshedStatus,
       snapshot,
     };
   }

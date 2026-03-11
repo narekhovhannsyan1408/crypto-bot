@@ -3,6 +3,12 @@ import { Candle } from '../../market/types';
 import { getBotConfig } from '../../config/bot-config';
 import { PortfolioService } from '../portfolio/portfolio.service';
 import {
+  armBreakeven,
+  hasExceededMaxHoldTime,
+  shouldArmBreakeven,
+  updateTrailingStop,
+} from '../trade-protection.utils';
+import {
   ClosedTrade,
   ExecutionResult,
   makePositionKey,
@@ -126,7 +132,39 @@ export class PaperTraderService {
           continue;
         }
 
-        this.updateTrailingLevels(position, candle);
+        if (
+          shouldArmBreakeven(
+            position,
+            candle.close,
+            this.config.breakevenTriggerPct,
+          )
+        ) {
+          armBreakeven(
+            position,
+            this.config.feePct,
+            this.config.breakevenOffsetPct,
+          );
+        }
+
+        if (
+          hasExceededMaxHoldTime(
+            position,
+            candle.closeTime,
+            this.config.maxPositionHoldMinutes,
+          )
+        ) {
+          const action = this.tryCloseLong(
+            candle.symbol,
+            position.strategyId,
+            candle.close,
+            candle.closeTime,
+            'Time stop по лонгу: превышено максимальное время удержания',
+          );
+          if (action) actions.push(action);
+          continue;
+        }
+
+        updateTrailingStop(position, candle);
         continue;
       }
 
@@ -154,7 +192,35 @@ export class PaperTraderService {
         continue;
       }
 
-      this.updateTrailingLevels(position, candle);
+      if (
+        shouldArmBreakeven(
+          position,
+          candle.close,
+          this.config.breakevenTriggerPct,
+        )
+      ) {
+        armBreakeven(position, this.config.feePct, this.config.breakevenOffsetPct);
+      }
+
+      if (
+        hasExceededMaxHoldTime(
+          position,
+          candle.closeTime,
+          this.config.maxPositionHoldMinutes,
+        )
+      ) {
+        const action = this.tryCloseShort(
+          candle.symbol,
+          position.strategyId,
+          candle.close,
+          candle.closeTime,
+          'Time stop по шорту: превышено максимальное время удержания',
+        );
+        if (action) actions.push(action);
+        continue;
+      }
+
+      updateTrailingStop(position, candle);
     }
 
     return actions;
@@ -257,6 +323,7 @@ export class PaperTraderService {
       takePrice,
       highestPrice: price,
       lowestPrice: price,
+      breakevenArmed: false,
     });
 
     return {
@@ -356,28 +423,4 @@ export class PaperTraderService {
     };
   }
 
-  private updateTrailingLevels(position: Position, candle: Candle) {
-    if (position.trailingStopPct <= 0) {
-      return;
-    }
-
-    if (position.side === 'LONG') {
-      if (candle.high <= position.highestPrice) {
-        return;
-      }
-
-      position.highestPrice = candle.high;
-      const trailingStop = position.highestPrice * (1 - position.trailingStopPct);
-      position.stopPrice = Math.max(position.stopPrice, trailingStop);
-      return;
-    }
-
-    if (candle.low >= position.lowestPrice) {
-      return;
-    }
-
-    position.lowestPrice = candle.low;
-    const trailingStop = position.lowestPrice * (1 + position.trailingStopPct);
-    position.stopPrice = Math.min(position.stopPrice, trailingStop);
-  }
 }

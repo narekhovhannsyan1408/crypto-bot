@@ -43,6 +43,7 @@ describe('PortfolioService', () => {
       takePrice: 102,
       highestPrice: 100,
       lowestPrice: 100,
+      breakevenArmed: false,
     });
     service.updateMark('BTCUSDT', 100);
 
@@ -70,6 +71,7 @@ describe('PortfolioService', () => {
       takePrice: 98,
       highestPrice: 100,
       lowestPrice: 100,
+      breakevenArmed: false,
     });
     service.updateMark('BTCUSDT', 100);
 
@@ -98,6 +100,7 @@ describe('PortfolioService', () => {
       takePrice: 102,
       highestPrice: 100,
       lowestPrice: 100,
+      breakevenArmed: false,
     });
     service.registerOpenedPosition({
       key: makePositionKey('ETHUSDT', 'mean_reversion'),
@@ -118,6 +121,7 @@ describe('PortfolioService', () => {
       takePrice: 204,
       highestPrice: 200,
       lowestPrice: 200,
+      breakevenArmed: false,
     });
 
     service.updateMark('BTCUSDT', 100);

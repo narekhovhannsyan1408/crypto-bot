@@ -171,6 +171,39 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      if (message.type === 'liquidate_spot_assets') {
+        if (message.confirmationPhrase !== 'LIQUIDATE SPOT') {
+          this.sendJson(socket, {
+            type: 'command_result',
+            payload: {
+              статус: 'ошибка',
+              сообщение:
+                'Для ликвидации всех внешних spot-активов нужно подтверждение фразой LIQUIDATE SPOT',
+            },
+          });
+          return;
+        }
+
+        const result = await this.botRunner.liquidateAllSpotAssets(
+          message.reason || 'Ликвидация всех внешних spot-активов через live dashboard',
+        );
+
+        this.sendJson(socket, {
+          type: 'command_result',
+          payload: {
+            статус: result.success ? 'успешно' : 'не выполнено',
+            сообщение: result.message,
+            проданоАктивов: result.soldAssets.length,
+            проданныеАктивы: result.soldAssets,
+            пропущеноАктивов: result.skippedAssets.length,
+            пропущенныеАктивы: result.skippedAssets,
+            execution: result.status,
+            snapshot: result.snapshot,
+          },
+        });
+        return;
+      }
+
       if (message.type === 'request_snapshot') {
         this.sendJson(socket, {
           type: 'runtime_snapshot',

@@ -15,13 +15,43 @@ export class BotLoggerService {
 
   constructor(private readonly liveStream: LiveStreamService) {}
 
-  private normalizePayload(payload: unknown): unknown {
+  private normalizePayload(
+    payload: unknown,
+    seen = new WeakSet<object>(),
+    depth = 0,
+  ): unknown {
+    if (depth > 6) {
+      return '[max-depth-reached]';
+    }
+
     if (payload instanceof Error) {
       return {
         name: payload.name,
         message: payload.message,
         stack: payload.stack,
       };
+    }
+
+    if (payload === null || payload === undefined) {
+      return payload;
+    }
+
+    if (Array.isArray(payload)) {
+      return payload.map((item) => this.normalizePayload(item, seen, depth + 1));
+    }
+
+    if (typeof payload === 'object') {
+      if (seen.has(payload)) {
+        return '[circular]';
+      }
+
+      seen.add(payload);
+      return Object.fromEntries(
+        Object.entries(payload).map(([key, value]) => [
+          key,
+          this.normalizePayload(value, seen, depth + 1),
+        ]),
+      );
     }
 
     return payload;

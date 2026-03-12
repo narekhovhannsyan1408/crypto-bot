@@ -98,14 +98,7 @@ export class PortfolioService {
     }
 
     this.balance = nextBalance;
-
-    if (!hasOpenPositions) {
-      this.peakEquity = nextBalance;
-      this.maxDrawdownPct = 0;
-      return;
-    }
-
-    this.trackDrawdown(this.getEquity());
+    this.trackDrawdown(hasOpenPositions ? this.getEquity() : nextBalance);
   }
 
   updateMark(symbol: string, price: number) {

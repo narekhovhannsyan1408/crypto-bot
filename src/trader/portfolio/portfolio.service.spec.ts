@@ -142,4 +142,15 @@ describe('PortfolioService', () => {
     expect(service.getEquity()).toBe(1250);
     expect(service.peakEquity).toBe(1250);
   });
+
+  it('does not reset historical drawdown when external balance sync happens flat', () => {
+    service.peakEquity = 1200;
+    service.maxDrawdownPct = 10;
+
+    service.syncExternalUsdtWallet(950, 950);
+
+    expect(service.balance).toBe(950);
+    expect(service.peakEquity).toBe(1200);
+    expect(service.maxDrawdownPct).toBeCloseTo(((1200 - 950) / 1200) * 100, 6);
+  });
 });

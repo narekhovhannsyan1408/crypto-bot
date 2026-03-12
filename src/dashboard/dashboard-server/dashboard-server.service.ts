@@ -289,7 +289,7 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
         type: 'command_result',
         payload: {
           статус: 'ошибка',
-          сообщение: error instanceof Error ? error.message : 'Неизвестная ошибка',
+          сообщение: this.describeUnknownError(error),
         },
       });
     }
@@ -321,5 +321,31 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
       'Content-Type': 'application/json; charset=utf-8',
     });
     res.end(JSON.stringify(payload));
+  }
+
+  private describeUnknownError(error: unknown) {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message;
+    }
+
+    if (typeof error === 'string' && error.trim()) {
+      return error.trim();
+    }
+
+    if (typeof error === 'object' && error !== null) {
+      const candidate = error as Record<string, unknown>;
+      const directMessage = [
+        candidate.message,
+        candidate.msg,
+        candidate.error,
+        candidate.body,
+      ].find((value) => typeof value === 'string' && value.trim());
+
+      if (typeof directMessage === 'string' && directMessage.trim()) {
+        return directMessage.trim();
+      }
+    }
+
+    return 'Неизвестная ошибка';
   }
 }

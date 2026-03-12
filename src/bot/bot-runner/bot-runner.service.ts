@@ -9,6 +9,7 @@ import {
 } from '../../scanner/symbol-scanner/symbol-scanner.service';
 import { HigherTimeframeConfirmationService } from '../../strategy/higher-timeframe-confirmation/higher-timeframe-confirmation.service';
 import {
+  RankedStrategyCandidate,
   StrategyCandidateDecision,
   StrategyArbitrationService,
   StrategyOpenCandidate,
@@ -347,7 +348,7 @@ export class BotRunnerService implements OnModuleDestroy {
         if (position.side === 'LONG') {
           if (
             result.signal === 'CLOSE_LONG' &&
-            this.config.exitOnStrategySignal
+            this.shouldExecuteCloseSignal(result)
           ) {
             tradeHappened =
               this.handleExecutionResult(
@@ -362,6 +363,20 @@ export class BotRunnerService implements OnModuleDestroy {
           }
 
           if (result.signal === 'REVERSE_TO_SHORT') {
+            if (!this.isSideAllowedByExecution('SHORT')) {
+              tradeHappened =
+                this.handleExecutionResult(
+                  await this.trader.tryCloseLong(
+                    candle.symbol,
+                    strategy.id,
+                    candle.close,
+                    candle.closeTime,
+                    `${result.reason}. Short недоступен в текущем execution-режиме, поэтому выполняем только закрытие long`,
+                  ),
+                ) || tradeHappened;
+              continue;
+            }
+
             const closeExecuted = this.handleExecutionResult(
               await this.trader.tryCloseLong(
                 candle.symbol,
@@ -384,7 +399,7 @@ export class BotRunnerService implements OnModuleDestroy {
         if (position.side === 'SHORT') {
           if (
             result.signal === 'CLOSE_SHORT' &&
-            this.config.exitOnStrategySignal
+            this.shouldExecuteCloseSignal(result)
           ) {
             tradeHappened =
               this.handleExecutionResult(
@@ -420,10 +435,15 @@ export class BotRunnerService implements OnModuleDestroy {
       }
 
       if (openCandidates.length > 0) {
+        const executionStatus = this.trader.getExecutionStatus();
+        const rankedCandidates = this.strategyArbitration.rankCandidates(
+          openCandidates,
+          executionStatus,
+        );
         const selectionDecision = this.strategyArbitration.selectCandidate(
           candle,
           openCandidates,
-          this.trader.getExecutionStatus(),
+          executionStatus,
         );
         const selectedCandidate =
           selectionDecision.selectedStrategyId === null
@@ -466,13 +486,36 @@ export class BotRunnerService implements OnModuleDestroy {
             })),
           });
 
-          tradeHappened =
-            (await this.tryOpenWithRisk(
-              candle,
-              selectedCandidate.strategy,
-              selectedCandidate.side,
-              selectedCandidate.result.reason,
-            )) || tradeHappened;
+          const openedCandidate = await this.tryOpenRankedCandidates(
+            candle,
+            rankedCandidates,
+          );
+          if (openedCandidate) {
+            if (
+              openedCandidate.strategy.id !== selectedCandidate.strategy.id ||
+              openedCandidate.side !== selectedCandidate.side
+            ) {
+              this.lastStrategySelection = {
+                ...this.lastStrategySelection,
+                selectedStrategyId: openedCandidate.strategy.id,
+                selectedStrategyName: openedCandidate.strategy.name,
+                selectedSide: openedCandidate.side,
+                selectedScore: Number(openedCandidate.arbitrationScore.toFixed(2)),
+                reason:
+                  'Первый кандидат не прошёл проверку риска/исполнения, поэтому открыт следующий допустимый кандидат по приоритету',
+                candidates: selectionDecision.candidates,
+              };
+              this.logger.logInfo('Использован запасной кандидат после отклонения лидера', {
+                символ: candle.symbol,
+                стратегия: openedCandidate.strategy.name,
+                strategyId: openedCandidate.strategy.id,
+                сторона: openedCandidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+                arbitrationScore: Number(openedCandidate.arbitrationScore.toFixed(2)),
+              });
+            }
+
+            tradeHappened = true;
+          }
         } else {
           this.logger.logInfo('Автовыбор стратегии не нашёл допустимый вход', {
             символ: candle.symbol,
@@ -546,6 +589,29 @@ export class BotRunnerService implements OnModuleDestroy {
           );
 
     return this.handleExecutionResult(execution);
+  }
+
+  private async tryOpenRankedCandidates(
+    candle: Candle,
+    rankedCandidates: RankedStrategyCandidate[],
+  ) {
+    for (const candidate of rankedCandidates) {
+      if (!candidate.isAllowed) {
+        continue;
+      }
+
+      const executed = await this.tryOpenWithRisk(
+        candle,
+        candidate.strategy,
+        candidate.side,
+        candidate.result.reason,
+      );
+      if (executed) {
+        return candidate;
+      }
+    }
+
+    return null;
   }
 
   private handleExecutionResult(execution: ExecutionResult | null) {
@@ -874,6 +940,7 @@ export class BotRunnerService implements OnModuleDestroy {
         return {
           ...result,
           signal: 'CLOSE_SHORT',
+          forceClose: true,
           reason: `${result.reason}. Старший таймфрейм ещё не готов подтвердить long, поэтому закрываем шорт без переворота`,
         };
       }
@@ -882,6 +949,7 @@ export class BotRunnerService implements OnModuleDestroy {
         return {
           ...result,
           signal: 'CLOSE_LONG',
+          forceClose: true,
           reason: `${result.reason}. Старший таймфрейм ещё не готов подтвердить short, поэтому закрываем лонг без переворота`,
         };
       }
@@ -901,6 +969,7 @@ export class BotRunnerService implements OnModuleDestroy {
         return {
           ...result,
           signal: 'CLOSE_SHORT',
+          forceClose: true,
           reason: `${result.reason}. Старший таймфрейм не подтверждает long, поэтому выполняем только закрытие short`,
         };
       }
@@ -920,6 +989,7 @@ export class BotRunnerService implements OnModuleDestroy {
         return {
           ...result,
           signal: 'CLOSE_LONG',
+          forceClose: true,
           reason: `${result.reason}. Старший таймфрейм не подтверждает short, поэтому выполняем только закрытие long`,
         };
       }
@@ -947,6 +1017,18 @@ export class BotRunnerService implements OnModuleDestroy {
     }
 
     return true;
+  }
+
+  private shouldExecuteCloseSignal(result: StrategyResult) {
+    return this.config.exitOnStrategySignal || result.forceClose === true;
+  }
+
+  private isSideAllowedByExecution(side: 'LONG' | 'SHORT') {
+    if (side === 'LONG') {
+      return true;
+    }
+
+    return this.trader.getExecutionStatus().canTradeShort;
   }
 
   private translateConfirmationTrend(trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL') {

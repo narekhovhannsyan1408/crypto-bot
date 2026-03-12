@@ -4,14 +4,16 @@ import { LiveStreamService } from '../../streaming/live-stream/live-stream.servi
 
 describe('BotLoggerService', () => {
   let service: BotLoggerService;
+  let publishMock: jest.Mock;
 
   beforeEach(async () => {
+    publishMock = jest.fn();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BotLoggerService,
         {
           provide: LiveStreamService,
-          useValue: { publish: jest.fn() },
+          useValue: { publish: publishMock },
         },
       ],
     }).compile();
@@ -21,5 +23,24 @@ describe('BotLoggerService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('normalizes nested errors without recursive overflow', () => {
+    const error = new Error('scanner failed');
+    const payload = { symbol: 'BTCUSDT', error } as Record<string, unknown>;
+    payload.self = payload;
+
+    expect(() => service.logError('nested error', payload)).not.toThrow();
+    expect(publishMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          symbol: 'BTCUSDT',
+          error: expect.objectContaining({
+            message: 'scanner failed',
+          }),
+          self: '[circular]',
+        }),
+      }),
+    );
   });
 });

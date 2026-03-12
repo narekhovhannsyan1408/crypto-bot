@@ -19,6 +19,10 @@ export type ExecutionStatus = {
   quoteAsset: string;
   quoteFree?: number | null;
   quoteTotal?: number | null;
+  spotQuoteFree?: number | null;
+  spotQuoteTotal?: number | null;
+  futuresQuoteFree?: number | null;
+  futuresQuoteTotal?: number | null;
   lastSyncAt?: number;
   lastError?: string | null;
   userDataStreamStatus?: 'unknown' | 'connected' | 'disconnected' | 'error';

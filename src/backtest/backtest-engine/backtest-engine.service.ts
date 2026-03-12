@@ -13,6 +13,7 @@ import { VolumeSpikeReversalStrategyService } from '../../strategy/volume-spike-
 import { PaperTraderService } from '../../trader/paper-trader/paper-trader.service';
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
+import { ExecutionStatus } from '../../trader/execution.types';
 import { BacktestInput, BacktestReport } from '../types';
 
 @Injectable()
@@ -36,6 +37,7 @@ export class BacktestEngineService {
 
     const seededBySymbol = new Set<string>();
     const equityCurve: BacktestReport['equityCurve'] = [];
+    const executionStatus = this.buildBacktestExecutionStatus();
 
     for (const candle of sortedCandles) {
       if (!candle.isClosed) {
@@ -103,6 +105,10 @@ export class BacktestEngineService {
               'Backtest: переворот из лонга в шорт',
             );
             strategy.registerTradeClosed(candle.symbol, candle.interval);
+
+            if (!executionStatus.canTradeShort) {
+              continue;
+            }
 
             const approval = riskManager.approveOpenPosition({
               symbol: candle.symbol,
@@ -181,63 +187,53 @@ export class BacktestEngineService {
       const selectionDecision = arbitration.selectCandidate(
         candle,
         openCandidates,
-        {
-          mode: 'paper',
-          marketType: 'futures',
-          label: 'PAPER',
-          canTradeShort: true,
-          liveTradingEnabled: false,
-          usingTestnet: false,
-          allowLiveReal: false,
-          apiConfigured: false,
-          accountConnectivity: 'unknown',
-          quoteAsset: 'USDT',
-          warnings: [],
-        },
+        executionStatus,
       );
-      const selectedCandidate =
-        selectionDecision.selectedStrategyId === null
-          ? null
-          : openCandidates.find(
-              (candidate) =>
-                candidate.strategy.id === selectionDecision.selectedStrategyId &&
-                candidate.side === selectionDecision.selectedSide,
-            ) ?? null;
+      if (selectionDecision.selectedStrategyId !== null) {
+        const rankedCandidates = arbitration.rankCandidates(openCandidates, executionStatus);
+        for (const candidate of rankedCandidates) {
+          if (!candidate.isAllowed) {
+            continue;
+          }
 
-      if (selectedCandidate) {
-        const approval = riskManager.approveOpenPosition({
-          symbol: candle.symbol,
-          interval: candle.interval,
-          strategyId: selectedCandidate.strategy.id,
-          side: selectedCandidate.side,
-          entryPrice: candle.close,
-          timestamp: candle.closeTime,
-        });
+          const approval = riskManager.approveOpenPosition({
+            symbol: candle.symbol,
+            interval: candle.interval,
+            strategyId: candidate.strategy.id,
+            side: candidate.side,
+            entryPrice: candle.close,
+            timestamp: candle.closeTime,
+          });
 
-        if (approval.status === 'APPROVED') {
-          if (selectedCandidate.side === 'LONG') {
+          if (approval.status !== 'APPROVED') {
+            continue;
+          }
+
+          if (candidate.side === 'LONG') {
             trader.tryOpenLong(
               candle.symbol,
               candle.interval,
-              selectedCandidate.strategy.id,
-              selectedCandidate.strategy.name,
+              candidate.strategy.id,
+              candidate.strategy.name,
               candle.close,
               candle.closeTime,
-              selectedCandidate.result.reason,
+              candidate.result.reason,
               approval.approvedSizeUsdt,
             );
           } else {
             trader.tryOpenShort(
               candle.symbol,
               candle.interval,
-              selectedCandidate.strategy.id,
-              selectedCandidate.strategy.name,
+              candidate.strategy.id,
+              candidate.strategy.name,
               candle.close,
               candle.closeTime,
-              selectedCandidate.result.reason,
+              candidate.result.reason,
               approval.approvedSizeUsdt,
             );
           }
+
+          break;
         }
       }
 
@@ -280,5 +276,27 @@ export class BacktestEngineService {
     const enabled = new Set(this.config.enabledStrategies);
 
     return strategies.filter((strategy) => enabled.has(strategy.id));
+  }
+
+  private buildBacktestExecutionStatus(): ExecutionStatus {
+    const canTradeShort = this.config.executionMarketType !== 'spot';
+
+    return {
+      mode: 'paper',
+      marketType: this.config.executionMarketType,
+      label: 'PAPER',
+      canTradeShort,
+      longMarketType:
+        this.config.executionMarketType === 'futures' ? 'futures' : 'spot',
+      shortMarketType:
+        this.config.executionMarketType === 'spot' ? 'spot' : 'futures',
+      liveTradingEnabled: false,
+      usingTestnet: false,
+      allowLiveReal: false,
+      apiConfigured: false,
+      accountConnectivity: 'unknown',
+      quoteAsset: 'USDT',
+      warnings: [],
+    };
   }
 }

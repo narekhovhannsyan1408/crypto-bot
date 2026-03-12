@@ -61,6 +61,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
         accountConnectivity: 'unknown',
         quoteFree: this.portfolio.balance,
         quoteTotal: this.portfolio.getEquity(),
+        spotQuoteFree: marketType !== 'futures' ? this.portfolio.balance : null,
+        spotQuoteTotal: marketType !== 'futures' ? this.portfolio.getEquity() : null,
+        futuresQuoteFree: marketType !== 'spot' ? this.portfolio.balance : null,
+        futuresQuoteTotal: marketType !== 'spot' ? this.portfolio.getEquity() : null,
         warnings: [],
       });
     }
@@ -75,7 +79,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
     try {
       if (marketType === 'spot') {
-        return this.refreshSpotAccountStatus(mode);
+        return await this.refreshSpotAccountStatus(mode);
       }
 
       const client = await this.getClient(mode, marketType);
@@ -87,6 +91,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
       if (mode === 'live_testnet' && marketType === 'futures') {
         warnings.push('Binance Futures Demo работает через demo trading endpoint');
+        if (this.isUsingSharedLiveTestnetKeyForFutures()) {
+          warnings.push(
+            'Для Binance Futures Demo используется общий demo key из BINANCE_TESTNET_API_*',
+          );
+        }
       }
 
       return this.buildStatus(mode, marketType, {
@@ -100,6 +109,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
           typeof quoteWallet.total === 'number' && Number.isFinite(quoteWallet.total)
             ? quoteWallet.total
             : null,
+        spotQuoteFree: null,
+        spotQuoteTotal: null,
+        futuresQuoteFree: quoteWallet.free ?? null,
+        futuresQuoteTotal: quoteWallet.total ?? null,
         lastError: null,
         warnings,
       });
@@ -107,7 +120,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return this.buildStatus(mode, marketType, {
         apiConfigured: true,
         accountConnectivity: 'error',
-        lastError: error instanceof Error ? error.message : 'Не удалось подключиться к Binance',
+        lastError: this.describeUnknownError(error, 'Не удалось подключиться к Binance'),
       });
     }
   }
@@ -130,10 +143,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       };
     }
 
-    if (marketType !== 'spot') {
+    if (marketType !== 'spot' && marketType !== 'hybrid') {
       return {
         success: false,
-        message: 'Ликвидация внешних активов доступна только в режиме Spot',
+        message: 'Ликвидация внешних активов доступна только в режиме Spot или Hybrid',
         soldAssets: [] as string[],
         skippedAssets: [] as Array<{ asset: string; reason: string }>,
       };
@@ -515,30 +528,37 @@ export class BinanceExecutionService implements OnModuleDestroy {
       const executionPrice = this.resolveExecutionPrice(order, price);
       const executionTimestamp = order.timestamp ?? timestamp;
       const executionReason = `${reason} [${mode}/${marketType}]`;
+      const quoteAsset = 'USDT';
+      const baseAsset = symbol.replace(/USDT$/, '');
+      const feeSummary = this.resolveOrderFeeSummary(order, baseAsset, quoteAsset);
+      const executedQuantity = this.resolveOpenedQuantity(
+        order,
+        amount,
+        side,
+        executionMarketType,
+        feeSummary.baseFee,
+      );
+      const executedNotional = this.resolveExecutedQuoteNotional(
+        order,
+        executionPrice,
+        executedQuantity,
+        positionSizeUsdt,
+      );
 
-      return side === 'LONG'
-        ? this.paperTrader.tryOpenLong(
-            symbol,
-            interval,
-            strategyId,
-            strategyName,
-            executionPrice,
-            executionTimestamp,
-            executionReason,
-            positionSizeUsdt,
-            executionMarketType,
-          )
-        : this.paperTrader.tryOpenShort(
-            symbol,
-            interval,
-            strategyId,
-            strategyName,
-            executionPrice,
-            executionTimestamp,
-            executionReason,
-            positionSizeUsdt,
-            executionMarketType,
-          );
+      return this.paperTrader.recordExternalOpenPosition({
+        side,
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        price: executionPrice,
+        timestamp: executionTimestamp,
+        reason: executionReason,
+        quantity: executedQuantity,
+        investedUsdt: executedNotional + feeSummary.quoteFee,
+        entryFeePaid: feeSummary.quoteFee,
+        marketType: executionMarketType,
+      });
     } catch (error) {
       if (this.isInsufficientFundsError(error)) {
         const availableQuote = await this.getAvailableQuoteBalance(mode, executionMarketType);
@@ -608,8 +628,9 @@ export class BinanceExecutionService implements OnModuleDestroy {
       const baseAsset = symbol.replace(/USDT$/, '');
       const balance = await this.getSpotAssetBalance(mode, baseAsset);
       const freeBalance = balance.free;
+      const totalBalance = balance.free + balance.locked;
 
-      if (freeBalance <= 0) {
+      if (totalBalance <= 0) {
         return this.paperTrader.tryCloseLong(
           symbol,
           strategyId,
@@ -620,8 +641,34 @@ export class BinanceExecutionService implements OnModuleDestroy {
         );
       }
 
+      if (freeBalance <= 0 && balance.locked > 0) {
+        return {
+          status: 'REJECTED',
+          action: 'CLOSE_LONG',
+          symbol,
+          interval: position.interval,
+          strategyId,
+          strategyName: position.strategyName,
+          reason:
+            'Нельзя закрыть spot-позицию: актив полностью заблокирован в открытых ордерах Binance. Сначала сними внешние ордера или дождись их исполнения.',
+        };
+      }
+
       const availableAmount = this.normalizeAmount(client, marketSymbol, freeBalance);
       if (!Number.isFinite(availableAmount) || availableAmount <= 0) {
+        if (balance.locked > 0) {
+          return {
+            status: 'REJECTED',
+            action: 'CLOSE_LONG',
+            symbol,
+            interval: position.interval,
+            strategyId,
+            strategyName: position.strategyName,
+            reason:
+              'Нельзя закрыть spot-позицию: доступное количество после lot-size нормализации равно нулю, а актив заблокирован в ордерах Binance.',
+          };
+        }
+
         return this.paperTrader.tryCloseLong(
           symbol,
           strategyId,
@@ -633,9 +680,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       }
 
       if (availableAmount < amount) {
-        const coverageRatio = position.quantity > 0 ? freeBalance / position.quantity : 0;
+        const totalCoverageRatio =
+          position.quantity > 0 ? totalBalance / position.quantity : 0;
 
-        if (coverageRatio < 0.95) {
+        if (totalCoverageRatio < 0.95) {
           return this.paperTrader.tryCloseLong(
             symbol,
             strategyId,
@@ -644,6 +692,19 @@ export class BinanceExecutionService implements OnModuleDestroy {
             `${reason} [${mode}/${executionMarketType}] [sync: exchange asset balance diverged from bot position]`,
             executionMarketType,
           );
+        }
+
+        if (balance.locked > 0) {
+          return {
+            status: 'REJECTED',
+            action: 'CLOSE_LONG',
+            symbol,
+            interval: position.interval,
+            strategyId,
+            strategyName: position.strategyName,
+            reason:
+              'Нельзя закрыть spot-позицию полным объёмом: часть актива заблокирована во внешних ордерах Binance.',
+          };
         }
 
         amount = availableAmount;
@@ -669,24 +730,22 @@ export class BinanceExecutionService implements OnModuleDestroy {
     const executionPrice = this.resolveExecutionPrice(order, price);
     const executionTimestamp = order.timestamp ?? timestamp;
     const executionReason = `${reason} [${mode}/${executionMarketType}]`;
+    const quoteAsset = 'USDT';
+    const baseAsset = symbol.replace(/USDT$/, '');
+    const feeSummary = this.resolveOrderFeeSummary(order, baseAsset, quoteAsset);
+    const executedQuantity = this.resolveClosedQuantity(order, amount);
 
-    return expectedSide === 'LONG'
-      ? this.paperTrader.tryCloseLong(
-          symbol,
-          strategyId,
-          executionPrice,
-          executionTimestamp,
-          executionReason,
-          executionMarketType,
-        )
-      : this.paperTrader.tryCloseShort(
-          symbol,
-          strategyId,
-          executionPrice,
-          executionTimestamp,
-          executionReason,
-          executionMarketType,
-        );
+    return this.paperTrader.recordExternalClosePosition({
+      expectedSide,
+      symbol,
+      strategyId,
+      price: executionPrice,
+      timestamp: executionTimestamp,
+      reason: executionReason,
+      executedQuantity,
+      exitFeePaid: feeSummary.quoteFee,
+      marketType: executionMarketType,
+    });
   }
 
   private hasCredentials(
@@ -694,8 +753,14 @@ export class BinanceExecutionService implements OnModuleDestroy {
     marketType: 'spot' | 'futures' | 'hybrid',
   ) {
     if (mode === 'live_testnet') {
-      const credentials = this.getUnifiedTestnetCredentials();
-      return Boolean(credentials.apiKey && credentials.secret);
+      if (marketType === 'hybrid') {
+        return (
+          this.hasLiveTestnetCredentials('spot') &&
+          this.hasLiveTestnetCredentials('futures')
+        );
+      }
+
+      return this.hasLiveTestnetCredentials(marketType);
     }
 
     return Boolean(this.config.binanceApiKey && this.config.binanceApiSecret);
@@ -739,11 +804,15 @@ export class BinanceExecutionService implements OnModuleDestroy {
       warnings.push(`На Binance есть незакрытые spot-активы: ${nonUsdtBalances.length} шт.`);
     }
 
-    if (streamStatus === 'disconnected') {
+    if (this.isSpotDemoRestFallbackMessage(streamState.lastError)) {
+      warnings.push(
+        'Spot Demo private user-data stream недоступен у Binance. Используем REST fallback для spot account sync.',
+      );
+    } else if (streamStatus === 'disconnected') {
       warnings.push('Private user-data stream Binance не подтверждён');
     }
 
-    if (streamState.lastError) {
+    if (streamState.lastError && !this.isSpotDemoRestFallbackMessage(streamState.lastError)) {
       warnings.push(`User-data stream: ${streamState.lastError}`);
     }
 
@@ -752,6 +821,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       accountConnectivity: 'ok',
       quoteFree: Number.isFinite(quoteFree) ? quoteFree : null,
       quoteTotal: Number.isFinite(quoteFree + quoteLocked) ? quoteFree + quoteLocked : null,
+      spotQuoteFree: Number.isFinite(quoteFree) ? quoteFree : null,
+      spotQuoteTotal: Number.isFinite(quoteFree + quoteLocked) ? quoteFree + quoteLocked : null,
+      futuresQuoteFree: null,
+      futuresQuoteTotal: null,
       lastError: null,
       userDataStreamStatus: streamStatus,
       userDataStreamLastEventAt: streamState.lastEventAt,
@@ -786,6 +859,14 @@ export class BinanceExecutionService implements OnModuleDestroy {
   }
 
   private async ensureSpotUserDataStream(mode: ExecutionMode) {
+    if (mode === 'live_testnet') {
+      const state = this.getSpotUserDataState(mode);
+      state.connected = false;
+      state.lastError =
+        'Spot Demo private user-data stream недоступен у Binance; используем REST fallback';
+      return null;
+    }
+
     const existing = this.spotWsClients.get(mode);
     if (existing) {
       return existing;
@@ -798,8 +879,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
       api_key: credentials.apiKey,
       api_secret: credentials.secret,
       testnet: false,
-      demoTrading: mode === 'live_testnet',
-      wsUrl: mode === 'live_testnet' ? 'wss://demo-stream.binance.com/ws' : undefined,
+      demoTrading: false,
+      wsUrl: undefined,
       beautify: true,
     });
     const wsKey = 'main';
@@ -916,10 +997,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       );
     } catch (error) {
       const state = this.getSpotUserDataState(mode);
-      state.lastError =
-        error instanceof Error
-          ? error.message
-          : 'Не удалось обновить spot-балансы через Binance SDK';
+      state.lastError = this.describeUnknownError(
+        error,
+        'Не удалось обновить spot-балансы через Binance SDK',
+      );
     }
   }
 
@@ -993,7 +1074,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
     marketType: 'spot' | 'futures',
   ) {
     if (mode === 'live_testnet') {
-      return this.getUnifiedTestnetCredentials();
+      return this.getLiveTestnetCredentials(marketType);
     }
 
     return {
@@ -1022,14 +1103,23 @@ export class BinanceExecutionService implements OnModuleDestroy {
     );
   }
 
-  private getUnifiedTestnetCredentials() {
-    if (
-      this.config.binanceFuturesDemoApiKey &&
-      this.config.binanceFuturesDemoApiSecret
-    ) {
+  private hasLiveTestnetCredentials(marketType: 'spot' | 'futures') {
+    const credentials = this.getLiveTestnetCredentials(marketType);
+    return Boolean(credentials.apiKey && credentials.secret);
+  }
+
+  private getLiveTestnetCredentials(marketType: 'spot' | 'futures') {
+    if (marketType === 'futures') {
+      if (this.config.binanceFuturesDemoApiKey && this.config.binanceFuturesDemoApiSecret) {
+        return {
+          apiKey: this.config.binanceFuturesDemoApiKey,
+          secret: this.config.binanceFuturesDemoApiSecret,
+        };
+      }
+
       return {
-        apiKey: this.config.binanceFuturesDemoApiKey,
-        secret: this.config.binanceFuturesDemoApiSecret,
+        apiKey: this.config.binanceTestnetApiKey,
+        secret: this.config.binanceTestnetApiSecret,
       };
     }
 
@@ -1047,7 +1137,22 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return 'Не заданы API credentials для выбранного режима';
     }
 
-    return 'Не заданы единые testnet credentials: BINANCE_FUTURES_DEMO_API_* или BINANCE_TESTNET_API_*';
+    if (marketType === 'hybrid') {
+      return 'Для live_testnet/hybrid нужен хотя бы BINANCE_TESTNET_API_*; при наличии отдельного BINANCE_FUTURES_DEMO_API_* он будет использован для futures, иначе futures demo попробует общий demo key из BINANCE_TESTNET_API_*';
+    }
+
+    return marketType === 'futures'
+      ? 'Для live_testnet/futures нужен BINANCE_FUTURES_DEMO_API_* или общий demo key в BINANCE_TESTNET_API_* с включённым Futures permission'
+      : 'Для live_testnet/spot нужны credentials BINANCE_TESTNET_API_*';
+  }
+
+  private isUsingSharedLiveTestnetKeyForFutures() {
+    return Boolean(
+      !this.config.binanceFuturesDemoApiKey &&
+        !this.config.binanceFuturesDemoApiSecret &&
+        this.config.binanceTestnetApiKey &&
+        this.config.binanceTestnetApiSecret,
+    );
   }
 
   private async getMarketSymbol(client: ccxt.Exchange, symbol: string) {
@@ -1066,6 +1171,83 @@ export class BinanceExecutionService implements OnModuleDestroy {
     const price = typeof order.price === 'number' ? order.price : undefined;
 
     return average ?? price ?? fallbackPrice;
+  }
+
+  private resolveExecutedQuoteNotional(
+    order: ccxt.Order,
+    executionPrice: number,
+    executedQuantity: number,
+    fallbackNotional: number,
+  ) {
+    if (typeof order.cost === 'number' && Number.isFinite(order.cost) && order.cost > 0) {
+      return order.cost;
+    }
+
+    const derivedNotional = executionPrice * executedQuantity;
+    if (Number.isFinite(derivedNotional) && derivedNotional > 0) {
+      return derivedNotional;
+    }
+
+    return fallbackNotional;
+  }
+
+  private resolveOpenedQuantity(
+    order: ccxt.Order,
+    fallbackAmount: number,
+    side: 'LONG' | 'SHORT',
+    marketType: 'spot' | 'futures',
+    baseFee: number,
+  ) {
+    const filled =
+      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
+        ? order.filled
+        : fallbackAmount;
+
+    if (side === 'LONG' && marketType === 'spot') {
+      return Math.max(filled - baseFee, 0);
+    }
+
+    return filled;
+  }
+
+  private resolveClosedQuantity(order: ccxt.Order, fallbackAmount: number) {
+    if (typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0) {
+      return order.filled;
+    }
+
+    return fallbackAmount;
+  }
+
+  private resolveOrderFeeSummary(
+    order: ccxt.Order,
+    baseAsset: string,
+    quoteAsset: string,
+  ) {
+    const fees =
+      Array.isArray(order.fees) && order.fees.length > 0 ? [...order.fees] : [];
+    if (order.fee) {
+      fees.push(order.fee);
+    }
+
+    return fees.reduce(
+      (acc, fee) => {
+        if (!fee || typeof fee.cost !== 'number' || !Number.isFinite(fee.cost) || fee.cost <= 0) {
+          return acc;
+        }
+
+        const currency = fee.currency?.toUpperCase();
+        if (currency === quoteAsset.toUpperCase()) {
+          acc.quoteFee += fee.cost;
+        }
+
+        if (currency === baseAsset.toUpperCase()) {
+          acc.baseFee += fee.cost;
+        }
+
+        return acc;
+      },
+      { quoteFee: 0, baseFee: 0 },
+    );
   }
 
   private isInsufficientFundsError(error: unknown) {
@@ -1131,6 +1313,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       quoteAsset: 'USDT',
       quoteFree: partial.quoteFree ?? null,
       quoteTotal: partial.quoteTotal ?? null,
+      spotQuoteFree: partial.spotQuoteFree ?? null,
+      spotQuoteTotal: partial.spotQuoteTotal ?? null,
+      futuresQuoteFree: partial.futuresQuoteFree ?? null,
+      futuresQuoteTotal: partial.futuresQuoteTotal ?? null,
       lastSyncAt: Date.now(),
       lastError: partial.lastError ?? null,
       userDataStreamStatus: partial.userDataStreamStatus ?? 'unknown',
@@ -1142,5 +1328,58 @@ export class BinanceExecutionService implements OnModuleDestroy {
       spotAssetsPreview: partial.spotAssetsPreview ?? [],
       warnings: partial.warnings ?? [],
     };
+  }
+
+  private isSpotDemoRestFallbackMessage(lastError: string | null | undefined) {
+    return (
+      typeof lastError === 'string' &&
+      /rest fallback|spot demo private user-data stream/i.test(lastError)
+    );
+  }
+
+  private describeUnknownError(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message;
+    }
+
+    if (typeof error === 'string' && error.trim()) {
+      return error.trim();
+    }
+
+    if (typeof error === 'object' && error !== null) {
+      const candidate = error as Record<string, unknown>;
+      const directMessage = [
+        candidate.message,
+        candidate.msg,
+        candidate.error,
+        candidate.body,
+      ].find((value) => typeof value === 'string' && value.trim());
+
+      if (typeof directMessage === 'string' && directMessage.trim()) {
+        return directMessage.trim();
+      }
+
+      const code =
+        typeof candidate.code === 'string' || typeof candidate.code === 'number'
+          ? String(candidate.code)
+          : null;
+      const requestUrl =
+        typeof candidate.requestUrl === 'string' && candidate.requestUrl.trim()
+          ? candidate.requestUrl
+          : null;
+
+      if (code || requestUrl) {
+        return [code ? `code=${code}` : null, requestUrl]
+          .filter(Boolean)
+          .join(' | ');
+      }
+    }
+
+    const text = String(error);
+    if (text && text !== '[object Object]') {
+      return text;
+    }
+
+    return fallback;
   }
 }

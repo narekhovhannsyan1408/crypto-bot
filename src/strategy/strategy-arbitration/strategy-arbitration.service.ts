@@ -30,14 +30,19 @@ export type StrategySelectionDecision = {
   candidates: StrategyCandidateDecision[];
 };
 
+export type RankedStrategyCandidate = StrategyOpenCandidate & {
+  entryScore: number;
+  arbitrationScore: number;
+  isAllowed: boolean;
+};
+
 @Injectable()
 export class StrategyArbitrationService {
-  selectCandidate(
-    candle: Candle,
+  rankCandidates(
     candidates: StrategyOpenCandidate[],
     executionStatus: ExecutionStatus,
-  ): StrategySelectionDecision {
-    const rankedCandidates = candidates
+  ): RankedStrategyCandidate[] {
+    return candidates
       .map((candidate) => ({
         ...candidate,
         entryScore: candidate.result.entryScore ?? 0,
@@ -45,6 +50,14 @@ export class StrategyArbitrationService {
         isAllowed: this.isSideAllowed(candidate.side, executionStatus),
       }))
       .sort((left, right) => right.arbitrationScore - left.arbitrationScore);
+  }
+
+  selectCandidate(
+    candle: Candle,
+    candidates: StrategyOpenCandidate[],
+    executionStatus: ExecutionStatus,
+  ): StrategySelectionDecision {
+    const rankedCandidates = this.rankCandidates(candidates, executionStatus);
 
     const winner = rankedCandidates.find((candidate) => candidate.isAllowed) ?? null;
 

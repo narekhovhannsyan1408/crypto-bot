@@ -74,15 +74,18 @@ export class RangeScalpingStrategyService implements TradingStrategy {
       return { signal: 'HOLD', reason: 'Индикаторы range scalping ещё не готовы' };
     }
 
+    const priorCandles = state.candles.slice(0, -1);
     const rangeLookback = 18;
-    const rangeHigh = highestHigh(state.candles, rangeLookback);
-    const rangeLow = lowestLow(state.candles, rangeLookback);
+    const rangeHigh = highestHigh(priorCandles, rangeLookback);
+    const rangeLow = lowestLow(priorCandles, rangeLookback);
     const rangeMid = (rangeHigh + rangeLow) / 2;
     const rangeWidthPct = rangeMid > 0 ? (rangeHigh - rangeLow) / rangeMid : 0;
     const distanceToLowPct = rangeLow > 0 ? (candle.close - rangeLow) / rangeLow : 0;
     const distanceToHighPct = rangeHigh > 0 ? (rangeHigh - candle.close) / rangeHigh : 0;
-    const recentVolumes = state.candles.slice(-10).map((item) => item.volume);
-    const volumeCompression = average(recentVolumes) > 0 ? candle.volume / average(recentVolumes) : 1;
+    const recentVolumes = priorCandles.slice(-10).map((item) => item.volume);
+    const averageRecentVolume = average(recentVolumes);
+    const volumeCompression =
+      averageRecentVolume > 0 ? candle.volume / averageRecentVolume : 1;
     const indicators = {
       ...core,
       rangeHigh,

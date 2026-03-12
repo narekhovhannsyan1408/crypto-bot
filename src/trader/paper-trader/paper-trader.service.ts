@@ -22,6 +22,9 @@ export class PaperTraderService {
 
   constructor(private readonly portfolio: PortfolioService) {}
 
+  private readonly defaultLongMarketType: 'spot' | 'futures' = 'spot';
+  private readonly defaultShortMarketType: 'spot' | 'futures' = 'futures';
+
   tryOpenLong(
     symbol: string,
     interval: string,
@@ -31,6 +34,7 @@ export class PaperTraderService {
     timestamp: number,
     reason: string,
     positionSizeUsdt: number,
+    marketType: 'spot' | 'futures' = this.defaultLongMarketType,
   ): ExecutionResult {
     return this.tryOpenPosition(
       'LONG',
@@ -42,6 +46,7 @@ export class PaperTraderService {
       timestamp,
       reason,
       positionSizeUsdt,
+      marketType,
     );
   }
 
@@ -51,6 +56,7 @@ export class PaperTraderService {
     price: number,
     timestamp: number,
     reason: string,
+    marketType?: 'spot' | 'futures',
   ): ExecutionResult | null {
     return this.tryClosePosition(
       'LONG',
@@ -59,6 +65,7 @@ export class PaperTraderService {
       price,
       timestamp,
       reason,
+      marketType,
     );
   }
 
@@ -71,6 +78,7 @@ export class PaperTraderService {
     timestamp: number,
     reason: string,
     positionSizeUsdt: number,
+    marketType: 'spot' | 'futures' = this.defaultShortMarketType,
   ): ExecutionResult {
     return this.tryOpenPosition(
       'SHORT',
@@ -82,6 +90,7 @@ export class PaperTraderService {
       timestamp,
       reason,
       positionSizeUsdt,
+      marketType,
     );
   }
 
@@ -91,6 +100,7 @@ export class PaperTraderService {
     price: number,
     timestamp: number,
     reason: string,
+    marketType?: 'spot' | 'futures',
   ): ExecutionResult | null {
     return this.tryClosePosition(
       'SHORT',
@@ -99,6 +109,7 @@ export class PaperTraderService {
       price,
       timestamp,
       reason,
+      marketType,
     );
   }
 
@@ -236,6 +247,7 @@ export class PaperTraderService {
     timestamp: number,
     reason: string,
     positionSizeUsdt: number,
+    marketType: 'spot' | 'futures',
   ): ExecutionResult {
     if (this.portfolio.hasOpenPosition(symbol, strategyId)) {
       return {
@@ -311,6 +323,7 @@ export class PaperTraderService {
       strategyId,
       strategyName,
       side,
+      marketType,
       entryPrice: price,
       quantity,
       investedUsdt: positionSizeUsdt,
@@ -336,6 +349,7 @@ export class PaperTraderService {
         strategyId,
         strategyName,
         side,
+        marketType,
         price,
         quantity,
         fee: entryFee,
@@ -352,6 +366,7 @@ export class PaperTraderService {
     price: number,
     timestamp: number,
     reason: string,
+    marketType?: 'spot' | 'futures',
   ): ExecutionResult | null {
     const position = this.portfolio.getPosition(symbol, strategyId);
 
@@ -384,6 +399,7 @@ export class PaperTraderService {
       strategyId: position.strategyId,
       strategyName: position.strategyName,
       side: position.side,
+      marketType: marketType ?? position.marketType,
       entryPrice: position.entryPrice,
       exitPrice: price,
       quantity: position.quantity,
@@ -409,6 +425,7 @@ export class PaperTraderService {
         strategyId: position.strategyId,
         strategyName: position.strategyName,
         side: position.side,
+        marketType: marketType ?? position.marketType,
         entryPrice: position.entryPrice,
         exitPrice: price,
         quantity: position.quantity,

@@ -9,6 +9,7 @@ export type Position = {
   strategyId: string;
   strategyName: string;
   side: PositionSide;
+  marketType: 'spot' | 'futures';
   entryPrice: number;
   quantity: number;
   investedUsdt: number;
@@ -31,6 +32,7 @@ export type ClosedTrade = {
   strategyId: string;
   strategyName: string;
   side: PositionSide;
+  marketType: 'spot' | 'futures';
   entryPrice: number;
   exitPrice: number;
   quantity: number;
@@ -52,6 +54,7 @@ export type ExecutedTrade = {
   strategyId: string;
   strategyName: string;
   side: PositionSide;
+  marketType?: 'spot' | 'futures';
   price?: number;
   entryPrice?: number;
   exitPrice?: number;

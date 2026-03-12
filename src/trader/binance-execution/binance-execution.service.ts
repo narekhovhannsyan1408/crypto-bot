@@ -53,7 +53,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
     mode: ExecutionMode,
     marketType: ExecutionMarketType,
   ): Promise<ExecutionStatus> {
-    const apiConfigured = this.hasCredentials(mode);
+    const apiConfigured = this.hasCredentials(mode, marketType);
 
     if (mode === 'paper') {
       return this.buildStatus(mode, marketType, {
@@ -69,7 +69,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return this.buildStatus(mode, marketType, {
         apiConfigured: false,
         accountConnectivity: 'error',
-        lastError: 'Не заданы API credentials для выбранного режима',
+        lastError: this.getMissingCredentialsMessage(mode, marketType),
       });
     }
 
@@ -86,7 +86,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
       const warnings: string[] = [];
 
       if (mode === 'live_testnet' && marketType === 'futures') {
-        warnings.push('Binance Futures testnet работает через demo trading endpoint');
+        warnings.push('Binance Futures Demo работает через demo trading endpoint');
       }
 
       return this.buildStatus(mode, marketType, {
@@ -343,11 +343,13 @@ export class BinanceExecutionService implements OnModuleDestroy {
     const actions: ExecutionResult[] = [];
 
     for (const position of positions) {
+      const positionMarketType = position.marketType;
+
       if (position.side === 'LONG') {
         if (candle.low <= position.stopPrice) {
           const action = await this.tryCloseLong(
             mode,
-            marketType,
+            positionMarketType,
             candle.symbol,
             position.strategyId,
             position.stopPrice,
@@ -361,7 +363,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
         if (candle.high >= position.takePrice) {
           const action = await this.tryCloseLong(
             mode,
-            marketType,
+            positionMarketType,
             candle.symbol,
             position.strategyId,
             position.takePrice,
@@ -395,7 +397,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
         ) {
           const action = await this.tryCloseLong(
             mode,
-            marketType,
+            positionMarketType,
             candle.symbol,
             position.strategyId,
             candle.close,
@@ -413,7 +415,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
       if (candle.high >= position.stopPrice) {
         const action = await this.tryCloseShort(
           mode,
-          marketType,
+          positionMarketType,
           candle.symbol,
           position.strategyId,
           position.stopPrice,
@@ -427,7 +429,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
       if (candle.low <= position.takePrice) {
         const action = await this.tryCloseShort(
           mode,
-          marketType,
+          positionMarketType,
           candle.symbol,
           position.strategyId,
           position.takePrice,
@@ -457,7 +459,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
       ) {
         const action = await this.tryCloseShort(
           mode,
-          marketType,
+          positionMarketType,
           candle.symbol,
           position.strategyId,
           candle.close,
@@ -487,7 +489,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
     reason: string,
     positionSizeUsdt: number,
   ): Promise<ExecutionResult> {
-    if (marketType === 'spot' && side === 'SHORT') {
+    const executionMarketType =
+      marketType === 'hybrid' ? (side === 'LONG' ? 'spot' : 'futures') : marketType;
+
+    if (executionMarketType === 'spot' && side === 'SHORT') {
       return {
         status: 'REJECTED',
         action: 'OPEN_SHORT',
@@ -499,36 +504,70 @@ export class BinanceExecutionService implements OnModuleDestroy {
       };
     }
 
-    const client = await this.getClient(mode, marketType);
+    const client = await this.getClient(mode, executionMarketType);
     const marketSymbol = await this.getMarketSymbol(client, symbol);
     const amount = this.normalizeAmount(client, marketSymbol, positionSizeUsdt / price);
     const orderSide = side === 'LONG' ? 'buy' : 'sell';
-    const order = await client.createOrder(marketSymbol, 'market', orderSide, amount);
-    const executionPrice = this.resolveExecutionPrice(order, price);
-    const executionTimestamp = order.timestamp ?? timestamp;
-    const executionReason = `${reason} [${mode}/${marketType}]`;
+    const rejectAction = side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT';
 
-    return side === 'LONG'
-      ? this.paperTrader.tryOpenLong(
+    try {
+      const order = await client.createOrder(marketSymbol, 'market', orderSide, amount);
+      const executionPrice = this.resolveExecutionPrice(order, price);
+      const executionTimestamp = order.timestamp ?? timestamp;
+      const executionReason = `${reason} [${mode}/${marketType}]`;
+
+      return side === 'LONG'
+        ? this.paperTrader.tryOpenLong(
+            symbol,
+            interval,
+            strategyId,
+            strategyName,
+            executionPrice,
+            executionTimestamp,
+            executionReason,
+            positionSizeUsdt,
+            executionMarketType,
+          )
+        : this.paperTrader.tryOpenShort(
+            symbol,
+            interval,
+            strategyId,
+            strategyName,
+            executionPrice,
+            executionTimestamp,
+            executionReason,
+            positionSizeUsdt,
+            executionMarketType,
+          );
+    } catch (error) {
+      if (this.isInsufficientFundsError(error)) {
+        const availableQuote = await this.getAvailableQuoteBalance(mode, executionMarketType);
+        const venueLabel =
+          executionMarketType === 'futures' ? 'Binance Futures' : 'Binance Spot';
+        const fundsHint =
+          executionMarketType === 'futures'
+            ? 'Пополни/сбрось Futures Demo баланс, проверь leverage по символу или уменьши BOT_POSITION_SIZE_USDT.'
+            : 'Проверь свободный USDT на Spot Demo или уменьши BOT_POSITION_SIZE_USDT.';
+        const availableHint =
+          availableQuote === null
+            ? ''
+            : ` Доступно примерно ${availableQuote.toFixed(4)} USDT в ${venueLabel}.`;
+
+        return {
+          status: 'REJECTED',
+          action: rejectAction,
           symbol,
           interval,
           strategyId,
           strategyName,
-          executionPrice,
-          executionTimestamp,
-          executionReason,
-          positionSizeUsdt,
-        )
-      : this.paperTrader.tryOpenShort(
-          symbol,
-          interval,
-          strategyId,
-          strategyName,
-          executionPrice,
-          executionTimestamp,
-          executionReason,
-          positionSizeUsdt,
-        );
+          reason: `Недостаточно средств для открытия позиции на ${venueLabel}: запрошен размер ~${positionSizeUsdt.toFixed(
+            4,
+          )} USDT.${availableHint} ${fundsHint}`.trim(),
+        };
+      }
+
+      throw error;
+    }
   }
 
   private async tryClosePosition(
@@ -546,7 +585,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return null;
     }
 
-    if (marketType === 'spot' && expectedSide === 'SHORT') {
+    const executionMarketType =
+      marketType === 'hybrid' ? position.marketType : marketType;
+
+    if (executionMarketType === 'spot' && expectedSide === 'SHORT') {
       return {
         status: 'REJECTED',
         action: 'CLOSE_SHORT',
@@ -558,11 +600,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
       };
     }
 
-    const client = await this.getClient(mode, marketType);
+    const client = await this.getClient(mode, executionMarketType);
     const marketSymbol = await this.getMarketSymbol(client, symbol);
     let amount = this.normalizeAmount(client, marketSymbol, position.quantity);
 
-    if (marketType === 'spot' && expectedSide === 'LONG') {
+    if (executionMarketType === 'spot' && expectedSide === 'LONG') {
       const baseAsset = symbol.replace(/USDT$/, '');
       const balance = await this.getSpotAssetBalance(mode, baseAsset);
       const freeBalance = balance.free;
@@ -573,7 +615,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
           strategyId,
           price,
           timestamp,
-          `${reason} [${mode}/${marketType}] [sync: asset already absent on exchange]`,
+          `${reason} [${mode}/${executionMarketType}] [sync: asset already absent on exchange]`,
+          executionMarketType,
         );
       }
 
@@ -584,7 +627,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
           strategyId,
           price,
           timestamp,
-          `${reason} [${mode}/${marketType}] [sync: available asset amount rounded to zero]`,
+          `${reason} [${mode}/${executionMarketType}] [sync: available asset amount rounded to zero]`,
+          executionMarketType,
         );
       }
 
@@ -597,7 +641,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
             strategyId,
             price,
             timestamp,
-            `${reason} [${mode}/${marketType}] [sync: exchange asset balance diverged from bot position]`,
+            `${reason} [${mode}/${executionMarketType}] [sync: exchange asset balance diverged from bot position]`,
+            executionMarketType,
           );
         }
 
@@ -610,7 +655,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
         ? 'sell'
         : 'buy';
     const params =
-      marketType === 'futures'
+      executionMarketType === 'futures'
         ? { reduceOnly: true }
         : undefined;
     const order = await client.createOrder(
@@ -623,7 +668,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
     );
     const executionPrice = this.resolveExecutionPrice(order, price);
     const executionTimestamp = order.timestamp ?? timestamp;
-    const executionReason = `${reason} [${mode}/${marketType}]`;
+    const executionReason = `${reason} [${mode}/${executionMarketType}]`;
 
     return expectedSide === 'LONG'
       ? this.paperTrader.tryCloseLong(
@@ -632,6 +677,7 @@ export class BinanceExecutionService implements OnModuleDestroy {
           executionPrice,
           executionTimestamp,
           executionReason,
+          executionMarketType,
         )
       : this.paperTrader.tryCloseShort(
           symbol,
@@ -639,14 +685,17 @@ export class BinanceExecutionService implements OnModuleDestroy {
           executionPrice,
           executionTimestamp,
           executionReason,
+          executionMarketType,
         );
   }
 
-  private hasCredentials(mode: ExecutionMode) {
+  private hasCredentials(
+    mode: ExecutionMode,
+    marketType: 'spot' | 'futures' | 'hybrid',
+  ) {
     if (mode === 'live_testnet') {
-      return Boolean(
-        this.config.binanceTestnetApiKey && this.config.binanceTestnetApiSecret,
-      );
+      const credentials = this.getUnifiedTestnetCredentials();
+      return Boolean(credentials.apiKey && credentials.secret);
     }
 
     return Boolean(this.config.binanceApiKey && this.config.binanceApiSecret);
@@ -720,21 +769,15 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return existing;
     }
 
-    const credentials =
-      mode === 'live_testnet'
-        ? {
-            apiKey: this.config.binanceTestnetApiKey,
-            secret: this.config.binanceTestnetApiSecret,
-          }
-        : {
-            apiKey: this.config.binanceApiKey,
-            secret: this.config.binanceApiSecret,
-          };
+    const credentials = this.getApiCredentials(mode, 'spot');
+    this.assertCredentialsLoaded(credentials, mode, 'spot');
 
     const client = new MainClient({
       api_key: credentials.apiKey,
       api_secret: credentials.secret,
-      testnet: mode === 'live_testnet',
+      testnet: false,
+      demoTrading: mode === 'live_testnet',
+      baseUrl: mode === 'live_testnet' ? 'https://demo-api.binance.com' : undefined,
       beautifyResponses: true,
     });
 
@@ -748,24 +791,18 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return existing;
     }
 
-    const credentials =
-      mode === 'live_testnet'
-        ? {
-            apiKey: this.config.binanceTestnetApiKey,
-            secret: this.config.binanceTestnetApiSecret,
-          }
-        : {
-            apiKey: this.config.binanceApiKey,
-            secret: this.config.binanceApiSecret,
-          };
+    const credentials = this.getApiCredentials(mode, 'spot');
+    this.assertCredentialsLoaded(credentials, mode, 'spot');
 
     const client = new WebsocketClient({
       api_key: credentials.apiKey,
       api_secret: credentials.secret,
-      testnet: mode === 'live_testnet',
+      testnet: false,
+      demoTrading: mode === 'live_testnet',
+      wsUrl: mode === 'live_testnet' ? 'wss://demo-stream.binance.com/ws' : undefined,
       beautify: true,
     });
-    const wsKey = mode === 'live_testnet' ? 'mainTestnetUserData' : 'main';
+    const wsKey = 'main';
 
     client.on('open', () => {
       const state = this.getSpotUserDataState(mode);
@@ -803,9 +840,27 @@ export class BinanceExecutionService implements OnModuleDestroy {
       );
     });
 
-    this.spotWsClients.set(mode, client);
-    await client.subscribeSpotUserDataStream(wsKey);
-    return client;
+    try {
+      await client.subscribeSpotUserDataStream(wsKey);
+      this.spotWsClients.set(mode, client);
+      return client;
+    } catch (error) {
+      const state = this.getSpotUserDataState(mode);
+      state.connected = false;
+
+      if (this.isDeprecatedSpotTestnetUserDataStreamError(error)) {
+        state.lastError =
+          'Spot Demo private user-data stream временно недоступен. Продолжаем через REST polling.';
+        try {
+          client.closeAll(true);
+        } catch {
+          // ignore cleanup errors
+        }
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   private handleSpotUserDataMessage(
@@ -906,38 +961,93 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return existing;
     }
 
-    const credentials =
-      mode === 'live_testnet'
-        ? {
-            apiKey: this.config.binanceTestnetApiKey,
-            secret: this.config.binanceTestnetApiSecret,
-          }
-        : {
-            apiKey: this.config.binanceApiKey,
-            secret: this.config.binanceApiSecret,
-          };
+    const normalizedMarketType = marketType === 'hybrid' ? 'spot' : marketType;
+    const credentials = this.getApiCredentials(mode, normalizedMarketType);
+    this.assertCredentialsLoaded(credentials, mode, normalizedMarketType);
 
     const client = new ccxt.binance({
       apiKey: credentials.apiKey,
       secret: credentials.secret,
       enableRateLimit: true,
       options: {
-        defaultType: marketType === 'futures' ? 'future' : 'spot',
+        defaultType: normalizedMarketType === 'futures' ? 'future' : 'spot',
         adjustForTimeDifference: true,
       },
     });
 
     if (mode === 'live_testnet') {
-      if (marketType === 'futures') {
+      if (normalizedMarketType === 'futures') {
         client.enableDemoTrading(true);
       } else {
-        client.setSandboxMode(true);
+        client.enableDemoTrading(true);
       }
     }
 
     await client.loadMarkets();
     this.clients.set(cacheKey, client);
     return client;
+  }
+
+  private getApiCredentials(
+    mode: ExecutionMode,
+    marketType: 'spot' | 'futures',
+  ) {
+    if (mode === 'live_testnet') {
+      return this.getUnifiedTestnetCredentials();
+    }
+
+    return {
+      apiKey: this.config.binanceApiKey,
+      secret: this.config.binanceApiSecret,
+    };
+  }
+
+  private assertCredentialsLoaded(
+    credentials: { apiKey?: string; secret?: string },
+    mode: ExecutionMode,
+    marketType: 'spot' | 'futures',
+  ) {
+    if (credentials.apiKey && credentials.secret) {
+      return;
+    }
+
+    if (mode === 'live_testnet') {
+      throw new Error(
+        `Не загружены testnet credentials для ${marketType}. Проверь .env и полный restart процесса.`,
+      );
+    }
+
+    throw new Error(
+      `Не загружены API credentials для ${mode}/${marketType}. Проверь .env и способ запуска процесса.`,
+    );
+  }
+
+  private getUnifiedTestnetCredentials() {
+    if (
+      this.config.binanceFuturesDemoApiKey &&
+      this.config.binanceFuturesDemoApiSecret
+    ) {
+      return {
+        apiKey: this.config.binanceFuturesDemoApiKey,
+        secret: this.config.binanceFuturesDemoApiSecret,
+      };
+    }
+
+    return {
+      apiKey: this.config.binanceTestnetApiKey,
+      secret: this.config.binanceTestnetApiSecret,
+    };
+  }
+
+  private getMissingCredentialsMessage(
+    mode: ExecutionMode,
+    marketType: ExecutionMarketType,
+  ) {
+    if (mode !== 'live_testnet') {
+      return 'Не заданы API credentials для выбранного режима';
+    }
+
+    return 'Не заданы единые testnet credentials: BINANCE_FUTURES_DEMO_API_* или BINANCE_TESTNET_API_*';
   }
 
   private async getMarketSymbol(client: ccxt.Exchange, symbol: string) {
@@ -958,6 +1068,42 @@ export class BinanceExecutionService implements OnModuleDestroy {
     return average ?? price ?? fallbackPrice;
   }
 
+  private isInsufficientFundsError(error: unknown) {
+    if (error instanceof ccxt.InsufficientFunds) {
+      return true;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return /insufficient balance|insufficient funds|margin is insufficient/i.test(message);
+  }
+
+  private isDeprecatedSpotTestnetUserDataStreamError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return /410 gone|testnet\.binance\.vision\/api\/v3\/userdatastream/i.test(message);
+  }
+
+  private async getAvailableQuoteBalance(
+    mode: ExecutionMode,
+    marketType: 'spot' | 'futures',
+  ): Promise<number | null> {
+    try {
+      if (marketType === 'spot') {
+        const balance = await this.getSpotAssetBalance(mode, 'USDT');
+        return Number.isFinite(balance.free) ? balance.free : null;
+      }
+
+      const client = await this.getClient(mode, 'futures');
+      const balance = await client.fetchBalance();
+      const quoteWallet =
+        (balance.USDT as { free?: number; total?: number } | undefined) ?? {};
+      return typeof quoteWallet.free === 'number' && Number.isFinite(quoteWallet.free)
+        ? quoteWallet.free
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   private buildStatus(
     mode: ExecutionMode,
     marketType: ExecutionMarketType,
@@ -971,8 +1117,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
           ? 'PAPER'
           : mode === 'live_testnet'
             ? marketType === 'spot'
-              ? 'LIVE TESTNET SPOT'
-              : 'LIVE TESTNET FUTURES'
+              ? 'LIVE DEMO SPOT'
+              : 'LIVE DEMO FUTURES'
             : marketType === 'spot'
               ? 'LIVE REAL SPOT'
               : 'LIVE REAL FUTURES',

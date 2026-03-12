@@ -151,7 +151,7 @@ export class DashboardServerService implements OnModuleInit, OnModuleDestroy {
         symbol?: string;
         strategyId?: string;
         mode?: 'paper' | 'live_testnet' | 'live_real';
-        marketType?: 'spot' | 'futures';
+        marketType?: 'spot' | 'futures' | 'hybrid';
         confirmationPhrase?: string;
       };
 

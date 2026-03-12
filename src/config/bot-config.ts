@@ -1,3 +1,19 @@
+import { config as loadEnv } from 'dotenv';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const envCandidates = [
+  resolve(process.cwd(), '.env'),
+  resolve(__dirname, '../../.env'),
+  resolve(__dirname, '../.env'),
+];
+
+for (const envPath of envCandidates) {
+  if (existsSync(envPath)) {
+    loadEnv({ path: envPath, override: false });
+  }
+}
+
 const numberValue = (value: string | undefined, fallback: number) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -26,8 +42,9 @@ const executionModeValue = (
 
 const executionMarketTypeValue = (
   value: string | undefined,
-): 'spot' | 'futures' => {
+): 'spot' | 'futures' | 'hybrid' => {
   const normalized = value?.trim().toLowerCase();
+  if (normalized === 'hybrid') return 'hybrid';
   if (normalized === 'futures') return 'futures';
   return 'spot';
 };
@@ -38,7 +55,7 @@ export type BotConfig = {
   confirmationInterval: string | null;
   confirmationMode: 'strict' | 'lenient' | 'off';
   executionMode: 'paper' | 'live_testnet' | 'live_real';
-  executionMarketType: 'spot' | 'futures';
+  executionMarketType: 'spot' | 'futures' | 'hybrid';
   allowLiveReal: boolean;
   useScanner: boolean;
   scanIntervalMs: number;
@@ -89,6 +106,8 @@ export type BotConfig = {
   binanceApiSecret: string;
   binanceTestnetApiKey: string;
   binanceTestnetApiSecret: string;
+  binanceFuturesDemoApiKey: string;
+  binanceFuturesDemoApiSecret: string;
   allowedSymbols: string[];
 };
 
@@ -186,16 +205,28 @@ export const getBotConfig = (): BotConfig => {
     dashboardPort: numberValue(process.env.BOT_DASHBOARD_PORT, 3200),
     binanceRestBaseUrl: stringValue(
       process.env.BINANCE_REST_BASE_URL,
-      'https://api.binance.com',
+      process.env.BOT_EXECUTION_MODE?.trim().toLowerCase() === 'live_testnet'
+        ? 'https://demo-api.binance.com'
+        : 'https://api.binance.com',
     ),
     binanceWsBaseUrl: stringValue(
       process.env.BINANCE_WS_BASE_URL,
-      'wss://stream.binance.com/ws',
+      process.env.BOT_EXECUTION_MODE?.trim().toLowerCase() === 'live_testnet'
+        ? 'wss://demo-stream.binance.com/ws'
+        : 'wss://stream.binance.com/ws',
     ),
     binanceApiKey: stringValue(process.env.BINANCE_API_KEY, ''),
     binanceApiSecret: stringValue(process.env.BINANCE_API_SECRET, ''),
     binanceTestnetApiKey: stringValue(process.env.BINANCE_TESTNET_API_KEY, ''),
     binanceTestnetApiSecret: stringValue(process.env.BINANCE_TESTNET_API_SECRET, ''),
+    binanceFuturesDemoApiKey: stringValue(
+      process.env.BINANCE_FUTURES_DEMO_API_KEY,
+      '',
+    ),
+    binanceFuturesDemoApiSecret: stringValue(
+      process.env.BINANCE_FUTURES_DEMO_API_SECRET,
+      '',
+    ),
     allowedSymbols: (process.env.BOT_ALLOWED_SYMBOLS || '')
       .split(',')
       .map((value) => value.trim())

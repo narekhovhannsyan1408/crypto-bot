@@ -109,8 +109,12 @@ function connect() {
     }
 
     const execution = state.runtime?.execution;
-    if (!execution || execution.marketType !== 'spot' || execution.mode === 'paper') {
-      window.alert('Команда доступна только для live spot режима');
+    if (
+      !execution ||
+      (execution.marketType !== 'spot' && execution.marketType !== 'hybrid') ||
+      execution.mode === 'paper'
+    ) {
+      window.alert('Команда доступна только для режимов live spot или hybrid');
       return;
     }
 
@@ -322,14 +326,25 @@ function renderExecution() {
       : execution.mode === 'live_testnet'
         ? 'testnet'
         : 'live';
+  const modeLabel =
+    execution.mode === 'paper'
+      ? 'paper'
+      : execution.mode === 'live_testnet'
+        ? 'live_demo'
+        : 'live_real';
+  const routeSummary =
+    execution.longMarketType && execution.shortMarketType
+      ? `LONG -> ${execution.longMarketType}, SHORT -> ${execution.shortMarketType}`
+      : '-';
 
   elements.executionStatus.innerHTML = `
     <div class="execution-chip ${chipClass}">${escapeHtml(execution.label)}</div>
     <div class="execution-kv">
-      <div class="kv-row"><span>Режим</span><strong>${escapeHtml(execution.mode)}</strong></div>
+      <div class="kv-row"><span>Режим</span><strong>${escapeHtml(modeLabel)}</strong></div>
       <div class="kv-row"><span>Рынок</span><strong>${escapeHtml(execution.marketType)}</strong></div>
+      <div class="kv-row"><span>Routing</span><strong>${escapeHtml(routeSummary)}</strong></div>
       <div class="kv-row"><span>Short</span><strong>${execution.canTradeShort ? 'да' : 'нет'}</strong></div>
-      <div class="kv-row"><span>Testnet</span><strong>${execution.usingTestnet ? 'да' : 'нет'}</strong></div>
+      <div class="kv-row"><span>Demo mode</span><strong>${execution.usingTestnet ? 'да' : 'нет'}</strong></div>
       <div class="kv-row"><span>API configured</span><strong>${execution.apiConfigured ? 'да' : 'нет'}</strong></div>
       <div class="kv-row"><span>Связь с Binance</span><strong>${escapeHtml(execution.accountConnectivity)}</strong></div>
       <div class="kv-row"><span>Свободный USDT</span><strong>${formatNumber(execution.quoteFree)}</strong></div>
@@ -403,7 +418,7 @@ function renderPositions() {
       : '');
     elements.positionsTable.innerHTML = `
       <tr>
-        <td colspan="11" class="muted" style="padding: 1.5rem; text-align: center;">
+        <td colspan="12" class="muted" style="padding: 1.5rem; text-align: center;">
           Нет открытых позиций.
           ${lastReason ? `<br><small>${escapeHtml(lastReason)}</small>` : ''}
           <br><small>Проверь блок «Автоподбор стратегии» и «Риск-менеджмент» ниже.</small>
@@ -420,6 +435,7 @@ function renderPositions() {
           <td>${escapeHtml(position.символ)}</td>
           <td>${escapeHtml(position.стратегия || position.strategyId || '-')}</td>
           <td>${escapeHtml(position.сторона)}</td>
+          <td>${escapeHtml(position.рынокИсполнения || '-')}</td>
           <td>${formatNumber(position.ценаВхода)}</td>
           <td>${formatNumber(position.текущаяЦена)}</td>
           <td>${formatNumber(position.времяВПозицииМинут)}</td>

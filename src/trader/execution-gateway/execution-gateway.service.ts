@@ -38,6 +38,8 @@ export class ExecutionGatewayService implements TraderService {
     reason: string,
     positionSizeUsdt: number,
   ): Promise<ExecutionResult> {
+    const marketType = this.resolveOpenMarketType('LONG');
+
     if (this.executionControl.getMode() === 'paper') {
       return this.paperTrader.tryOpenLong(
         symbol,
@@ -48,12 +50,13 @@ export class ExecutionGatewayService implements TraderService {
         timestamp,
         reason,
         positionSizeUsdt,
+        marketType,
       );
     }
 
     return this.liveTrader.tryOpenLong(
       this.executionControl.getMode(),
-      this.executionControl.getMarketType(),
+      marketType,
       symbol,
       interval,
       strategyId,
@@ -72,6 +75,8 @@ export class ExecutionGatewayService implements TraderService {
     timestamp: number,
     reason: string,
   ) {
+    const marketType = this.resolvePositionMarketType(symbol, strategyId, 'spot');
+
     if (this.executionControl.getMode() === 'paper') {
       return this.paperTrader.tryCloseLong(
         symbol,
@@ -79,12 +84,13 @@ export class ExecutionGatewayService implements TraderService {
         price,
         timestamp,
         reason,
+        marketType,
       );
     }
 
     return this.liveTrader.tryCloseLong(
       this.executionControl.getMode(),
-      this.executionControl.getMarketType(),
+      marketType,
       symbol,
       strategyId,
       price,
@@ -103,6 +109,8 @@ export class ExecutionGatewayService implements TraderService {
     reason: string,
     positionSizeUsdt: number,
   ): Promise<ExecutionResult> {
+    const marketType = this.resolveOpenMarketType('SHORT');
+
     if (this.executionControl.getMode() === 'paper') {
       return this.paperTrader.tryOpenShort(
         symbol,
@@ -113,12 +121,13 @@ export class ExecutionGatewayService implements TraderService {
         timestamp,
         reason,
         positionSizeUsdt,
+        marketType,
       );
     }
 
     return this.liveTrader.tryOpenShort(
       this.executionControl.getMode(),
-      this.executionControl.getMarketType(),
+      marketType,
       symbol,
       interval,
       strategyId,
@@ -137,6 +146,8 @@ export class ExecutionGatewayService implements TraderService {
     timestamp: number,
     reason: string,
   ) {
+    const marketType = this.resolvePositionMarketType(symbol, strategyId, 'futures');
+
     if (this.executionControl.getMode() === 'paper') {
       return this.paperTrader.tryCloseShort(
         symbol,
@@ -144,12 +155,13 @@ export class ExecutionGatewayService implements TraderService {
         price,
         timestamp,
         reason,
+        marketType,
       );
     }
 
     return this.liveTrader.tryCloseShort(
       this.executionControl.getMode(),
-      this.executionControl.getMarketType(),
+      marketType,
       symbol,
       strategyId,
       price,
@@ -179,6 +191,19 @@ export class ExecutionGatewayService implements TraderService {
       const status = this.buildPaperStatus();
       this.executionControl.updateStatus(status);
       return status;
+    }
+
+    if (this.executionControl.getMarketType() === 'hybrid') {
+      const [spotStatus, futuresStatus] = await Promise.all([
+        this.liveTrader.refreshAccountStatus(this.executionControl.getMode(), 'spot'),
+        this.liveTrader.refreshAccountStatus(this.executionControl.getMode(), 'futures'),
+      ]);
+      const status = this.mergeHybridStatus(spotStatus, futuresStatus);
+      this.executionControl.updateStatus(status);
+      if (status.accountConnectivity === 'ok') {
+        this.liveTrader.syncPortfolioBalance(status);
+      }
+      return this.executionControl.getStatus();
     }
 
     const status = await this.liveTrader.refreshAccountStatus(
@@ -271,7 +296,11 @@ export class ExecutionGatewayService implements TraderService {
       mode: 'paper',
       marketType: this.executionControl.getMarketType(),
       label: 'PAPER',
-      canTradeShort: true,
+      canTradeShort: this.executionControl.getMarketType() !== 'spot',
+      longMarketType:
+        this.executionControl.getMarketType() === 'futures' ? 'futures' : 'spot',
+      shortMarketType:
+        this.executionControl.getMarketType() === 'spot' ? 'spot' : 'futures',
       liveTradingEnabled: false,
       usingTestnet: false,
       allowLiveReal: this.config.allowLiveReal,
@@ -283,6 +312,69 @@ export class ExecutionGatewayService implements TraderService {
       lastSyncAt: Date.now(),
       lastError: null,
       warnings: ['Paper trading: реальные ордера не отправляются'],
+    };
+  }
+
+  private resolveOpenMarketType(side: 'LONG' | 'SHORT'): 'spot' | 'futures' {
+    const configuredMarketType = this.executionControl.getMarketType();
+
+    if (configuredMarketType === 'hybrid') {
+      return side === 'LONG' ? 'spot' : 'futures';
+    }
+
+    return configuredMarketType;
+  }
+
+  private resolvePositionMarketType(
+    symbol: string,
+    strategyId: string,
+    fallback: 'spot' | 'futures',
+  ): 'spot' | 'futures' {
+    const position = this.portfolio.getPosition(symbol, strategyId);
+    return position?.marketType ?? fallback;
+  }
+
+  private mergeHybridStatus(
+    spotStatus: ExecutionStatus,
+    futuresStatus: ExecutionStatus,
+  ): ExecutionStatus {
+    const quoteFree =
+      (spotStatus.quoteFree ?? 0) + (futuresStatus.quoteFree ?? 0);
+    const quoteTotal =
+      (spotStatus.quoteTotal ?? 0) + (futuresStatus.quoteTotal ?? 0);
+    const warnings = [...(spotStatus.warnings ?? []), ...(futuresStatus.warnings ?? [])];
+    const lastError = [spotStatus.lastError, futuresStatus.lastError].filter(Boolean).join(' | ');
+
+    return {
+      mode: this.executionControl.getMode(),
+      marketType: 'hybrid',
+      label:
+        this.executionControl.getMode() === 'live_testnet'
+          ? 'LIVE DEMO HYBRID'
+          : 'LIVE REAL HYBRID',
+      canTradeShort: true,
+      longMarketType: 'spot',
+      shortMarketType: 'futures',
+      liveTradingEnabled: true,
+      usingTestnet: this.executionControl.getMode() === 'live_testnet',
+      allowLiveReal: this.config.allowLiveReal,
+      apiConfigured: spotStatus.apiConfigured && futuresStatus.apiConfigured,
+      accountConnectivity:
+        spotStatus.accountConnectivity === 'ok' && futuresStatus.accountConnectivity === 'ok'
+          ? 'ok'
+          : 'error',
+      quoteAsset: 'USDT',
+      quoteFree,
+      quoteTotal,
+      lastSyncAt: Date.now(),
+      lastError: lastError || null,
+      userDataStreamStatus: spotStatus.userDataStreamStatus,
+      userDataStreamLastEventAt: spotStatus.userDataStreamLastEventAt,
+      userDataStreamLastExecutionReportAt: spotStatus.userDataStreamLastExecutionReportAt,
+      openSpotOrdersCount: spotStatus.openSpotOrdersCount,
+      spotAssetsCount: spotStatus.spotAssetsCount,
+      spotAssetsPreview: spotStatus.spotAssetsPreview,
+      warnings: [...new Set(warnings)],
     };
   }
 }

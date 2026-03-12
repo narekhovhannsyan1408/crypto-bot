@@ -29,7 +29,9 @@ export class ExecutionControlService {
       mode,
       marketType,
       label: this.getModeLabel(mode, marketType),
-      canTradeShort: marketType === 'futures',
+      canTradeShort: marketType !== 'spot',
+      longMarketType: marketType === 'futures' ? 'futures' : 'spot',
+      shortMarketType: marketType === 'spot' ? 'spot' : 'futures',
       liveTradingEnabled: mode !== 'paper',
       usingTestnet: mode === 'live_testnet',
       allowLiveReal: this.config.allowLiveReal,
@@ -45,7 +47,15 @@ export class ExecutionControlService {
       marketType: partial.marketType ?? this.marketType,
       label: partial.label ?? this.getModeLabel(this.mode, this.marketType),
       canTradeShort:
-        partial.canTradeShort ?? this.lastStatus.canTradeShort ?? this.marketType === 'futures',
+        partial.canTradeShort ?? this.lastStatus.canTradeShort ?? this.marketType !== 'spot',
+      longMarketType:
+        partial.longMarketType ??
+        this.lastStatus.longMarketType ??
+        (this.marketType === 'futures' ? 'futures' : 'spot'),
+      shortMarketType:
+        partial.shortMarketType ??
+        this.lastStatus.shortMarketType ??
+        (this.marketType === 'spot' ? 'spot' : 'futures'),
       liveTradingEnabled: partial.liveTradingEnabled ?? this.mode !== 'paper',
       usingTestnet: partial.usingTestnet ?? this.mode === 'live_testnet',
       allowLiveReal: this.config.allowLiveReal,
@@ -66,7 +76,9 @@ export class ExecutionControlService {
       mode: this.mode,
       marketType: this.marketType,
       label: this.getModeLabel(this.mode, this.marketType),
-      canTradeShort: this.marketType === 'futures',
+      canTradeShort: this.marketType !== 'spot',
+      longMarketType: this.marketType === 'futures' ? 'futures' : 'spot',
+      shortMarketType: this.marketType === 'spot' ? 'spot' : 'futures',
       liveTradingEnabled: this.mode !== 'paper',
       usingTestnet: this.mode === 'live_testnet',
       allowLiveReal: this.config.allowLiveReal,
@@ -87,7 +99,14 @@ export class ExecutionControlService {
     }
 
     if (mode === 'live_testnet') {
-      return marketType === 'spot' ? 'LIVE TESTNET SPOT' : 'LIVE TESTNET FUTURES';
+      if (marketType === 'hybrid') {
+        return 'LIVE DEMO HYBRID';
+      }
+      return marketType === 'spot' ? 'LIVE DEMO SPOT' : 'LIVE DEMO FUTURES';
+    }
+
+    if (marketType === 'hybrid') {
+      return 'LIVE REAL HYBRID';
     }
 
     return marketType === 'spot' ? 'LIVE REAL SPOT' : 'LIVE REAL FUTURES';
@@ -114,6 +133,10 @@ export class ExecutionControlService {
 
     if (marketType === 'spot') {
       nextWarnings.push('В режиме Spot short-сделки недоступны');
+    }
+
+    if (marketType === 'hybrid') {
+      nextWarnings.push('Hybrid routing: long открывается на Spot, short открывается на Futures');
     }
 
     return [...new Set(nextWarnings)];

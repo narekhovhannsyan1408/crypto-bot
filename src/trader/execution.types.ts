@@ -2,13 +2,15 @@ import { Candle } from '../market/types';
 import { ExecutionResult } from './types';
 
 export type ExecutionMode = 'paper' | 'live_testnet' | 'live_real';
-export type ExecutionMarketType = 'spot' | 'futures';
+export type ExecutionMarketType = 'spot' | 'futures' | 'hybrid';
 
 export type ExecutionStatus = {
   mode: ExecutionMode;
   marketType: ExecutionMarketType;
   label: string;
   canTradeShort: boolean;
+  longMarketType?: 'spot' | 'futures';
+  shortMarketType?: 'spot' | 'futures';
   liveTradingEnabled: boolean;
   usingTestnet: boolean;
   allowLiveReal: boolean;

@@ -666,6 +666,7 @@ export class BotRunnerService implements OnModuleDestroy {
         стратегия: position.strategyName,
         strategyId: position.strategyId,
         сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+        рынокИсполнения: position.marketType === 'spot' ? 'SPOT' : 'FUTURES',
         ценаВхода: Number(position.entryPrice.toFixed(2)),
         количество: Number(position.quantity.toFixed(8)),
         стопЦена: Number(position.stopPrice.toFixed(2)),
@@ -1049,6 +1050,7 @@ export class BotRunnerService implements OnModuleDestroy {
           стратегия: position.strategyName,
           strategyId: position.strategyId,
           сторона: position.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+          рынокИсполнения: position.marketType === 'spot' ? 'SPOT' : 'FUTURES',
           ценаВхода: Number(position.entryPrice.toFixed(4)),
           количество: Number(position.quantity.toFixed(8)),
           стопЦена: Number(position.stopPrice.toFixed(4)),
@@ -1089,7 +1091,7 @@ export class BotRunnerService implements OnModuleDestroy {
 
   async setExecutionMode(
     mode: 'paper' | 'live_testnet' | 'live_real',
-    marketType: 'spot' | 'futures',
+    marketType: 'spot' | 'futures' | 'hybrid',
     confirmationPhrase?: string,
   ) {
     const result = await this.trader.setExecutionMode(

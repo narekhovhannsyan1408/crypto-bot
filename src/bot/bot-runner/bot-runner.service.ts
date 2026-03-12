@@ -266,14 +266,26 @@ export class BotRunnerService implements OnModuleDestroy {
       return;
     }
 
-    for (const symbol of this.watchedSymbols) {
+    for (const symbol of [...this.watchedSymbols]) {
       for (const strategy of this.strategyRegistry.getStrategies()) {
         strategy.resetSymbol(symbol, previousActiveInterval);
       }
       if (previousConfirmationInterval) {
         this.confirmation.resetSymbol(symbol, previousConfirmationInterval);
       }
-      await this.preloadSymbolHistory(symbol);
+      const preloaded = await this.preloadSymbolHistory(symbol);
+      if (!preloaded) {
+        this.watchedSymbols.delete(symbol);
+        this.candlesWithoutPosition.delete(symbol);
+        this.logger.logInfo(
+          'Символ удалён из watched universe: не удалось перепрогреть историю после смены timeframe',
+          {
+            символ: symbol,
+            executionInterval: this.activeInterval,
+            confirmationInterval: this.confirmationInterval ?? 'нет',
+          },
+        );
+      }
     }
 
     if (this.marketStarted) {
@@ -411,7 +423,15 @@ export class BotRunnerService implements OnModuleDestroy {
     );
 
     for (const symbol of addedSymbols) {
-      await this.preloadSymbolHistory(symbol);
+      const preloaded = await this.preloadSymbolHistory(symbol);
+      if (!preloaded) {
+        this.logger.logInfo('Символ пропущен: не удалось безопасно прогреть историю', {
+          символ: symbol,
+          executionInterval: this.activeInterval,
+          confirmationInterval: this.confirmationInterval ?? 'нет',
+        });
+        continue;
+      }
       this.candlesWithoutPosition.set(symbol, 0);
       this.watchedSymbols.add(symbol);
     }
@@ -445,6 +465,11 @@ export class BotRunnerService implements OnModuleDestroy {
 
   private connectMarketStreams() {
     const symbols = [...this.watchedSymbols];
+    if (symbols.length === 0) {
+      this.logger.logInfo('Старт отложен: нет символов с готовым warmup для подключения market streams');
+      return;
+    }
+
     const onCandle = (candle: Candle) => {
       void this.handleCandle(candle);
     };
@@ -863,7 +888,7 @@ export class BotRunnerService implements OnModuleDestroy {
     return true;
   }
 
-  private async preloadSymbolHistory(symbol: string) {
+  private async preloadSymbolHistory(symbol: string): Promise<boolean> {
     try {
       const requiredWarmupCandles = this.getRequiredWarmupCandles();
       const preloadCandles = Math.max(requiredWarmupCandles + 30, 60);
@@ -872,6 +897,11 @@ export class BotRunnerService implements OnModuleDestroy {
         this.activeInterval,
         preloadCandles,
       );
+      if (candles.length < requiredWarmupCandles) {
+        throw new Error(
+          `Недостаточно execution history для прогрева: получено ${candles.length}, требуется минимум ${requiredWarmupCandles}`,
+        );
+      }
       for (const strategy of this.strategyRegistry.getStrategies()) {
         strategy.seedHistory(symbol, this.activeInterval, candles);
       }
@@ -893,6 +923,11 @@ export class BotRunnerService implements OnModuleDestroy {
           this.confirmationInterval,
           confirmationPreloadCandles,
         );
+        if (confirmationCandles.length < confirmationWarmupCandles) {
+          throw new Error(
+            `Недостаточно higher-timeframe history для прогрева: получено ${confirmationCandles.length}, требуется минимум ${confirmationWarmupCandles}`,
+          );
+        }
         this.confirmation.seedHistory(
           symbol,
           this.confirmationInterval,
@@ -916,7 +951,10 @@ export class BotRunnerService implements OnModuleDestroy {
       if (this.confirmationInterval) {
         this.confirmation.resetSymbol(symbol, this.confirmationInterval);
       }
+      return false;
     }
+
+    return true;
   }
 
   private getRequiredWarmupCandles() {

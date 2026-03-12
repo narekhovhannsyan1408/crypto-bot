@@ -129,22 +129,35 @@ export class BinanceMarketService implements OnModuleDestroy {
           },
         );
 
+        const now = Date.now();
+
         return (
           response.data as Array<[number, string, string, string, string, string, number]>
         )
-          .map((item) => ({
-            symbol,
-            interval,
-            openTime: item[0],
-            closeTime: item[6],
-            open: Number(item[1]),
-            high: Number(item[2]),
-            low: Number(item[3]),
-            close: Number(item[4]),
-            volume: Number(item[5]),
-            isClosed: true,
-          }))
-          .filter((candle) => Number.isFinite(candle.close));
+          .map((item) => {
+            const closeTime = item[6];
+            return {
+              symbol,
+              interval,
+              openTime: item[0],
+              closeTime,
+              open: Number(item[1]),
+              high: Number(item[2]),
+              low: Number(item[3]),
+              close: Number(item[4]),
+              volume: Number(item[5]),
+              isClosed: closeTime < now,
+            };
+          })
+          .filter(
+            (candle) =>
+              candle.isClosed &&
+              Number.isFinite(candle.open) &&
+              Number.isFinite(candle.high) &&
+              Number.isFinite(candle.low) &&
+              Number.isFinite(candle.close) &&
+              Number.isFinite(candle.volume),
+          );
       } catch (error) {
         lastError = error;
 

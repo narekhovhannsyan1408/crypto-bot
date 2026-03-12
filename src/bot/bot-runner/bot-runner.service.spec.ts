@@ -13,12 +13,28 @@ import { BotRunnerService } from './bot-runner.service';
 
 describe('BotRunnerService', () => {
   let service: BotRunnerService;
+  const buildCandles = (count: number, interval: string, symbol = 'BTCUSDT') =>
+    Array.from({ length: count }, (_, index) => {
+      const base = 100 + index * 0.25;
+      return {
+        symbol,
+        interval,
+        openTime: index * 60_000,
+        closeTime: index * 60_000 + 59_999,
+        open: base,
+        high: base + 0.4,
+        low: base - 0.4,
+        close: base + 0.2,
+        volume: 100 + index,
+        isClosed: true,
+      };
+    });
   const marketMock = {
     connectSymbols: jest.fn(),
     connectSymbolIntervals: jest.fn(),
     replaceSymbols: jest.fn(),
     replaceSymbolIntervals: jest.fn(),
-    loadHistoricalCandles: jest.fn().mockResolvedValue([]),
+    loadHistoricalCandles: jest.fn(),
   };
   const scannerMock = {
     scanBestSymbol: jest.fn().mockResolvedValue(null),
@@ -177,6 +193,9 @@ describe('BotRunnerService', () => {
     delete process.env.BOT_CONFIRMATION_INTERVAL;
     delete process.env.BOT_CONFIRMATION_MODE;
     resetBotConfigCache();
+    marketMock.loadHistoricalCandles.mockImplementation(
+      async (_symbol: string, interval: string, limit = 200) => buildCandles(limit, interval),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -254,6 +273,67 @@ describe('BotRunnerService', () => {
     resetBotConfigCache();
   });
 
+  it('skips symbol when execution warmup history is insufficient', async () => {
+    marketMock.loadHistoricalCandles.mockImplementation(
+      async (_symbol: string, interval: string) => buildCandles(10, interval),
+    );
+
+    await service.start();
+
+    expect(strategyMock.seedHistory).not.toHaveBeenCalled();
+    expect(marketMock.connectSymbols).not.toHaveBeenCalled();
+    expect(loggerMock.logInfo).toHaveBeenCalledWith(
+      'Символ пропущен: не удалось безопасно прогреть историю',
+      expect.objectContaining({
+        символ: 'BTCUSDT',
+      }),
+    );
+  });
+
+  it('skips symbol when confirmation warmup history is insufficient', async () => {
+    process.env.BOT_CONFIRMATION_INTERVAL = '5m';
+    resetBotConfigCache();
+    marketMock.loadHistoricalCandles.mockImplementation(
+      async (_symbol: string, interval: string, limit = 200) =>
+        interval === '5m' ? buildCandles(5, interval) : buildCandles(limit, interval),
+    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BotRunnerService,
+        { provide: BinanceMarketService, useValue: marketMock },
+        { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: HigherTimeframeConfirmationService,
+          useValue: confirmationMock,
+        },
+        { provide: ExecutionGatewayService, useValue: traderMock },
+        { provide: PortfolioService, useValue: portfolioMock },
+        { provide: RiskManagerService, useValue: riskManagerMock },
+        { provide: BotLoggerService, useValue: loggerMock },
+        { provide: SymbolScannerService, useValue: scannerMock },
+      ],
+    }).compile();
+
+    const serviceWithConfirmation = module.get<BotRunnerService>(BotRunnerService);
+    await serviceWithConfirmation.start();
+
+    expect(confirmationMock.seedHistory).not.toHaveBeenCalled();
+    expect(marketMock.connectSymbolIntervals).not.toHaveBeenCalled();
+    expect(loggerMock.logInfo).toHaveBeenCalledWith(
+      'Символ пропущен: не удалось безопасно прогреть историю',
+      expect.objectContaining({
+        символ: 'BTCUSDT',
+        confirmationInterval: '5m',
+      }),
+    );
+
+    delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_ALLOWED_SYMBOLS;
+    resetBotConfigCache();
+  });
+
   it('selects adaptive timeframe when fast interval quality is weak', async () => {
     process.env.BOT_DYNAMIC_TIMEFRAME_ENABLED = 'true';
     process.env.BOT_DYNAMIC_TIMEFRAME_CANDIDATES = '5m,15m,30m';
@@ -274,35 +354,49 @@ describe('BotRunnerService', () => {
         volume: 100 + index,
         isClosed: true,
       }));
+    const stretchSeries = (values: number[], targetLength: number) =>
+      Array.from({ length: targetLength }, (_, index) => {
+        const cycle = Math.floor(index / values.length);
+        return values[index % values.length] + cycle * 0.8;
+      });
 
     marketMock.loadHistoricalCandles.mockImplementation(
-      async (_symbol: string, interval: string) => {
+      async (_symbol: string, interval: string, limit = 200) => {
         if (interval === '5m') {
           return buildCandles(
-            [
-              100, 101, 99.5, 101.5, 99.8, 101.8, 100.2, 102, 100.5, 102.2, 100.6, 102.1,
-              100.7, 102.3, 100.8, 102.4, 101, 102.5, 101.1, 102.7, 101.2, 102.6, 101.3,
-              102.8,
-            ],
+            stretchSeries(
+              [
+                100, 101, 99.5, 101.5, 99.8, 101.8, 100.2, 102, 100.5, 102.2, 100.6, 102.1,
+                100.7, 102.3, 100.8, 102.4, 101, 102.5, 101.1, 102.7, 101.2, 102.6, 101.3,
+                102.8,
+              ],
+              limit,
+            ),
             interval,
           );
         }
 
         if (interval === '15m') {
           return buildCandles(
-            [
-              100, 100.4, 100.8, 101.2, 101.6, 102, 102.5, 103, 103.6, 104.1, 104.7, 105.2,
-              105.8, 106.4, 107, 107.6, 108.3, 109, 109.8, 110.5, 111.2, 112, 112.7, 113.5,
-            ],
+            stretchSeries(
+              [
+                100, 100.4, 100.8, 101.2, 101.6, 102, 102.5, 103, 103.6, 104.1, 104.7, 105.2,
+                105.8, 106.4, 107, 107.6, 108.3, 109, 109.8, 110.5, 111.2, 112, 112.7, 113.5,
+              ],
+              limit,
+            ),
             interval,
           );
         }
 
         return buildCandles(
-          [
-            100, 100.6, 101.2, 101.9, 102.5, 103.2, 103.9, 104.7, 105.4, 106.2, 107, 107.8,
-            108.7, 109.5, 110.4, 111.3, 112.2, 113.1, 114, 115, 116, 117, 118, 119,
-          ],
+          stretchSeries(
+            [
+              100, 100.6, 101.2, 101.9, 102.5, 103.2, 103.9, 104.7, 105.4, 106.2, 107, 107.8,
+              108.7, 109.5, 110.4, 111.3, 112.2, 113.1, 114, 115, 116, 117, 118, 119,
+            ],
+            limit,
+          ),
           interval,
         );
       },

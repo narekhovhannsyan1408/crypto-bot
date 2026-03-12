@@ -119,6 +119,8 @@ export type BotConfig = {
   maxPositionsPerStrategy: number;
   allowOppositePositionsSameSymbol: boolean;
   enabledStrategies: string[];
+  dynamicTimeframeEnabled: boolean;
+  dynamicTimeframeCandidates: string[];
   dashboardEnabled: boolean;
   dashboardHost: string;
   dashboardPort: number;
@@ -219,6 +221,13 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL === 'true',
     enabledStrategies: (process.env.BOT_ENABLED_STRATEGIES ||
       'momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+    dynamicTimeframeEnabled: process.env.BOT_DYNAMIC_TIMEFRAME_ENABLED === 'true',
+    dynamicTimeframeCandidates: (
+      process.env.BOT_DYNAMIC_TIMEFRAME_CANDIDATES || '5m,15m,30m'
+    )
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),

@@ -9,13 +9,15 @@
   <body>
     <div class="layout">
       <header class="topbar">
-        <div>
+        <div class="topbar-copy">
           <h1>Crypto Bot Live Dashboard</h1>
-          <p class="muted">Живой мониторинг стратегии, сделок, капитала и риска</p>
+          <p class="muted">
+            Живой мониторинг исполнения, портфеля, риска и торговых решений
+          </p>
         </div>
         <div class="topbar-actions">
           <div class="status-chip" id="connection-status">Подключение...</div>
-          <div class="muted" id="data-freshness" style="font-size: 12px; align-self: center;">—</div>
+          <div class="status-chip subtle" id="data-freshness">—</div>
           <button id="refresh-button" class="secondary-button">Обновить snapshot</button>
           <button id="liquidate-spot-assets-button" class="danger-button">
             Продать все spot-активы
@@ -26,60 +28,86 @@
         </div>
       </header>
 
-      <section class="cards-grid" id="metrics-grid"></section>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Портфель и Балансы</h2>
+          <span class="muted">Ключевые метрики бота и Binance</span>
+        </div>
+        <section class="cards-grid" id="metrics-grid"></section>
+      </section>
 
       <section class="panel">
         <div class="panel-header">
           <h2>Режим исполнения</h2>
-          <span class="muted">Paper / Live Demo / Live Real</span>
+          <span class="muted">Статус среды, routing и синхронизация с Binance</span>
         </div>
         <div class="execution-grid">
           <div id="execution-status" class="execution-status-card"></div>
           <div class="execution-actions">
-            <button class="secondary-button" data-execution-mode="paper" data-market-type="spot">
-              Paper
-            </button>
-            <button
-              class="secondary-button"
-              data-execution-mode="live_testnet"
-              data-market-type="spot"
-            >
-              Demo Spot
-            </button>
-            <button
-              class="secondary-button"
-              data-execution-mode="live_testnet"
-              data-market-type="futures"
-            >
-              Demo Futures
-            </button>
-            <button
-              class="secondary-button"
-              data-execution-mode="live_testnet"
-              data-market-type="hybrid"
-            >
-              Demo Hybrid
-            </button>
-            <button class="danger-button" data-execution-mode="live_real" data-market-type="spot">
-              Live Real Spot
-            </button>
-            <button
-              class="danger-button"
-              data-execution-mode="live_real"
-              data-market-type="futures"
-            >
-              Live Real Futures
-            </button>
-            <button
-              class="danger-button"
-              data-execution-mode="live_real"
-              data-market-type="hybrid"
-            >
-              Live Real Hybrid
-            </button>
-            <button id="refresh-execution-button" class="secondary-button">
-              Обновить статус Binance
-            </button>
+            <div class="action-group">
+              <div class="action-group-title">Безопасный режим</div>
+              <button
+                class="secondary-button"
+                data-execution-mode="paper"
+                data-market-type="spot"
+              >
+                Paper
+              </button>
+            </div>
+            <div class="action-group">
+              <div class="action-group-title">Demo</div>
+              <button
+                class="secondary-button"
+                data-execution-mode="live_testnet"
+                data-market-type="spot"
+              >
+                Demo Spot
+              </button>
+              <button
+                class="secondary-button"
+                data-execution-mode="live_testnet"
+                data-market-type="futures"
+              >
+                Demo Futures
+              </button>
+              <button
+                class="secondary-button"
+                data-execution-mode="live_testnet"
+                data-market-type="hybrid"
+              >
+                Demo Hybrid
+              </button>
+            </div>
+            <div class="action-group">
+              <div class="action-group-title">Live Real</div>
+              <button
+                class="danger-button"
+                data-execution-mode="live_real"
+                data-market-type="spot"
+              >
+                Live Spot
+              </button>
+              <button
+                class="danger-button"
+                data-execution-mode="live_real"
+                data-market-type="futures"
+              >
+                Live Futures
+              </button>
+              <button
+                class="danger-button"
+                data-execution-mode="live_real"
+                data-market-type="hybrid"
+              >
+                Live Hybrid
+              </button>
+            </div>
+            <div class="action-group action-group-wide">
+              <div class="action-group-title">Сервис</div>
+              <button id="refresh-execution-button" class="secondary-button">
+                Обновить статус Binance
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -98,10 +126,10 @@
         <div class="panel">
           <div class="panel-header">
             <h2>Открытые позиции</h2>
-            <span class="muted" id="positions-count">0</span>
+          <span class="status-chip subtle" id="positions-count">0</span>
           </div>
           <div class="table-wrapper">
-            <table>
+          <table class="data-table">
               <thead>
                 <tr>
                   <th>Символ</th>
@@ -129,11 +157,11 @@
             <span class="muted">Universe, лимиты, загрузка</span>
           </div>
           <div class="runtime-columns">
-            <div>
+            <div class="subpanel">
               <h3>Universe</h3>
               <ul id="universe-list" class="tag-list"></ul>
             </div>
-            <div>
+            <div class="subpanel">
               <h3>Риск-менеджмент</h3>
               <div id="risk-state" class="kv-list"></div>
             </div>
@@ -149,12 +177,12 @@
         <div class="strategy-selection-layout">
           <div class="strategy-selection-summary">
             <div id="strategy-selection-summary"></div>
-            <div>
+            <div class="subpanel">
               <h3>Активные стратегии</h3>
               <ul id="active-strategies-list" class="tag-list"></ul>
             </div>
           </div>
-          <div>
+          <div class="subpanel">
             <h3>Кандидаты последнего выбора</h3>
             <div id="strategy-candidates-list" class="strategy-candidates-list"></div>
           </div>
@@ -167,7 +195,7 @@
           <span class="muted">Последние операции и результат</span>
         </div>
         <div class="table-wrapper">
-          <table>
+          <table class="data-table">
             <thead>
               <tr>
                 <th>Время</th>

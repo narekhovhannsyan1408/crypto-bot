@@ -346,31 +346,66 @@ function renderExecution() {
     execution.futuresQuoteTotal === null
       ? 'недоступно'
       : `${formatNumber(execution.futuresQuoteFree)} / ${formatNumber(execution.futuresQuoteTotal)} USDT`;
+  const warnings = execution.warnings || [];
+  const statusTone =
+    execution.accountConnectivity === 'ok'
+      ? 'success'
+      : execution.accountConnectivity === 'error'
+        ? 'danger'
+        : 'neutral';
 
   elements.executionStatus.innerHTML = `
-    <div class="execution-chip ${chipClass}">${escapeHtml(execution.label)}</div>
+    <div class="execution-topline">
+      <div class="execution-chip ${chipClass}">${escapeHtml(execution.label)}</div>
+      <div class="badge-row">
+        ${renderBadge(modeLabel, 'neutral')}
+        ${renderBadge(execution.marketType, 'neutral')}
+        ${renderBadge(
+          execution.accountConnectivity === 'ok' ? 'Binance OK' : 'Binance issue',
+          statusTone,
+        )}
+        ${renderBadge(execution.canTradeShort ? 'Short enabled' : 'Short disabled', execution.canTradeShort ? 'success' : 'warning')}
+      </div>
+    </div>
+    <div class="execution-balance-grid">
+      <div class="info-card">
+        <div class="info-card-label">Spot</div>
+        <div class="info-card-value">${escapeHtml(spotBalanceSummary)}</div>
+        <div class="info-card-subtitle">free / total USDT</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">Futures</div>
+        <div class="info-card-value">${escapeHtml(futuresBalanceSummary)}</div>
+        <div class="info-card-subtitle">free / total USDT</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">Итого</div>
+        <div class="info-card-value">${formatNumber(execution.quoteTotal)}</div>
+        <div class="info-card-subtitle">total USDT по всем venue</div>
+      </div>
+    </div>
     <div class="execution-kv">
-      <div class="kv-row"><span>Режим</span><strong>${escapeHtml(modeLabel)}</strong></div>
-      <div class="kv-row"><span>Рынок</span><strong>${escapeHtml(execution.marketType)}</strong></div>
       <div class="kv-row"><span>Routing</span><strong>${escapeHtml(routeSummary)}</strong></div>
-      <div class="kv-row"><span>Short</span><strong>${execution.canTradeShort ? 'да' : 'нет'}</strong></div>
       <div class="kv-row"><span>Demo mode</span><strong>${execution.usingTestnet ? 'да' : 'нет'}</strong></div>
       <div class="kv-row"><span>API configured</span><strong>${execution.apiConfigured ? 'да' : 'нет'}</strong></div>
-      <div class="kv-row"><span>Связь с Binance</span><strong>${escapeHtml(execution.accountConnectivity)}</strong></div>
-      <div class="kv-row"><span>Spot баланс</span><strong>${escapeHtml(spotBalanceSummary)}</strong></div>
-      <div class="kv-row"><span>Futures баланс</span><strong>${escapeHtml(futuresBalanceSummary)}</strong></div>
-      <div class="kv-row"><span>Итого free USDT</span><strong>${formatNumber(execution.quoteFree)}</strong></div>
-      <div class="kv-row"><span>Итого total USDT</span><strong>${formatNumber(execution.quoteTotal)}</strong></div>
-      <div class="kv-row"><span>Источник баланса</span><strong>Binance account sync</strong></div>
       <div class="kv-row"><span>Private stream</span><strong>${escapeHtml(streamStatusMap[execution.userDataStreamStatus || 'unknown'] || 'неизвестно')}</strong></div>
       <div class="kv-row"><span>Последнее user-data событие</span><strong>${execution.userDataStreamLastEventAt ? escapeHtml(formatDate(execution.userDataStreamLastEventAt)) : '-'}</strong></div>
       <div class="kv-row"><span>Последний execution report</span><strong>${execution.userDataStreamLastExecutionReportAt ? escapeHtml(formatDate(execution.userDataStreamLastExecutionReportAt)) : '-'}</strong></div>
       <div class="kv-row"><span>Открытых spot-ордеров</span><strong>${formatNumber(execution.openSpotOrdersCount)}</strong></div>
-      <div class="kv-row"><span>Non-USDT активов</span><strong>${formatNumber(execution.spotAssetsCount)}</strong></div>
+      <div class="kv-row"><span>Spot активов</span><strong>${formatNumber(execution.spotAssetsCount)}</strong></div>
       <div class="kv-row"><span>Превью активов</span><strong>${escapeHtml(spotAssetsPreview)}</strong></div>
-      <div class="kv-row"><span>Последняя ошибка</span><strong>${escapeHtml(execution.lastError || '-')}</strong></div>
-      <div class="kv-row"><span>Предупреждения</span><strong>${escapeHtml((execution.warnings || []).join(' | ') || '-')}</strong></div>
     </div>
+    ${execution.lastError ? `<div class="status-banner danger"><strong>Последняя ошибка:</strong> ${escapeHtml(execution.lastError)}</div>` : ''}
+    ${
+      warnings.length > 0
+        ? `<div class="status-section">
+            <div class="status-section-title">Предупреждения</div>
+            <ul class="status-list">
+              ${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}
+            </ul>
+          </div>`
+        : ''
+    }
   `;
 }
 
@@ -388,22 +423,22 @@ function renderMetrics() {
     ['Баланс бота', portfolio.баланс, 'Баланс, который бот сейчас использует в портфеле'],
     ['Капитал бота', portfolio.капитал, 'Баланс + стоимость открытых позиций'],
     [
-      'Spot free USDT',
+      'Spot свободно',
       execution?.spotQuoteFree ?? null,
       'Свободный USDT на Binance Spot',
     ],
     [
-      'Spot total USDT',
+      'Spot всего',
       execution?.spotQuoteTotal ?? null,
       'Свободный + locked USDT на Binance Spot',
     ],
     [
-      'Futures free USDT',
+      'Futures свободно',
       execution?.futuresQuoteFree ?? null,
       'Свободный USDT на Binance Futures',
     ],
     [
-      'Futures total USDT',
+      'Futures всего',
       execution?.futuresQuoteTotal ?? null,
       'Общий USDT на Binance Futures',
     ],
@@ -472,11 +507,7 @@ function renderPositions() {
       : '');
     elements.positionsTable.innerHTML = `
       <tr>
-        <td colspan="12" class="muted" style="padding: 1.5rem; text-align: center;">
-          Нет открытых позиций.
-          ${lastReason ? `<br><small>${escapeHtml(lastReason)}</small>` : ''}
-          <br><small>Проверь блок «Автоподбор стратегии» и «Риск-менеджмент» ниже.</small>
-        </td>
+        <td colspan="12">${renderEmptyState('Нет открытых позиций.', lastReason || 'Проверь блоки «Автоподбор стратегии» и «Риск-менеджмент».')}</td>
       </tr>`;
     return;
   }
@@ -488,15 +519,15 @@ function renderPositions() {
         <tr>
           <td>${escapeHtml(position.символ)}</td>
           <td>${escapeHtml(position.стратегия || position.strategyId || '-')}</td>
-          <td>${escapeHtml(position.сторона)}</td>
-          <td>${escapeHtml(position.рынокИсполнения || '-')}</td>
+          <td>${renderBadge(position.сторона, position.сторона === 'ЛОНГ' ? 'success' : 'danger')}</td>
+          <td>${renderBadge(position.рынокИсполнения || '-', 'neutral')}</td>
           <td>${formatNumber(position.ценаВхода)}</td>
           <td>${formatNumber(position.текущаяЦена)}</td>
           <td>${formatNumber(position.времяВПозицииМинут)}</td>
-          <td class="${pnlClass}">${formatNumber(position.плавающийРезультат)}</td>
+          <td class="${pnlClass}">${formatSignedNumber(position.плавающийРезультат)}</td>
           <td>${formatNumber(position.стопЦена)}</td>
           <td>${formatNumber(position.тейкЦена)}</td>
-          <td>${escapeHtml(position.breakevenАктивен === 'да' ? 'Breakeven' : 'Стандарт')}</td>
+          <td>${renderBadge(position.breakevenАктивен === 'да' ? 'Breakeven' : 'Стандарт', position.breakevenАктивен === 'да' ? 'success' : 'neutral')}</td>
           <td>
             <button
               class="table-action-button"
@@ -518,9 +549,9 @@ function renderPositions() {
 
 function renderUniverse() {
   const symbols = state.runtime?.watchedSymbols || [];
-  elements.universeList.innerHTML = symbols
-    .map((symbol) => `<li>${escapeHtml(symbol)}</li>`)
-    .join('');
+  elements.universeList.innerHTML = symbols.length
+    ? symbols.map((symbol) => `<li>${escapeHtml(symbol)}</li>`).join('')
+    : '<li class="tag-list-empty">Пока нет активного universe</li>';
 }
 
 function renderRiskState() {
@@ -529,7 +560,7 @@ function renderRiskState() {
     .map(
       ([key, value]) => `
         <div class="kv-row">
-          <span>${escapeHtml(key)}</span>
+          <span>${escapeHtml(humanizeKey(key))}</span>
           <strong>${formatValue(value)}</strong>
         </div>
       `,
@@ -543,7 +574,7 @@ function renderStrategySelection() {
 
   elements.activeStrategiesList.innerHTML = activeStrategies
     .map((strategy) => `<li>${escapeHtml(strategy.name || strategy.id || '-')}</li>`)
-    .join('');
+    .join('') || '<li class="tag-list-empty">Стратегии не активированы</li>';
 
   if (!selection) {
     elements.strategySelectionSummary.innerHTML = `
@@ -613,23 +644,25 @@ function renderTrades() {
           <td>${formatDate(entry.timestamp)}</td>
           <td>${escapeHtml(trade.символ || '-')}</td>
           <td>${escapeHtml(trade.стратегия || trade.strategyId || '-')}</td>
-          <td>${escapeHtml(trade.действие || '-')}</td>
-          <td>${escapeHtml(trade.сторона || '-')}</td>
+          <td>${renderBadge(trade.действие || '-', 'neutral')}</td>
+          <td>${renderBadge(trade.сторона || '-', trade.сторона === 'ЛОНГ' ? 'success' : trade.сторона === 'ШОРТ' ? 'danger' : 'neutral')}</td>
           <td>${formatNumber(trade.ценаВхода ?? trade.цена)}</td>
           <td>${formatNumber(trade.ценаВыхода)}</td>
-          <td class="${pnlClass}">${formatNumber(trade.чистыйРезультат)}</td>
+          <td class="${pnlClass}">${formatSignedNumber(trade.чистыйРезультат)}</td>
           <td>${formatNumber(trade.суммарныеКомиссии ?? trade.комиссия)}</td>
           <td>${escapeHtml(trade.причина || '-')}</td>
         </tr>
       `;
     });
 
-  elements.tradesTable.innerHTML = rows.join('');
+  elements.tradesTable.innerHTML =
+    rows.join('') ||
+    `<tr><td colspan="10">${renderEmptyState('Пока нет завершённых сделок.', 'После первых открытий и закрытий история появится здесь.')}</td></tr>`;
 }
 
 function renderLogs() {
   const search = state.logSearch.trim().toLowerCase();
-  elements.logsContainer.innerHTML = state.recentEvents
+  const logsMarkup = state.recentEvents
     .slice(0, 80)
     .filter((entry) => matchesLogFilter(entry, state.logFilter))
     .filter((entry) => {
@@ -659,6 +692,8 @@ function renderLogs() {
       `;
     })
     .join('');
+  elements.logsContainer.innerHTML =
+    logsMarkup || renderEmptyState('Нет логов для текущего фильтра.', 'Смени фильтр или дождись новых событий.');
 }
 
 function renderLogFilters() {
@@ -757,6 +792,27 @@ function formatValue(value) {
   }
 
   return escapeHtml(formatNumber(value));
+}
+
+function humanizeKey(value) {
+  return String(value)
+    .replace(/([a-zа-я])([A-ZА-Я])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function renderBadge(label, tone = 'neutral') {
+  return `<span class="inline-badge ${tone}">${escapeHtml(label)}</span>`;
+}
+
+function renderEmptyState(title, subtitle = '') {
+  return `
+    <div class="empty-state">
+      <div class="empty-state-title">${escapeHtml(title)}</div>
+      ${subtitle ? `<div class="empty-state-subtitle">${escapeHtml(subtitle)}</div>` : ''}
+    </div>
+  `;
 }
 
 function matchesLogFilter(entry, filter) {

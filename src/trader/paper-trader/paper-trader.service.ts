@@ -237,6 +237,272 @@ export class PaperTraderService {
     return actions;
   }
 
+  recordExternalOpenPosition(params: {
+    side: PositionSide;
+    symbol: string;
+    interval: string;
+    strategyId: string;
+    strategyName: string;
+    price: number;
+    timestamp: number;
+    reason: string;
+    quantity: number;
+    investedUsdt: number;
+    entryFeePaid?: number;
+    marketType: 'spot' | 'futures';
+  }): ExecutionResult {
+    const {
+      side,
+      symbol,
+      interval,
+      strategyId,
+      strategyName,
+      price,
+      timestamp,
+      reason,
+      quantity,
+      investedUsdt,
+      entryFeePaid = 0,
+      marketType,
+    } = params;
+
+    if (this.portfolio.hasOpenPosition(symbol, strategyId)) {
+      return {
+        status: 'REJECTED',
+        action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        reason: 'Позиция уже открыта',
+      };
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return {
+        status: 'REJECTED',
+        action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        reason: 'Цена исполнения получилась некорректной',
+      };
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return {
+        status: 'REJECTED',
+        action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        reason: 'Фактическое количество исполнения получилось некорректным',
+      };
+    }
+
+    if (!Number.isFinite(investedUsdt) || investedUsdt <= 0) {
+      return {
+        status: 'REJECTED',
+        action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        reason: 'Фактический объём исполнения в USDT получился некорректным',
+      };
+    }
+
+    const stopPrice =
+      side === 'LONG'
+        ? price * (1 - this.config.stopLossPct)
+        : price * (1 + this.config.stopLossPct);
+
+    const takePrice =
+      side === 'LONG'
+        ? price * (1 + this.config.takeProfitPct)
+        : price * (1 - this.config.takeProfitPct);
+
+    this.portfolio.balance -= investedUsdt;
+    this.portfolio.registerOpenedPosition({
+      key: makePositionKey(symbol, strategyId),
+      symbol,
+      interval,
+      strategyId,
+      strategyName,
+      side,
+      marketType,
+      entryPrice: price,
+      quantity,
+      investedUsdt,
+      openedAt: timestamp,
+      entryFeePaid: Math.max(entryFeePaid, 0),
+      stopLossPct: this.config.stopLossPct,
+      takeProfitPct: this.config.takeProfitPct,
+      trailingStopPct: this.config.trailingStopPct,
+      stopPrice,
+      takePrice,
+      highestPrice: price,
+      lowestPrice: price,
+      breakevenArmed: false,
+    });
+
+    return {
+      status: 'EXECUTED',
+      trade: {
+        action: side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        side,
+        marketType,
+        price,
+        quantity,
+        fee: Math.max(entryFeePaid, 0),
+        reason,
+        openedAt: timestamp,
+      },
+    };
+  }
+
+  recordExternalClosePosition(params: {
+    expectedSide: PositionSide;
+    symbol: string;
+    strategyId: string;
+    price: number;
+    timestamp: number;
+    reason: string;
+    executedQuantity: number;
+    exitFeePaid?: number;
+    marketType?: 'spot' | 'futures';
+  }): ExecutionResult | null {
+    const {
+      expectedSide,
+      symbol,
+      strategyId,
+      price,
+      timestamp,
+      reason,
+      executedQuantity,
+      exitFeePaid = 0,
+      marketType,
+    } = params;
+    const position = this.portfolio.getPosition(symbol, strategyId);
+
+    if (!position || position.side !== expectedSide) {
+      return null;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return {
+        status: 'REJECTED',
+        action: expectedSide === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
+        symbol,
+        interval: position.interval,
+        strategyId,
+        strategyName: position.strategyName,
+        reason: 'Цена закрытия получилась некорректной',
+      };
+    }
+
+    const normalizedQuantity = Math.min(executedQuantity, position.quantity);
+    if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
+      return {
+        status: 'REJECTED',
+        action: expectedSide === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
+        symbol,
+        interval: position.interval,
+        strategyId,
+        strategyName: position.strategyName,
+        reason: 'Фактическое количество закрытия получилось некорректным',
+      };
+    }
+
+    const isFullClose =
+      position.quantity - normalizedQuantity <=
+      Math.max(position.quantity * 0.001, 1e-12);
+    const quantityRatio =
+      position.quantity > 0 ? normalizedQuantity / position.quantity : 0;
+    const allocatedInvestedUsdt = position.investedUsdt * quantityRatio;
+    const allocatedEntryFee = position.entryFeePaid * quantityRatio;
+    const exitFee = Math.max(exitFeePaid, 0);
+    const grossPnl =
+      position.side === 'LONG'
+        ? (price - position.entryPrice) * normalizedQuantity
+        : (position.entryPrice - price) * normalizedQuantity;
+    const shortEntryProceeds = normalizedQuantity * position.entryPrice;
+    const returnedCapital =
+      position.side === 'LONG'
+        ? normalizedQuantity * price - exitFee
+        : shortEntryProceeds + grossPnl - exitFee;
+    const pnlNet = returnedCapital - allocatedInvestedUsdt;
+    const totalFees = allocatedEntryFee + exitFee;
+
+    this.portfolio.balance += returnedCapital;
+
+    if (isFullClose) {
+      this.portfolio.clearPosition(symbol, strategyId);
+    } else {
+      position.quantity -= normalizedQuantity;
+      position.investedUsdt -= allocatedInvestedUsdt;
+      position.entryFeePaid -= allocatedEntryFee;
+    }
+
+    const closedTrade: ClosedTrade = {
+      key: position.key,
+      symbol: position.symbol,
+      interval: position.interval,
+      strategyId: position.strategyId,
+      strategyName: position.strategyName,
+      side: position.side,
+      marketType: marketType ?? position.marketType,
+      entryPrice: position.entryPrice,
+      exitPrice: price,
+      quantity: normalizedQuantity,
+      investedUsdt: allocatedInvestedUsdt,
+      grossPnl,
+      pnlNet,
+      totalFees,
+      exitFee,
+      openedAt: position.openedAt,
+      closedAt: timestamp,
+      reason,
+    };
+
+    this.portfolio.registerClosedTrade(closedTrade, this.portfolio.getEquity());
+
+    return {
+      status: 'EXECUTED',
+      trade: {
+        action: position.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
+        key: position.key,
+        symbol: position.symbol,
+        interval: position.interval,
+        strategyId: position.strategyId,
+        strategyName: position.strategyName,
+        side: position.side,
+        marketType: marketType ?? position.marketType,
+        entryPrice: position.entryPrice,
+        exitPrice: price,
+        quantity: normalizedQuantity,
+        fee: exitFee,
+        totalFees,
+        grossPnl,
+        pnlNet,
+        openedAt: position.openedAt,
+        closedAt: timestamp,
+        reason,
+      },
+    };
+  }
+
   private tryOpenPosition(
     side: PositionSide,
     symbol: string,
@@ -249,6 +515,19 @@ export class PaperTraderService {
     positionSizeUsdt: number,
     marketType: 'spot' | 'futures',
   ): ExecutionResult {
+    if (side === 'SHORT' && marketType === 'spot') {
+      return {
+        status: 'REJECTED',
+        action: 'OPEN_SHORT',
+        key: makePositionKey(symbol, strategyId),
+        symbol,
+        interval,
+        strategyId,
+        strategyName,
+        reason: 'Paper trading в режиме Spot не поддерживает short-позиции',
+      };
+    }
+
     if (this.portfolio.hasOpenPosition(symbol, strategyId)) {
       return {
         status: 'REJECTED',

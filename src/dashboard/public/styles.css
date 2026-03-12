@@ -181,6 +181,17 @@ button {
   font-weight: 700;
 }
 
+.metric-card .value.warning {
+  color: var(--warning);
+}
+
+.metric-subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .metric-card.positive .value {
   color: var(--success);
 }

@@ -41,6 +41,16 @@ describe('BotRunnerService', () => {
     }),
   };
   const strategyArbitrationMock = {
+    rankCandidates: jest.fn().mockImplementation((candidates: any[], executionStatus: any) => {
+      return candidates
+        .map((candidate: any) => ({
+          ...candidate,
+          entryScore: candidate.result?.entryScore ?? 0,
+          arbitrationScore: candidate.result?.entryScore ?? 0,
+          isAllowed: candidate.side === 'LONG' || executionStatus.canTradeShort,
+        }))
+        .sort((left: any, right: any) => right.arbitrationScore - left.arbitrationScore);
+    }),
     selectCandidate: jest.fn().mockImplementation((_: unknown, candidates: any[]) => {
       if (candidates.length === 0) {
         return {
@@ -157,9 +167,12 @@ describe('BotRunnerService', () => {
   beforeEach(async () => {
     process.env.BOT_USE_SCANNER = 'false';
     process.env.BOT_SYMBOL = 'BTCUSDT';
+    process.env.BOT_ALLOWED_SYMBOLS = 'BTCUSDT';
     process.env.BOT_INTERVAL = '1m';
     process.env.BOT_UNIVERSE_SIZE = '2';
     process.env.BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH = '2';
+    delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_CONFIRMATION_MODE;
     resetBotConfigCache();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -234,6 +247,7 @@ describe('BotRunnerService', () => {
     );
 
     delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_ALLOWED_SYMBOLS;
     resetBotConfigCache();
   });
 
@@ -280,6 +294,7 @@ describe('BotRunnerService', () => {
 
     delete process.env.BOT_CONFIRMATION_INTERVAL;
     delete process.env.BOT_CONFIRMATION_MODE;
+    delete process.env.BOT_ALLOWED_SYMBOLS;
     resetBotConfigCache();
   });
 
@@ -352,5 +367,94 @@ describe('BotRunnerService', () => {
       'manual close',
     );
     expect(result.closed).toBe(true);
+  });
+
+  it('forces close when confirmation downgrades reverse into close-only', async () => {
+    process.env.BOT_CONFIRMATION_INTERVAL = '5m';
+    process.env.BOT_CONFIRMATION_MODE = 'strict';
+    process.env.BOT_ALLOWED_SYMBOLS = 'BTCUSDT';
+    resetBotConfigCache();
+
+    const longPosition = {
+      symbol: 'BTCUSDT',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum Trend',
+      side: 'LONG',
+      interval: '1m',
+      entryPrice: 100,
+      stopPrice: 99,
+      takePrice: 102,
+      quantity: 1,
+      highestPrice: 100,
+      lowestPrice: 100,
+      openedAt: 1,
+      marketType: 'spot',
+    };
+    portfolioMock.getPositionsForSymbol.mockReturnValue([longPosition]);
+    portfolioMock.getPosition.mockReturnValue(longPosition);
+    strategyMock.onNewCandle.mockReturnValue({
+      signal: 'REVERSE_TO_SHORT',
+      reason: 'reverse test',
+    });
+    confirmationMock.getTrend.mockReturnValue({
+      isReady: false,
+      trend: 'NEUTRAL',
+      trendStrengthPct: 0,
+    });
+    traderMock.tryCloseLong.mockReturnValueOnce({
+      status: 'EXECUTED',
+      trade: {
+        action: 'CLOSE_LONG',
+        symbol: 'BTCUSDT',
+        interval: '1m',
+        strategyId: 'momentum_trend',
+        strategyName: 'Momentum Trend',
+        side: 'LONG',
+        entryPrice: 100,
+        exitPrice: 100,
+        reason: 'forced close',
+      },
+    });
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BotRunnerService,
+        { provide: BinanceMarketService, useValue: marketMock },
+        { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: HigherTimeframeConfirmationService,
+          useValue: confirmationMock,
+        },
+        { provide: ExecutionGatewayService, useValue: traderMock },
+        { provide: PortfolioService, useValue: portfolioMock },
+        { provide: RiskManagerService, useValue: riskManagerMock },
+        { provide: BotLoggerService, useValue: loggerMock },
+        { provide: SymbolScannerService, useValue: scannerMock },
+      ],
+    }).compile();
+    const serviceWithConfirmation = module.get<BotRunnerService>(BotRunnerService);
+    (serviceWithConfirmation as any).watchedSymbols.add('BTCUSDT');
+
+    await (serviceWithConfirmation as any).handleCandle({
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      openTime: 0,
+      closeTime: 60_000,
+      open: 100,
+      high: 101,
+      low: 99,
+      close: 100,
+      volume: 10,
+      isClosed: true,
+    });
+
+    expect(traderMock.tryCloseLong).toHaveBeenCalled();
+    expect(traderMock.tryOpenShort).not.toHaveBeenCalled();
+
+    delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_CONFIRMATION_MODE;
+    delete process.env.BOT_ALLOWED_SYMBOLS;
+    resetBotConfigCache();
   });
 });

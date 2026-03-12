@@ -50,13 +50,13 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - входить в рынок только при наличии допустимого риска
 - управлять несколькими символами одновременно
 - считать честный результат торговли
-- давать базу для дальнейшего перехода от paper trading к production execution
+- давать базу для безопасного перехода от paper trading к demo execution и затем к production execution
 
-Важно: на текущем этапе бот не торгует реальными деньгами. Он симулирует сделки.
+Важно: `live_real` в проекте существует, но по умолчанию жёстко защищён конфигом и явным подтверждением. Для безопасной проверки логики сначала используй `paper` и `live_testnet`, который в текущей реализации работает как `Binance Demo`.
 
 ## Текущий статус
 
-Система находится на стадии `research / paper trading / architecture hardening`.
+Система находится на стадии `research / demo execution / architecture hardening`.
 
 Что уже реализовано:
 
@@ -64,20 +64,28 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - per-symbol strategy state
 - отдельный `RiskManager`
 - multi-position portfolio
+- Binance Spot Demo execution
+- Binance Futures Demo execution
+- hybrid routing: `long -> spot`, `short -> futures`
 - trailing stop
+- breakeven stop
+- max hold time exit
 - volatility filter
 - trend strength filter
 - cooldown между сделками
 - market scanner с short-horizon enrichment
+- dashboard с переключением режимов исполнения
+- ручная ликвидация внешних spot-активов из dashboard в режимах `spot` и `hybrid`
+- базовая reconciliation логика между ботом и биржей
 - каркас historical backtesting
 
 Что ещё не реализовано полностью:
 
-- реальные ордера на Binance
 - persistent storage для сделок и equity history
 - slippage model production-grade уровня
 - correlation-aware risk management
 - walk-forward optimization и batch research pipeline
+- полноценная обработка partial fills и exchange-native order lifecycle для всех live сценариев
 
 ## Что умеет бот
 
@@ -89,7 +97,13 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - анализировать рынок по нескольким инструментам одновременно
 - рассчитывать сигналы стратегии на базе EMA, RSI, ATR и trend filter
 - открывать и закрывать long/short позиции в paper trading
+- отправлять реальные ордера в `Binance Demo` для `spot`, `futures` и `hybrid`
+- учитывать фактический `filled quantity` и quote-fees Binance при зеркалировании live/demo сделок в локальный портфель
 - сопровождать позиции через stop loss, take profit и trailing stop
+- переводить stop в breakeven
+- закрывать позицию по ограничению максимального времени удержания
+- хранить `marketType` позиции (`spot` или `futures`) для корректного закрытия в hybrid execution
+- показывать execution status, routing и warnings в dashboard
 - ограничивать сделки через `RiskManager`
 - считать:
   - баланс
@@ -161,10 +175,12 @@ Production-oriented алгоритмический крипто-бот на `Nod
 Отвечает за:
 
 - paper execution
+- live demo execution через Binance
 - открытие/закрытие позиций
 - комиссию
 - сопровождение позиции
 - stop / take / trailing behavior
+- reconciliation c внешним балансом, внешними spot-активами и spot-ордерами
 
 ### `Portfolio`
 
@@ -366,6 +382,8 @@ Short рассматривается, если:
 
 Сигналы стратегий `CLOSE_LONG` / `CLOSE_SHORT` **игнорируются** (стратегии определяют только вход и переворот). Это позволяет дать прибыли «расти» и выходить только когда trailing stop реально сработает, а не по раннему сигналу «сценарий завершён».
 
+Исключение из этого правила: если `REVERSE_TO_*` не может быть безопасно исполнен из-за higher-timeframe confirmation или из-за ограничений execution-режима (например, short недоступен в `spot`), бот теперь выполняет **только защитное закрытие текущей позиции** без открытия новой стороны. Это сделано намеренно ради safety и консистентности live/paper поведения.
+
 Если включить `BOT_EXIT_ON_STRATEGY_SIGNAL=true`, то дополнительно учитываются:
 
 - поломка рыночной структуры (по сигналу стратегии)
@@ -474,6 +492,8 @@ Short рассматривается, если:
 - более стабильное поведение портфеля
 - меньше риска разрушения капитала от одной идеи
 - контроль торговли на уровне всей системы, а не только одного символа
+- sync внешнего USDT wallet больше не сбрасывает историческую просадку, поэтому drawdown-stop остаётся честным и после внешних обновлений баланса
+- в live/demo режимах баланс в портфеле синхронизируется от Binance; если full hybrid недоступен, но Spot leg подключён, бот всё равно использует доступный Binance spot balance вместо `BOT_INITIAL_BALANCE`
 
 ## Market scanner и universe
 
@@ -631,10 +651,12 @@ BOT_TRAILING_STOP_PCT=0.008
 BOT_COOLDOWN_CANDLES=2
 BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher
 BOT_EXECUTION_MODE=paper
-BOT_EXECUTION_MARKET_TYPE=futures
+BOT_EXECUTION_MARKET_TYPE=hybrid
 BOT_ALLOW_LIVE_REAL=false
 BINANCE_TESTNET_API_KEY=
 BINANCE_TESTNET_API_SECRET=
+BINANCE_FUTURES_DEMO_API_KEY=
+BINANCE_FUTURES_DEMO_API_SECRET=
 BINANCE_API_KEY=
 BINANCE_API_SECRET=
 
@@ -660,8 +682,8 @@ BOT_DASHBOARD_ENABLED=true
 BOT_DASHBOARD_HOST=127.0.0.1
 BOT_DASHBOARD_PORT=3200
 
-BINANCE_REST_BASE_URL=https://api.binance.com
-BINANCE_WS_BASE_URL=wss://stream.binance.com/ws
+BINANCE_REST_BASE_URL=
+BINANCE_WS_BASE_URL=
 ```
 
 ## Быстрый старт за 5 минут
@@ -697,10 +719,12 @@ BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
 BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher
 BOT_EXECUTION_MODE=paper
-BOT_EXECUTION_MARKET_TYPE=futures
+BOT_EXECUTION_MARKET_TYPE=hybrid
 BOT_ALLOW_LIVE_REAL=false
 BINANCE_TESTNET_API_KEY=
 BINANCE_TESTNET_API_SECRET=
+BINANCE_FUTURES_DEMO_API_KEY=
+BINANCE_FUTURES_DEMO_API_SECRET=
 BINANCE_API_KEY=
 BINANCE_API_SECRET=
 
@@ -732,8 +756,8 @@ BOT_SCANNER_SHORTLIST_SIZE=8
 BOT_SCANNER_KLINE_LOOKBACK=30
 BOT_MIN_QUOTE_VOLUME=1000000
 
-BINANCE_REST_BASE_URL=https://api.binance.com
-BINANCE_WS_BASE_URL=wss://stream.binance.com/ws
+BINANCE_REST_BASE_URL=
+BINANCE_WS_BASE_URL=
 ```
 
 ### 3. Запусти бота
@@ -836,8 +860,25 @@ npm run build
 - `BOT_ALLOW_LIVE_REAL`
 - `BINANCE_TESTNET_API_KEY`
 - `BINANCE_TESTNET_API_SECRET`
+- `BINANCE_FUTURES_DEMO_API_KEY`
+- `BINANCE_FUTURES_DEMO_API_SECRET`
 - `BINANCE_API_KEY`
 - `BINANCE_API_SECRET`
+
+Важно:
+
+- внутреннее значение `BOT_EXECUTION_MODE=live_testnet` сохранено ради совместимости, но фактически оно означает `Binance Demo mode`
+- для `live_testnet` проект по умолчанию использует новые demo endpoints:
+  - Spot Demo REST: `https://demo-api.binance.com`
+  - Spot Demo WS: `wss://demo-stream.binance.com/ws`
+  - Futures Demo REST: `https://demo-fapi.binance.com`
+- для `live_testnet` бот в первую очередь использует:
+  - `BINANCE_TESTNET_API_*` - Spot Demo и fallback для Futures Demo, если у этого же key включён Futures permission
+  - `BINANCE_FUTURES_DEMO_API_*` - отдельные futures credentials, если хочешь явно развести Spot Demo и Futures Demo
+- для `live_testnet + hybrid` достаточно `BINANCE_TESTNET_API_*`, если этот demo key действительно поддерживает и Spot, и Futures; при наличии `BINANCE_FUTURES_DEMO_API_*` futures leg будет использовать их с приоритетом
+- Spot Demo private user-data stream у Binance сейчас нестабилен/недоступен, поэтому бот для `live_testnet/spot` и `live_testnet/hybrid` использует явный `REST fallback` для синхронизации spot account state
+- если в `hybrid` доступен только Spot leg, бот всё равно подтянет spot-баланс с Binance и продолжит long-only работу через Spot; short leg будет явно помечен как временно отключённый
+- если нужно явно выбрать нестандартный `.env`, можно задать `BOT_ENV_FILE=/absolute/or/relative/path/to/.env` перед запуском процесса
 
 ## Таблица переменных окружения
 
@@ -889,15 +930,17 @@ npm run build
 | `BOT_DASHBOARD_ENABLED` | Включить live dashboard | `true` | Можно отключить для headless режима |
 | `BOT_DASHBOARD_HOST` | Хост dashboard-сервера | `127.0.0.1` | Локальный доступ по умолчанию |
 | `BOT_DASHBOARD_PORT` | Порт dashboard-сервера | `3200` | Открой в браузере |
-| `BOT_EXECUTION_MODE` | Режим исполнения ордеров | `paper`, `live_testnet`, `live_real` | Начинай с `paper` |
-| `BOT_EXECUTION_MARKET_TYPE` | Рынок исполнения | `spot` или `futures` | Short полноценно работает в `futures` |
+| `BOT_EXECUTION_MODE` | Режим исполнения ордеров | `paper`, `live_testnet`, `live_real` | `live_testnet` в текущей версии означает `Binance Demo` |
+| `BOT_EXECUTION_MARKET_TYPE` | Рынок исполнения | `spot`, `futures`, `hybrid` | `hybrid`: `long -> spot`, `short -> futures` |
 | `BOT_ALLOW_LIVE_REAL` | Явное разрешение реального LIVE | `false` | Без этого `live_real` не включится |
-| `BINANCE_TESTNET_API_KEY` | API key Binance Testnet | пусто | Используется для `live_testnet` |
-| `BINANCE_TESTNET_API_SECRET` | API secret Binance Testnet | пусто | Используется для `live_testnet` |
+| `BINANCE_TESTNET_API_KEY` | API key для `Binance Spot Demo` | пусто | Нужен для `live_testnet/spot` и spot-ноги в `live_testnet/hybrid` |
+| `BINANCE_TESTNET_API_SECRET` | API secret для `Binance Spot Demo` | пусто | Нужен для `live_testnet/spot` и spot-ноги в `live_testnet/hybrid` |
+| `BINANCE_FUTURES_DEMO_API_KEY` | API key для `Binance Futures Demo` | пусто | Нужен для `live_testnet/futures` и futures-ноги в `live_testnet/hybrid` |
+| `BINANCE_FUTURES_DEMO_API_SECRET` | API secret для `Binance Futures Demo` | пусто | Нужен для `live_testnet/futures` и futures-ноги в `live_testnet/hybrid` |
 | `BINANCE_API_KEY` | API key реального Binance | пусто | Используется для `live_real` |
 | `BINANCE_API_SECRET` | API secret реального Binance | пусто | Используется для `live_real` |
-| `BINANCE_REST_BASE_URL` | REST endpoint Binance | `https://api.binance.com` | Можно заменить на test/testnet endpoint |
-| `BINANCE_WS_BASE_URL` | WebSocket endpoint Binance | `wss://stream.binance.com/ws` | База для stream subscriptions |
+| `BINANCE_REST_BASE_URL` | REST endpoint Binance Spot market data | пусто | Если пусто, бот сам выберет `demo-api.binance.com` для `live_testnet` и `api.binance.com` для остальных режимов |
+| `BINANCE_WS_BASE_URL` | WebSocket endpoint Binance Spot market data | пусто | Если пусто, бот сам выберет `demo-stream.binance.com` для `live_testnet` и `stream.binance.com` для остальных режимов |
 
 ## Как правильно использовать бота
 
@@ -1047,6 +1090,7 @@ npm run lint
 - live-лента логов
 - состояние risk manager
 - кнопка экстренного закрытия всех позиций
+- переключение execution mode блокируется, если у бота есть локальные позиции или на текущем live-аккаунте остались внешние spot-ордера / non-USDT spot-активы
 
 ## Пример реального лога
 
@@ -1217,6 +1261,17 @@ npm run lint
 - не блокируется ли WebSocket на стороне окружения
 - корректен ли interval
 
+### 7. `live_testnet` не подключается, хотя ключи заданы
+
+Что проверить:
+
+- для `live_testnet/spot` заданы именно `BINANCE_TESTNET_API_*`
+- для `live_testnet/futures` заданы именно `BINANCE_FUTURES_DEMO_API_*`
+- для `live_testnet/hybrid` заданы обе пары credentials одновременно
+- после изменения `.env` процесс был полностью перезапущен
+- если используется нестандартный env-файл, корректен ли путь в `BOT_ENV_FILE`
+- если видишь сообщение про `Spot Demo private user-data stream`, это известное ограничение demo-инфраструктуры Binance: бот в этом случае переходит на `REST fallback`, а spot-баланс продолжает браться через REST
+
 ### 6. Build и тесты проходят, но поведение на paper trading плохое
 
 Это нормально: корректный код не означает прибыльную стратегию.
@@ -1256,14 +1311,22 @@ src/
 
 Система уже заметно сильнее прототипа, но ограничения остаются.
 
-### Нет live execution
+### Live execution уже есть, но ещё не production-grade
 
-Пока нет:
+Сейчас уже есть:
 
-- настоящих ордеров
-- синхронизации с биржевыми fills
-- обработки exchange filters
-- частичных исполнений
+- demo execution для `spot`, `futures` и `hybrid`
+- базовая синхронизация с внешним USDT wallet
+- ручное управление режимом исполнения из dashboard
+
+Пока ещё не закрыты полностью:
+
+- все сценарии частичных исполнений
+- полноценная exchange-native lifecycle обработка для всех ордерных событий
+- унифицированная venue-aware sizing логика для сложных multi-venue сценариев
+- production-grade reconciliation при внешних ручных действиях на аккаунте
+- автоматическое восстановление открытых позиций из Binance после рестарта процесса
+- venue-aware market data для hybrid/futures execution: сейчас рыночные свечи по-прежнему приходят из spot market data layer
 
 ### Нет постоянного хранилища
 
@@ -1284,7 +1347,7 @@ src/
 
 - persistent trade ledger
 - PostgreSQL / TimescaleDB
-- live Binance execution layer
+- live Binance execution layer production-grade уровня
 - correlation-aware portfolio risk
 - parameter optimization
 - walk-forward analysis

@@ -8,10 +8,32 @@ const envCandidates = [
   resolve(__dirname, '../.env'),
 ];
 
-for (const envPath of envCandidates) {
-  if (existsSync(envPath)) {
-    loadEnv({ path: envPath, override: false });
+const configuredEnvPath = process.env.BOT_ENV_FILE?.trim();
+
+const resolveEnvPath = () => {
+  if (configuredEnvPath) {
+    const explicitEnvPath = resolve(configuredEnvPath);
+    if (!existsSync(explicitEnvPath)) {
+      throw new Error(
+        `Указанный BOT_ENV_FILE не найден: ${explicitEnvPath}. Исправь путь или убери BOT_ENV_FILE.`,
+      );
+    }
+
+    return explicitEnvPath;
   }
+
+  return envCandidates.find((envPath, index) => {
+    if (!existsSync(envPath)) {
+      return false;
+    }
+
+    return envCandidates.indexOf(envPath) === index;
+  });
+};
+
+const resolvedEnvPath = resolveEnvPath();
+if (resolvedEnvPath) {
+  loadEnv({ path: resolvedEnvPath, override: false });
 }
 
 const numberValue = (value: string | undefined, fallback: number) => {

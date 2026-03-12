@@ -10,6 +10,7 @@ export type StrategyResult = {
   indicators?: StrategyIndicators;
   entryScore?: number;
   marketRegime?: string;
+  forceClose?: boolean;
 };
 
 export type TradingStrategy = {

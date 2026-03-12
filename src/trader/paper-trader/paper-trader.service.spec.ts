@@ -57,6 +57,25 @@ describe('PaperTraderService', () => {
     expect(portfolio.realizedPnl).toBeCloseTo(-0.1999, 6);
   });
 
+  it('rejects spot-mode short positions in paper trading', () => {
+    const open = service.tryOpenShort(
+      'BTCUSDT',
+      '1m',
+      'momentum_trend',
+      'Momentum Trend',
+      100,
+      1,
+      'spot short test',
+      100,
+      'spot',
+    );
+
+    expect(open.status).toBe('REJECTED');
+    if (open.status === 'REJECTED') {
+      expect(open.reason).toContain('Spot');
+    }
+  });
+
   it('moves trailing stop after a favorable candle', () => {
     const open = service.tryOpenLong(
       'BTCUSDT',
@@ -165,5 +184,45 @@ describe('PaperTraderService', () => {
     expect(actions).toHaveLength(1);
     expect(actions[0]?.status).toBe('EXECUTED');
     expect(port.getPosition('BTCUSDT', 'momentum_trend')).toBeNull();
+  });
+
+  it('records external live fills with actual quantity and supports partial close accounting', () => {
+    const open = service.recordExternalOpenPosition({
+      side: 'LONG',
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      strategyId: 'momentum_trend',
+      strategyName: 'Momentum Trend',
+      price: 100,
+      timestamp: 1,
+      reason: 'live fill',
+      quantity: 0.987,
+      investedUsdt: 98.8,
+      entryFeePaid: 0.1,
+      marketType: 'spot',
+    });
+    expect(open.status).toBe('EXECUTED');
+    expect(portfolio.getPosition('BTCUSDT', 'momentum_trend')?.quantity).toBeCloseTo(
+      0.987,
+      8,
+    );
+
+    const partialClose = service.recordExternalClosePosition({
+      expectedSide: 'LONG',
+      symbol: 'BTCUSDT',
+      strategyId: 'momentum_trend',
+      price: 101,
+      timestamp: 2,
+      reason: 'partial live close',
+      executedQuantity: 0.5,
+      exitFeePaid: 0.05,
+      marketType: 'spot',
+    });
+    expect(partialClose?.status).toBe('EXECUTED');
+
+    const remainingPosition = portfolio.getPosition('BTCUSDT', 'momentum_trend');
+    expect(remainingPosition).not.toBeNull();
+    expect(remainingPosition?.quantity).toBeCloseTo(0.487, 8);
+    expect(portfolio.closedTrades.at(-1)?.quantity).toBeCloseTo(0.5, 8);
   });
 });

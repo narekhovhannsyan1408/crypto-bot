@@ -240,6 +240,9 @@ export class ExecutionGatewayService implements TraderService {
     confirmationPhrase?: string,
   ) {
     const current = this.executionControl.getStatus();
+    const currentMode = this.executionControl.getMode();
+    const currentStatus =
+      currentMode === 'paper' ? current : await this.refreshExecutionStatus();
 
     if (this.portfolio.getOpenPositionsCount() > 0) {
       return {
@@ -247,6 +250,19 @@ export class ExecutionGatewayService implements TraderService {
         message:
           'Нельзя переключать execution mode, пока есть открытые позиции. Сначала закрой позиции.',
         status: current,
+      };
+    }
+
+    if (
+      currentMode !== 'paper' &&
+      ((currentStatus.openSpotOrdersCount ?? 0) > 0 ||
+        (currentStatus.spotAssetsCount ?? 0) > 0)
+    ) {
+      return {
+        success: false,
+        message:
+          'Нельзя переключать execution mode, пока на текущем live-аккаунте есть внешние spot-ордера или spot-активы. Сначала выровняй состояние аккаунта.',
+        status: currentStatus,
       };
     }
 
@@ -292,23 +308,31 @@ export class ExecutionGatewayService implements TraderService {
   }
 
   private buildPaperStatus(): Partial<ExecutionStatus> {
+    const marketType = this.executionControl.getMarketType();
+    const paperBalance = this.portfolio.balance;
+    const paperEquity = this.portfolio.getEquity();
+
     return {
       mode: 'paper',
-      marketType: this.executionControl.getMarketType(),
+      marketType,
       label: 'PAPER',
-      canTradeShort: this.executionControl.getMarketType() !== 'spot',
+      canTradeShort: marketType !== 'spot',
       longMarketType:
-        this.executionControl.getMarketType() === 'futures' ? 'futures' : 'spot',
+        marketType === 'futures' ? 'futures' : 'spot',
       shortMarketType:
-        this.executionControl.getMarketType() === 'spot' ? 'spot' : 'futures',
+        marketType === 'spot' ? 'spot' : 'futures',
       liveTradingEnabled: false,
       usingTestnet: false,
       allowLiveReal: this.config.allowLiveReal,
       apiConfigured: false,
       accountConnectivity: 'unknown',
       quoteAsset: 'USDT',
-      quoteFree: this.portfolio.balance,
-      quoteTotal: this.portfolio.getEquity(),
+      quoteFree: paperBalance,
+      quoteTotal: paperEquity,
+      spotQuoteFree: marketType !== 'futures' ? paperBalance : null,
+      spotQuoteTotal: marketType !== 'futures' ? paperEquity : null,
+      futuresQuoteFree: marketType !== 'spot' ? paperBalance : null,
+      futuresQuoteTotal: marketType !== 'spot' ? paperEquity : null,
       lastSyncAt: Date.now(),
       lastError: null,
       warnings: ['Paper trading: реальные ордера не отправляются'],
@@ -344,6 +368,9 @@ export class ExecutionGatewayService implements TraderService {
       (spotStatus.quoteTotal ?? 0) + (futuresStatus.quoteTotal ?? 0);
     const warnings = [...(spotStatus.warnings ?? []), ...(futuresStatus.warnings ?? [])];
     const lastError = [spotStatus.lastError, futuresStatus.lastError].filter(Boolean).join(' | ');
+    const futuresShortAvailable =
+      futuresStatus.apiConfigured && futuresStatus.accountConnectivity === 'ok';
+    const spotLegAvailable = spotStatus.accountConnectivity === 'ok';
 
     return {
       mode: this.executionControl.getMode(),
@@ -352,20 +379,21 @@ export class ExecutionGatewayService implements TraderService {
         this.executionControl.getMode() === 'live_testnet'
           ? 'LIVE DEMO HYBRID'
           : 'LIVE REAL HYBRID',
-      canTradeShort: true,
+      canTradeShort: futuresShortAvailable,
       longMarketType: 'spot',
       shortMarketType: 'futures',
       liveTradingEnabled: true,
       usingTestnet: this.executionControl.getMode() === 'live_testnet',
       allowLiveReal: this.config.allowLiveReal,
       apiConfigured: spotStatus.apiConfigured && futuresStatus.apiConfigured,
-      accountConnectivity:
-        spotStatus.accountConnectivity === 'ok' && futuresStatus.accountConnectivity === 'ok'
-          ? 'ok'
-          : 'error',
+      accountConnectivity: spotLegAvailable ? 'ok' : 'error',
       quoteAsset: 'USDT',
       quoteFree,
       quoteTotal,
+      spotQuoteFree: spotStatus.quoteFree ?? null,
+      spotQuoteTotal: spotStatus.quoteTotal ?? null,
+      futuresQuoteFree: futuresStatus.quoteFree ?? null,
+      futuresQuoteTotal: futuresStatus.quoteTotal ?? null,
       lastSyncAt: Date.now(),
       lastError: lastError || null,
       userDataStreamStatus: spotStatus.userDataStreamStatus,
@@ -374,7 +402,16 @@ export class ExecutionGatewayService implements TraderService {
       openSpotOrdersCount: spotStatus.openSpotOrdersCount,
       spotAssetsCount: spotStatus.spotAssetsCount,
       spotAssetsPreview: spotStatus.spotAssetsPreview,
-      warnings: [...new Set(warnings)],
+      warnings: [
+        ...new Set([
+          ...warnings,
+          ...(futuresShortAvailable
+            ? []
+            : [
+                'Hybrid short временно отключён: futures leg недоступен или не настроен. Long продолжит идти через Spot.',
+              ]),
+        ]),
+      ],
     };
   }
 }

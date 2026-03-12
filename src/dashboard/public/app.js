@@ -336,6 +336,16 @@ function renderExecution() {
     execution.longMarketType && execution.shortMarketType
       ? `LONG -> ${execution.longMarketType}, SHORT -> ${execution.shortMarketType}`
       : '-';
+  const spotBalanceSummary =
+    execution.spotQuoteFree === null &&
+    execution.spotQuoteTotal === null
+      ? 'недоступно'
+      : `${formatNumber(execution.spotQuoteFree)} / ${formatNumber(execution.spotQuoteTotal)} USDT`;
+  const futuresBalanceSummary =
+    execution.futuresQuoteFree === null &&
+    execution.futuresQuoteTotal === null
+      ? 'недоступно'
+      : `${formatNumber(execution.futuresQuoteFree)} / ${formatNumber(execution.futuresQuoteTotal)} USDT`;
 
   elements.executionStatus.innerHTML = `
     <div class="execution-chip ${chipClass}">${escapeHtml(execution.label)}</div>
@@ -347,9 +357,11 @@ function renderExecution() {
       <div class="kv-row"><span>Demo mode</span><strong>${execution.usingTestnet ? 'да' : 'нет'}</strong></div>
       <div class="kv-row"><span>API configured</span><strong>${execution.apiConfigured ? 'да' : 'нет'}</strong></div>
       <div class="kv-row"><span>Связь с Binance</span><strong>${escapeHtml(execution.accountConnectivity)}</strong></div>
-      <div class="kv-row"><span>Свободный USDT</span><strong>${formatNumber(execution.quoteFree)}</strong></div>
-      <div class="kv-row"><span>Всего USDT</span><strong>${formatNumber(execution.quoteTotal)}</strong></div>
-      <div class="kv-row"><span>Источник total</span><strong>USDT wallet Binance</strong></div>
+      <div class="kv-row"><span>Spot баланс</span><strong>${escapeHtml(spotBalanceSummary)}</strong></div>
+      <div class="kv-row"><span>Futures баланс</span><strong>${escapeHtml(futuresBalanceSummary)}</strong></div>
+      <div class="kv-row"><span>Итого free USDT</span><strong>${formatNumber(execution.quoteFree)}</strong></div>
+      <div class="kv-row"><span>Итого total USDT</span><strong>${formatNumber(execution.quoteTotal)}</strong></div>
+      <div class="kv-row"><span>Источник баланса</span><strong>Binance account sync</strong></div>
       <div class="kv-row"><span>Private stream</span><strong>${escapeHtml(streamStatusMap[execution.userDataStreamStatus || 'unknown'] || 'неизвестно')}</strong></div>
       <div class="kv-row"><span>Последнее user-data событие</span><strong>${execution.userDataStreamLastEventAt ? escapeHtml(formatDate(execution.userDataStreamLastEventAt)) : '-'}</strong></div>
       <div class="kv-row"><span>Последний execution report</span><strong>${execution.userDataStreamLastExecutionReportAt ? escapeHtml(formatDate(execution.userDataStreamLastExecutionReportAt)) : '-'}</strong></div>
@@ -364,39 +376,81 @@ function renderExecution() {
 
 function renderMetrics() {
   const portfolio = state.runtime?.portfolio;
+  const execution = state.runtime?.execution;
   if (!portfolio) {
     elements.metricsGrid.innerHTML = '';
     return;
   }
 
+  const totalPnl =
+    Number(portfolio.реализованныйРезультат ?? 0) + Number(portfolio.плавающийРезультат ?? 0);
   const metrics = [
-    ['Баланс', portfolio.баланс],
-    ['Капитал', portfolio.капитал],
-    ['Реализованный результат', portfolio.реализованныйРезультат],
-    ['Плавающий результат', portfolio.плавающийРезультат],
-    ['Уплачено комиссий', portfolio.уплаченоКомиссий],
-    ['Макс. просадка %', portfolio.максимальнаяПросадкаВПроцентах],
-    ['Открытых позиций', portfolio.открытыхПозиций],
+    ['Баланс бота', portfolio.баланс, 'Баланс, который бот сейчас использует в портфеле'],
+    ['Капитал бота', portfolio.капитал, 'Баланс + стоимость открытых позиций'],
+    [
+      'Spot free USDT',
+      execution?.spotQuoteFree ?? null,
+      'Свободный USDT на Binance Spot',
+    ],
+    [
+      'Spot total USDT',
+      execution?.spotQuoteTotal ?? null,
+      'Свободный + locked USDT на Binance Spot',
+    ],
+    [
+      'Futures free USDT',
+      execution?.futuresQuoteFree ?? null,
+      'Свободный USDT на Binance Futures',
+    ],
+    [
+      'Futures total USDT',
+      execution?.futuresQuoteTotal ?? null,
+      'Общий USDT на Binance Futures',
+    ],
+    [
+      'Реализованный PnL',
+      portfolio.реализованныйРезультат,
+      'Прибыль/убыток по уже закрытым сделкам',
+    ],
+    [
+      'Плавающий PnL',
+      portfolio.плавающийРезультат,
+      'Текущий нереализованный результат по открытым позициям',
+    ],
+    ['Суммарный PnL', totalPnl, 'Реализованный + плавающий результат'],
+    ['Комиссии', portfolio.уплаченоКомиссий, 'Все комиссии, уже учтённые ботом'],
+    ['Макс. просадка %', portfolio.максимальнаяПросадкаВПроцентах, 'Историческая просадка'],
+    ['Открытых позиций', portfolio.открытыхПозиций, 'Активные позиции сейчас'],
     [
       'Активных стратегий',
       Object.keys(portfolio.экспозицияПоСтратегиям || {}).length,
+      'Сколько стратегий сейчас задействовано в портфеле',
     ],
-    ['Винрейт %', portfolio.винрейт],
+    ['Винрейт %', portfolio.винрейт, 'Доля прибыльных закрытых сделок'],
   ];
 
   elements.metricsGrid.innerHTML = metrics
-    .map(([label, value]) => {
+    .map(([label, value, hint]) => {
       const cssClass =
-        typeof value === 'number' && value > 0
+        typeof value === 'number' &&
+        isPnlMetric(label) &&
+        value > 0
           ? 'positive'
-          : typeof value === 'number' && value < 0
+          : typeof value === 'number' &&
+              (isPnlMetric(label) || label === 'Макс. просадка %') &&
+              value < 0
             ? 'negative'
             : '';
+      const valueClass =
+        label === 'Макс. просадка %' && typeof value === 'number' && value > 0 ? 'warning' : '';
+      const formattedValue =
+        typeof value === 'number' && isPnlMetric(label) ? formatSignedNumber(value) : formatNumber(value);
 
       return `
         <div class="metric-card ${cssClass}">
           <div class="label">${escapeHtml(label)}</div>
-          <div class="value">${formatNumber(value)}</div>
+          <div class="value ${valueClass}">${formattedValue}</div>
+          <div class="metric-subtitle">${escapeHtml(hint || '')}</div>
         </div>
       `;
     })
@@ -672,6 +726,29 @@ function formatNumber(value) {
   }
 
   return String(value);
+}
+
+function formatSignedNumber(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return formatNumber(value);
+  }
+
+  const formatted = formatNumber(Math.abs(value));
+  if (value > 0) {
+    return `+${formatted}`;
+  }
+  if (value < 0) {
+    return `-${formatted}`;
+  }
+  return formatted;
+}
+
+function isPnlMetric(label) {
+  return (
+    label === 'Реализованный PnL' ||
+    label === 'Плавающий PnL' ||
+    label === 'Суммарный PnL'
+  );
 }
 
 function formatValue(value) {

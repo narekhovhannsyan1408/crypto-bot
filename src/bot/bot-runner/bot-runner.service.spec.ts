@@ -125,6 +125,7 @@ describe('BotRunnerService', () => {
   };
   const portfolioMock = {
     hasOpenPosition: jest.fn().mockReturnValue(false),
+    getOpenPositionsCount: jest.fn().mockReturnValue(0),
     getPositionsForSymbol: jest.fn().mockReturnValue([]),
     getPosition: jest.fn().mockReturnValue(null),
     getOpenPositions: jest.fn().mockReturnValue([]),
@@ -171,6 +172,8 @@ describe('BotRunnerService', () => {
     process.env.BOT_INTERVAL = '1m';
     process.env.BOT_UNIVERSE_SIZE = '2';
     process.env.BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH = '2';
+    process.env.BOT_DYNAMIC_TIMEFRAME_ENABLED = 'false';
+    delete process.env.BOT_DYNAMIC_TIMEFRAME_CANDIDATES;
     delete process.env.BOT_CONFIRMATION_INTERVAL;
     delete process.env.BOT_CONFIRMATION_MODE;
     resetBotConfigCache();
@@ -249,6 +252,95 @@ describe('BotRunnerService', () => {
     delete process.env.BOT_CONFIRMATION_INTERVAL;
     delete process.env.BOT_ALLOWED_SYMBOLS;
     resetBotConfigCache();
+  });
+
+  it('selects adaptive timeframe when fast interval quality is weak', async () => {
+    process.env.BOT_DYNAMIC_TIMEFRAME_ENABLED = 'true';
+    process.env.BOT_DYNAMIC_TIMEFRAME_CANDIDATES = '5m,15m,30m';
+    process.env.BOT_ALLOWED_SYMBOLS = 'BTCUSDT';
+    process.env.BOT_USE_SCANNER = 'false';
+    resetBotConfigCache();
+
+    const buildCandles = (values: number[], interval: string) =>
+      values.map((close, index) => ({
+        symbol: 'BTCUSDT',
+        interval,
+        openTime: index * 60_000,
+        closeTime: index * 60_000 + 59_999,
+        open: index === 0 ? close : values[index - 1],
+        high: Math.max(close, index === 0 ? close : values[index - 1]) + 0.2,
+        low: Math.min(close, index === 0 ? close : values[index - 1]) - 0.2,
+        close,
+        volume: 100 + index,
+        isClosed: true,
+      }));
+
+    marketMock.loadHistoricalCandles.mockImplementation(
+      async (_symbol: string, interval: string) => {
+        if (interval === '5m') {
+          return buildCandles(
+            [
+              100, 101, 99.5, 101.5, 99.8, 101.8, 100.2, 102, 100.5, 102.2, 100.6, 102.1,
+              100.7, 102.3, 100.8, 102.4, 101, 102.5, 101.1, 102.7, 101.2, 102.6, 101.3,
+              102.8,
+            ],
+            interval,
+          );
+        }
+
+        if (interval === '15m') {
+          return buildCandles(
+            [
+              100, 100.4, 100.8, 101.2, 101.6, 102, 102.5, 103, 103.6, 104.1, 104.7, 105.2,
+              105.8, 106.4, 107, 107.6, 108.3, 109, 109.8, 110.5, 111.2, 112, 112.7, 113.5,
+            ],
+            interval,
+          );
+        }
+
+        return buildCandles(
+          [
+            100, 100.6, 101.2, 101.9, 102.5, 103.2, 103.9, 104.7, 105.4, 106.2, 107, 107.8,
+            108.7, 109.5, 110.4, 111.3, 112.2, 113.1, 114, 115, 116, 117, 118, 119,
+          ],
+          interval,
+        );
+      },
+    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BotRunnerService,
+        { provide: BinanceMarketService, useValue: marketMock },
+        { provide: StrategyRegistryService, useValue: strategyRegistryMock },
+        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: HigherTimeframeConfirmationService,
+          useValue: confirmationMock,
+        },
+        { provide: ExecutionGatewayService, useValue: traderMock },
+        { provide: PortfolioService, useValue: portfolioMock },
+        { provide: RiskManagerService, useValue: riskManagerMock },
+        { provide: BotLoggerService, useValue: loggerMock },
+        { provide: SymbolScannerService, useValue: scannerMock },
+      ],
+    }).compile();
+
+    const adaptiveService = module.get<BotRunnerService>(BotRunnerService);
+    await adaptiveService.start();
+
+    expect(marketMock.connectSymbolIntervals).toHaveBeenCalledWith(
+      ['BTCUSDT'],
+      ['15m', '30m'],
+      expect.any(Function),
+    );
+    expect(loggerMock.logInfo).toHaveBeenCalledWith(
+      'Адаптивный timeframe обновлён',
+      expect.objectContaining({
+        executionInterval: '15m',
+        confirmationInterval: '30m',
+      }),
+    );
   });
 
   it('allows short signal on neutral confirmation in lenient mode', async () => {

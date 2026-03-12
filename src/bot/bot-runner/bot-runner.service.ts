@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { getBotConfig } from '../../config/bot-config';
+import { getBotConfig, intervalToMs } from '../../config/bot-config';
 import { BotLoggerService } from '../../logger/bot-logger/bot-logger.service';
 import { BinanceMarketService } from '../../market/binance-market/binance-market.service';
 import { Candle } from '../../market/types';
@@ -20,6 +20,16 @@ import { ExecutionGatewayService } from '../../trader/execution-gateway/executio
 import { PortfolioService } from '../../trader/portfolio/portfolio.service';
 import { RiskManagerService } from '../../trader/risk-manager/risk-manager.service';
 import { ExecutedTrade, ExecutionResult } from '../../trader/types';
+
+type AdaptiveIntervalAssessment = {
+  interval: string;
+  score: number;
+  efficiency: number;
+  trendQuality: number;
+  atrPct: number;
+  volumeAcceleration: number;
+  sampleSize: number;
+};
 
 @Injectable()
 export class BotRunnerService implements OnModuleDestroy {
@@ -48,6 +58,16 @@ export class BotRunnerService implements OnModuleDestroy {
   private scannerInterval?: NodeJS.Timeout;
   private scannerInProgress = false;
   private marketStarted = false;
+  private lastAdaptiveTimeframeSelection:
+    | {
+        selectedAt: number;
+        executionInterval: string;
+        confirmationInterval: string | null;
+        sampleSymbols: string[];
+        assessments: AdaptiveIntervalAssessment[];
+        reason: string;
+      }
+    | null = null;
 
   constructor(
     private readonly market: BinanceMarketService,
@@ -66,6 +86,7 @@ export class BotRunnerService implements OnModuleDestroy {
     await this.trader.refreshExecutionStatus();
 
     const initialUniverse = await this.resolveInitialUniverse();
+    await this.refreshAdaptiveTimeframe(initialUniverse);
     await this.syncUniverse(initialUniverse);
 
     this.connectMarketStreams();
@@ -135,6 +156,7 @@ export class BotRunnerService implements OnModuleDestroy {
       );
 
       const nextUniverse = this.buildTargetUniverse(top);
+      await this.refreshAdaptiveTimeframe(nextUniverse, top);
       await this.syncUniverse(nextUniverse);
     } catch (error) {
       this.logger.logError('Ошибка сканера', error);
@@ -181,6 +203,203 @@ export class BotRunnerService implements OnModuleDestroy {
     }
 
     return [...desired];
+  }
+
+  private async refreshAdaptiveTimeframe(
+    targetUniverse: string[],
+    topCandidates: ScannedSymbol[] = this.lastScanTop,
+  ) {
+    if (!this.config.dynamicTimeframeEnabled) {
+      return;
+    }
+
+    const openPositionsCount = this.portfolio.getOpenPositionsCount();
+    if (openPositionsCount > 0) {
+      return;
+    }
+
+    const decision = await this.selectAdaptiveTimeframe(targetUniverse, topCandidates);
+    if (!decision) {
+      return;
+    }
+
+    if (
+      decision.executionInterval === this.activeInterval &&
+      decision.confirmationInterval === this.confirmationInterval
+    ) {
+      this.lastAdaptiveTimeframeSelection = {
+        ...decision,
+        selectedAt: Date.now(),
+      };
+      return;
+    }
+
+    const previousActiveInterval = this.activeInterval;
+    const previousConfirmationInterval = this.confirmationInterval;
+
+    this.activeInterval = decision.executionInterval;
+    this.confirmationInterval = decision.confirmationInterval;
+    this.lastAdaptiveTimeframeSelection = {
+      ...decision,
+      selectedAt: Date.now(),
+    };
+
+    this.logger.logInfo('Адаптивный timeframe обновлён', {
+      executionInterval: decision.executionInterval,
+      confirmationInterval: decision.confirmationInterval ?? 'нет',
+      прошлыйExecutionInterval: previousActiveInterval,
+      прошлыйConfirmationInterval: previousConfirmationInterval ?? 'нет',
+      sampleSymbols: decision.sampleSymbols,
+      причина: decision.reason,
+      оценки: decision.assessments.map((assessment) => ({
+        интервал: assessment.interval,
+        score: Number(assessment.score.toFixed(3)),
+        efficiency: Number(assessment.efficiency.toFixed(3)),
+        trendQuality: Number(assessment.trendQuality.toFixed(3)),
+        atrPct: Number((assessment.atrPct * 100).toFixed(3)),
+        volumeAccelerationPct: Number((assessment.volumeAcceleration * 100).toFixed(2)),
+        sampleSize: assessment.sampleSize,
+      })),
+    });
+
+    if (this.watchedSymbols.size === 0) {
+      return;
+    }
+
+    for (const symbol of this.watchedSymbols) {
+      for (const strategy of this.strategyRegistry.getStrategies()) {
+        strategy.resetSymbol(symbol, previousActiveInterval);
+      }
+      if (previousConfirmationInterval) {
+        this.confirmation.resetSymbol(symbol, previousConfirmationInterval);
+      }
+      await this.preloadSymbolHistory(symbol);
+    }
+
+    if (this.marketStarted) {
+      this.replaceMarketStreams();
+    }
+  }
+
+  private async selectAdaptiveTimeframe(
+    targetUniverse: string[],
+    topCandidates: ScannedSymbol[],
+  ) {
+    const candidateIntervals = this.getAdaptiveTimeframeCandidates();
+    if (candidateIntervals.length === 0) {
+      return null;
+    }
+
+    const sampleSymbols = [
+      ...new Set([
+        ...topCandidates.map((candidate) => candidate.symbol),
+        ...targetUniverse,
+      ]),
+    ].slice(0, 3);
+
+    if (sampleSymbols.length === 0) {
+      return null;
+    }
+
+    const assessments: AdaptiveIntervalAssessment[] = [];
+    for (const interval of candidateIntervals) {
+      const intervalMetrics = (
+        await Promise.all(
+          sampleSymbols.map((symbol) => this.buildAdaptiveIntervalMetrics(symbol, interval)),
+        )
+      ).filter((value): value is Omit<AdaptiveIntervalAssessment, 'interval' | 'score' | 'sampleSize'> => value !== null);
+
+      if (intervalMetrics.length === 0) {
+        continue;
+      }
+
+      const efficiency = this.median(intervalMetrics.map((item) => item.efficiency));
+      const trendQuality = this.median(intervalMetrics.map((item) => item.trendQuality));
+      const atrPct = this.median(intervalMetrics.map((item) => item.atrPct));
+      const volumeAcceleration = this.median(
+        intervalMetrics.map((item) => item.volumeAcceleration),
+      );
+      const score =
+        efficiency * 0.45 +
+        trendQuality * 0.35 +
+        this.clamp((volumeAcceleration + 0.2) / 0.8, 0, 1) * 0.1 +
+        this.clamp(atrPct / 0.003, 0, 1) * 0.1;
+
+      assessments.push({
+        interval,
+        score,
+        efficiency,
+        trendQuality,
+        atrPct,
+        volumeAcceleration,
+        sampleSize: intervalMetrics.length,
+      });
+    }
+
+    if (assessments.length === 0) {
+      return null;
+    }
+
+    const selectedAssessment =
+      assessments.find((assessment, index) =>
+        assessment.score >= this.getAdaptiveThresholdForIndex(index),
+      ) ?? assessments.at(-1)!;
+
+    const selectedIndex = candidateIntervals.indexOf(selectedAssessment.interval);
+    const confirmationInterval =
+      selectedIndex >= 0 && selectedIndex < candidateIntervals.length - 1
+        ? candidateIntervals[selectedIndex + 1]
+        : candidateIntervals.length > 0
+          ? this.getHigherConfirmationInterval(candidateIntervals.at(-1)!)
+          : null;
+
+    return {
+      executionInterval: selectedAssessment.interval,
+      confirmationInterval:
+        confirmationInterval === selectedAssessment.interval ? null : confirmationInterval,
+      sampleSymbols,
+      assessments,
+      reason:
+        selectedAssessment === assessments.at(-1)
+          ? 'Более быстрые интервалы не прошли порог качества сигнала, поэтому выбран более медленный execution timeframe'
+          : 'Выбран самый быстрый timeframe, который проходит порог качества сигнала по эффективности и направленности рынка',
+    };
+  }
+
+  private async buildAdaptiveIntervalMetrics(symbol: string, interval: string) {
+    try {
+      const candles = await this.market.loadHistoricalCandles(symbol, interval, 48);
+      if (candles.length < 20) {
+        return null;
+      }
+
+      const closes = candles.map((candle) => candle.close);
+      const volumes = candles.map((candle) => candle.volume);
+      const firstClose = closes[0];
+      const lastClose = closes.at(-1) ?? firstClose;
+      const netMovePct = firstClose > 0 ? Math.abs(lastClose - firstClose) / firstClose : 0;
+      const pathLengthPct = closes.slice(1).reduce((sum, close, index) => {
+        const prev = closes[index];
+        return sum + (prev > 0 ? Math.abs(close - prev) / prev : 0);
+      }, 0);
+      const efficiency =
+        pathLengthPct > 0 ? this.clamp(netMovePct / pathLengthPct, 0, 1) : 0;
+      const atrPct = this.calculateAtrPct(candles);
+      const trendQuality = this.clamp(netMovePct / Math.max(atrPct * 3, 0.0001), 0, 1);
+      const recentVolume = this.average(volumes.slice(-5));
+      const baselineVolume = this.average(volumes.slice(-15, -5));
+      const volumeAcceleration =
+        baselineVolume > 0 ? recentVolume / baselineVolume - 1 : 0;
+
+      return {
+        efficiency,
+        trendQuality,
+        atrPct,
+        volumeAcceleration,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async syncUniverse(nextSymbols: string[]) {
@@ -710,6 +929,78 @@ export class BotRunnerService implements OnModuleDestroy {
     return Math.max(...strategies.map((strategy) => strategy.getRequiredWarmupCandles()));
   }
 
+  private getAdaptiveTimeframeCandidates() {
+    return [...new Set(this.config.dynamicTimeframeCandidates)]
+      .filter(Boolean)
+      .sort((left, right) => intervalToMs(left) - intervalToMs(right));
+  }
+
+  private getAdaptiveThresholdForIndex(index: number) {
+    if (index <= 0) {
+      return 0.58;
+    }
+    if (index === 1) {
+      return 0.46;
+    }
+    return 0;
+  }
+
+  private getHigherConfirmationInterval(interval: string) {
+    const orderedIntervals = ['3m', '5m', '15m', '30m', '1h', '4h'];
+    const currentIndex = orderedIntervals.indexOf(interval);
+    if (currentIndex === -1 || currentIndex === orderedIntervals.length - 1) {
+      return null;
+    }
+
+    return orderedIntervals[currentIndex + 1];
+  }
+
+  private calculateAtrPct(candles: Candle[]) {
+    if (candles.length < 2) {
+      return 0;
+    }
+
+    const recent = candles.slice(-14);
+    const ranges = recent.map((candle, index) => {
+      const prevClose =
+        index === 0 ? recent[0].close : recent[index - 1].close;
+      const tr = Math.max(
+        candle.high - candle.low,
+        Math.abs(candle.high - prevClose),
+        Math.abs(candle.low - prevClose),
+      );
+      return candle.close > 0 ? tr / candle.close : 0;
+    });
+
+    return this.average(ranges);
+  }
+
+  private average(values: number[]) {
+    if (values.length === 0) {
+      return 0;
+    }
+
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
+  private median(values: number[]) {
+    if (values.length === 0) {
+      return 0;
+    }
+
+    const sorted = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) {
+      return (sorted[middle - 1] + sorted[middle]) / 2;
+    }
+
+    return sorted[middle];
+  }
+
+  private clamp(value: number, min: number, max: number) {
+    return Math.min(Math.max(value, min), max);
+  }
+
   private printPortfolio(symbol: string) {
     const snapshot = this.portfolio.getSnapshot();
     this.portfolio.trackDrawdown(snapshot.equity);
@@ -1053,6 +1344,36 @@ export class BotRunnerService implements OnModuleDestroy {
       executionInterval: this.activeInterval,
       confirmationInterval: this.confirmationInterval,
       confirmationMode: this.config.confirmationMode,
+      timeframeSelection: this.lastAdaptiveTimeframeSelection
+        ? {
+            режим: this.config.dynamicTimeframeEnabled ? 'adaptive' : 'static',
+            executionInterval: this.lastAdaptiveTimeframeSelection.executionInterval,
+            confirmationInterval:
+              this.lastAdaptiveTimeframeSelection.confirmationInterval ?? 'нет',
+            selectedAt: this.lastAdaptiveTimeframeSelection.selectedAt,
+            sampleSymbols: this.lastAdaptiveTimeframeSelection.sampleSymbols,
+            reason: this.lastAdaptiveTimeframeSelection.reason,
+            assessments: this.lastAdaptiveTimeframeSelection.assessments.map((assessment) => ({
+              interval: assessment.interval,
+              score: Number(assessment.score.toFixed(3)),
+              efficiency: Number(assessment.efficiency.toFixed(3)),
+              trendQuality: Number(assessment.trendQuality.toFixed(3)),
+              atrPct: Number((assessment.atrPct * 100).toFixed(3)),
+              volumeAccelerationPct: Number((assessment.volumeAcceleration * 100).toFixed(2)),
+              sampleSize: assessment.sampleSize,
+            })),
+          }
+        : {
+            режим: this.config.dynamicTimeframeEnabled ? 'adaptive' : 'static',
+            executionInterval: this.activeInterval,
+            confirmationInterval: this.confirmationInterval ?? 'нет',
+            selectedAt: null,
+            sampleSymbols: [],
+            reason: this.config.dynamicTimeframeEnabled
+              ? 'Адаптивный timeframe ещё не вычислялся'
+              : 'Используется статический timeframe из конфига',
+            assessments: [],
+          },
       strategySelectionMode: 'auto_best_signal',
       activeStrategies: this.strategyRegistry.getStrategies().map((strategy) => ({
         id: strategy.id,

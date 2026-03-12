@@ -217,6 +217,7 @@ Production-oriented алгоритмический крипто-бот на `Nod
 - определяет рабочий интервал торговли
 - при необходимости включает старший интервал подтверждения
 - строит стартовый universe
+- если включён `BOT_DYNAMIC_TIMEFRAME_ENABLED=true`, дополнительно оценивает качество рынка на кандидатных интервалах и выбирает самый быстрый execution timeframe, который проходит минимальный порог качества сигнала
 - загружает исторические свечи по каждому символу
 - прогревает индикаторы стратегии
 - подписывается на рыночные потоки
@@ -237,6 +238,8 @@ Production-oriented алгоритмический крипто-бот на `Nod
 
 - `BOT_INTERVAL` как execution timeframe
 - `BOT_CONFIRMATION_INTERVAL` как higher timeframe confirmation
+
+Если включён `BOT_DYNAMIC_TIMEFRAME_ENABLED`, связка `execution/confirmation` может быть автоматически переопределена в runtime. В текущей реализации бот выбирает между `5m`, `15m` и `30m`, а confirmation поднимает на следующую ступень выше. Переключение делается только когда портфель пустой, чтобы не менять рабочий таймфрейм посреди уже открытой сделки.
 
 ### 3. Проверка stop / take / trailing
 
@@ -803,6 +806,12 @@ npm run build
 - `BOT_CONFIRMATION_MODE`
   Режим подтверждения старшего таймфрейма: `strict`, `lenient` или `off`.
 
+- `BOT_DYNAMIC_TIMEFRAME_ENABLED`
+  Включает адаптивный выбор execution timeframe по качеству рынка. Бот выбирает самый быстрый интервал, который проходит порог качества сигнала.
+
+- `BOT_DYNAMIC_TIMEFRAME_CANDIDATES`
+  Список candidate intervals для adaptive timeframe, например `5m,15m,30m`.
+
 - `BOT_USE_SCANNER`
   Включает или выключает market scanner.
 
@@ -890,6 +899,8 @@ npm run build
 | `BOT_INTERVAL` | Интервал свечей для исполнения | `1m` | Базовый рабочий интервал |
 | `BOT_CONFIRMATION_INTERVAL` | Старший интервал подтверждения | `5m` или пусто | Для higher timeframe filter |
 | `BOT_CONFIRMATION_MODE` | Режим подтверждения старшего ТФ | `strict`, `lenient`, `off` | `lenient` обычно лучше для short |
+| `BOT_DYNAMIC_TIMEFRAME_ENABLED` | Включить adaptive timeframe | `true` / `false` | Если включён, runtime может переопределять `BOT_INTERVAL` |
+| `BOT_DYNAMIC_TIMEFRAME_CANDIDATES` | Кандидаты для adaptive timeframe | `5m,15m,30m` | Бот берёт самый быстрый интервал, который проходит quality threshold |
 | `BOT_USE_SCANNER` | Включить scanner | `true` | Если `false`, используется ручной режим |
 | `BOT_SCAN_INTERVAL_MS` | Частота пересчёта scanner | `60000` | В миллисекундах |
 | `BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH` | Старый порог простоя пары | `8` | Сохраняется для логики idle-state |

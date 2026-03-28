@@ -224,6 +224,12 @@ Production-oriented алгоритмический крипто-бот на `Nod
 
 Важно: бот не должен ждать десятки новых `1m` свечей только для прогрева индикаторов. На старте он заранее скачивает историю Binance через REST и уже после этого переходит в live-режим.
 
+Дополнительно:
+
+- в warmup теперь попадают только фактически закрытые REST-candles; потенциально незавершённый последний kline отбрасывается
+- если Binance вернул слишком мало истории для execution или higher-timeframe confirmation, символ не добавляется в active universe
+- при adaptive-переключении таймфрейма бот заново прогревает историю и исключает символ из `watchedSymbols`, если безопасный rewarmup не удался
+
 ### 2. Получение свечей
 
 Бот работает на закрытых свечах.
@@ -273,7 +279,7 @@ Production-oriented алгоритмический крипто-бот на `Nod
 
 - для `momentum_trend` входы в long разрешаются только при бычьем подтверждении сверху
 - для `momentum_trend` входы в short разрешаются только при медвежьем подтверждении сверху
-- для `mean_reversion` подтверждение сверху по умолчанию не обязательно
+- для `mean_reversion` жёсткое подтверждение сверху по умолчанию не обязательно, но runtime теперь может мягко блокировать контртрендовый вход против слишком сильного higher-timeframe тренда
 
 Momentum / trend стратегия использует:
 
@@ -283,6 +289,18 @@ Momentum / trend стратегия использует:
 - ATR
 - оценку силы тренда
 - cooldown после закрытия сделки
+- защиту от позднего входа в перегретый импульс:
+  - верхний лимит `RSI` для нового long
+  - нижний лимит `RSI` для нового short
+  - ограничение на максимальное расстояние цены от быстрой `EMA`
+
+Mean Reversion использует:
+
+- отклонение цены от `EMA slow`
+- RSI-экстремумы
+- ATR-фильтр волатильности
+- возврат к среднему как базовую точку выхода
+- мягкий higher-timeframe guard, чтобы не открывать контртрендовый вход против уже слишком сильного старшего тренда
 
 После этого каждая стратегия отдаёт одно из решений:
 
@@ -629,9 +647,11 @@ npm install
 
 ```env
 BOT_SYMBOL=BTCUSDT
-BOT_INTERVAL=1m
-BOT_CONFIRMATION_INTERVAL=5m
+BOT_INTERVAL=5m
+BOT_CONFIRMATION_INTERVAL=15m
 BOT_CONFIRMATION_MODE=lenient
+BOT_DYNAMIC_TIMEFRAME_ENABLED=true
+BOT_DYNAMIC_TIMEFRAME_CANDIDATES=5m,15m
 BOT_USE_SCANNER=true
 BOT_SCAN_INTERVAL_MS=60000
 BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH=8
@@ -652,7 +672,7 @@ BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
 BOT_COOLDOWN_CANDLES=2
-BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher
+BOT_ENABLED_STRATEGIES=momentum_trend,trend_pullback,mean_reversion
 BOT_EXECUTION_MODE=paper
 BOT_EXECUTION_MARKET_TYPE=hybrid
 BOT_ALLOW_LIVE_REAL=false
@@ -671,6 +691,10 @@ BOT_EMA_SLOW_PERIOD=21
 BOT_RSI_PERIOD=14
 BOT_RSI_LONG_THRESHOLD=55
 BOT_RSI_SHORT_THRESHOLD=45
+BOT_RSI_LONG_MAX_ENTRY=68
+BOT_RSI_SHORT_MIN_ENTRY=32
+BOT_MOMENTUM_MAX_EMA_STRETCH_PCT=0.0022
+BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT=0.0025
 
 BOT_MAX_CONCURRENT_POSITIONS=3
 BOT_MAX_POSITIONS_PER_SYMBOL=2
@@ -705,9 +729,11 @@ npm install
 
 ```env
 BOT_USE_SCANNER=true
-BOT_INTERVAL=1m
-BOT_CONFIRMATION_INTERVAL=5m
+BOT_INTERVAL=5m
+BOT_CONFIRMATION_INTERVAL=15m
 BOT_CONFIRMATION_MODE=lenient
+BOT_DYNAMIC_TIMEFRAME_ENABLED=true
+BOT_DYNAMIC_TIMEFRAME_CANDIDATES=5m,15m
 BOT_UNIVERSE_SIZE=3
 BOT_ALLOWED_SYMBOLS=BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,LINKUSDT
 
@@ -720,7 +746,7 @@ BOT_FEE_PCT=0.001
 BOT_STOP_LOSS_PCT=0.012
 BOT_TAKE_PROFIT_PCT=0.02
 BOT_TRAILING_STOP_PCT=0.008
-BOT_ENABLED_STRATEGIES=momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher
+BOT_ENABLED_STRATEGIES=momentum_trend,trend_pullback,mean_reversion
 BOT_EXECUTION_MODE=paper
 BOT_EXECUTION_MARKET_TYPE=hybrid
 BOT_ALLOW_LIVE_REAL=false
@@ -749,7 +775,11 @@ BOT_EMA_SLOW_PERIOD=21
 BOT_RSI_PERIOD=14
 BOT_RSI_LONG_THRESHOLD=55
 BOT_RSI_SHORT_THRESHOLD=45
-BOT_MIN_TREND_STRENGTH_PCT=0.0015
+BOT_RSI_LONG_MAX_ENTRY=68
+BOT_RSI_SHORT_MIN_ENTRY=32
+BOT_MOMENTUM_MAX_EMA_STRETCH_PCT=0.0022
+BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT=0.0025
+BOT_MIN_TREND_STRENGTH_PCT=0.0012
 BOT_MIN_ATR_PCT=0.001
 BOT_MAX_ATR_PCT=0.03
 BOT_COOLDOWN_CANDLES=2
@@ -810,7 +840,7 @@ npm run build
   Включает адаптивный выбор execution timeframe по качеству рынка. Бот выбирает самый быстрый интервал, который проходит порог качества сигнала.
 
 - `BOT_DYNAMIC_TIMEFRAME_CANDIDATES`
-  Список candidate intervals для adaptive timeframe, например `5m,15m,30m`.
+  Список candidate intervals для adaptive timeframe, например `5m,15m`. На практике лучше держать компактный набор соседних интервалов, чтобы runtime не делал слишком резкие переключения между режимами рынка.
 
 - `BOT_USE_SCANNER`
   Включает или выключает market scanner.
@@ -825,6 +855,18 @@ npm run build
 - `BOT_RSI_PERIOD`
 - `BOT_RSI_LONG_THRESHOLD`
 - `BOT_RSI_SHORT_THRESHOLD`
+- `BOT_RSI_LONG_MAX_ENTRY`
+  Верхняя граница RSI для новых `Momentum Trend long`, чтобы не покупать уже перегретый импульс слишком поздно.
+
+- `BOT_RSI_SHORT_MIN_ENTRY`
+  Нижняя граница RSI для новых `Momentum Trend short`, чтобы не шортить уже перерастянутый bearish move в конце движения.
+
+- `BOT_MOMENTUM_MAX_EMA_STRETCH_PCT`
+  Максимально допустимое расстояние цены от `EMA fast` для новых `Momentum Trend` входов. Помогает отсекать chase-entry после растянутой свечи.
+
+- `BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT`
+  Порог силы higher-timeframe тренда, после которого `Mean Reversion` больше не открывает контртрендовый вход против сильного старшего импульса.
+
 - `BOT_MIN_TREND_STRENGTH_PCT`
 - `BOT_MIN_ATR_PCT`
 - `BOT_MAX_ATR_PCT`
@@ -896,11 +938,11 @@ npm run build
 | Переменная | Назначение | Типичное значение | Комментарий |
 | --- | --- | --- | --- |
 | `BOT_SYMBOL` | Стартовый символ при отключённом scanner | `BTCUSDT` | Используется как fallback |
-| `BOT_INTERVAL` | Интервал свечей для исполнения | `1m` | Базовый рабочий интервал |
-| `BOT_CONFIRMATION_INTERVAL` | Старший интервал подтверждения | `5m` или пусто | Для higher timeframe filter |
+| `BOT_INTERVAL` | Интервал свечей для исполнения | `5m` | Базовый рабочий интервал, если adaptive timeframe выключен |
+| `BOT_CONFIRMATION_INTERVAL` | Старший интервал подтверждения | `15m` или пусто | Для higher timeframe filter |
 | `BOT_CONFIRMATION_MODE` | Режим подтверждения старшего ТФ | `strict`, `lenient`, `off` | `lenient` обычно лучше для short |
 | `BOT_DYNAMIC_TIMEFRAME_ENABLED` | Включить adaptive timeframe | `true` / `false` | Если включён, runtime может переопределять `BOT_INTERVAL` |
-| `BOT_DYNAMIC_TIMEFRAME_CANDIDATES` | Кандидаты для adaptive timeframe | `5m,15m,30m` | Бот берёт самый быстрый интервал, который проходит quality threshold |
+| `BOT_DYNAMIC_TIMEFRAME_CANDIDATES` | Кандидаты для adaptive timeframe | `5m,15m` | Лучше использовать компактный набор соседних ТФ, чтобы не было резких runtime-переключений |
 | `BOT_USE_SCANNER` | Включить scanner | `true` | Если `false`, используется ручной режим |
 | `BOT_SCAN_INTERVAL_MS` | Частота пересчёта scanner | `60000` | В миллисекундах |
 | `BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH` | Старый порог простоя пары | `8` | Сохраняется для логики idle-state |
@@ -920,12 +962,16 @@ npm run build
 | `BOT_TRAILING_STOP_PCT` | Трейлинг-стоп | `0.008` | 0.8% |
 | `BOT_EXIT_ON_STRATEGY_SIGNAL` | Закрывать по сигналу стратегии | `false` | `false` = только по стопам (SL/TP/трейлинг); `true` = ещё и по CLOSE_LONG/SHORT |
 | `BOT_COOLDOWN_CANDLES` | Пауза после сделки | `2` | Снижает overtrading |
-| `BOT_ENABLED_STRATEGIES` | Список активных стратегий | `momentum_trend,mean_reversion,breakout_volatility,...` | Runtime сам выбирает лучший вход из активных стратегий |
+| `BOT_ENABLED_STRATEGIES` | Список активных стратегий | `momentum_trend,trend_pullback,mean_reversion` | Практичный стартовый набор без лишнего шума на слабом рынке |
 | `BOT_EMA_FAST_PERIOD` | Быстрая EMA | `9` | Базовый импульс |
 | `BOT_EMA_SLOW_PERIOD` | Медленная EMA | `21` | Базовый фильтр тренда |
 | `BOT_RSI_PERIOD` | Период RSI | `14` | Осциллятор импульса |
 | `BOT_RSI_LONG_THRESHOLD` | Long threshold RSI | `55` | Подтверждение bullish impulse |
 | `BOT_RSI_SHORT_THRESHOLD` | Short threshold RSI | `45` | Подтверждение bearish impulse |
+| `BOT_RSI_LONG_MAX_ENTRY` | Максимальный RSI для нового momentum-long | `68` | Блокирует позднюю покупку уже перегретого импульса |
+| `BOT_RSI_SHORT_MIN_ENTRY` | Минимальный RSI для нового momentum-short | `32` | Блокирует поздний short в уже перерастянутом падении |
+| `BOT_MOMENTUM_MAX_EMA_STRETCH_PCT` | Max distance цены от `EMA fast` | `0.0022` | Отсекает chase-entry после растянутой свечи |
+| `BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT` | Порог силы старшего тренда для Mean Reversion | `0.0025` | При сильном HTF-тренде контртрендовый вход блокируется или переводится в close-only |
 | `BOT_MIN_TREND_STRENGTH_PCT` | Минимальная сила тренда | `0.0015` | Фильтр боковика |
 | `BOT_MIN_ATR_PCT` | Минимальная волатильность | `0.001` | Не торговать мёртвый рынок |
 | `BOT_MAX_ATR_PCT` | Максимальная волатильность | `0.03` | Не торговать слишком хаотичный рынок |

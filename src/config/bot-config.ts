@@ -106,6 +106,10 @@ export type BotConfig = {
   rsiPeriod: number;
   rsiLongThreshold: number;
   rsiShortThreshold: number;
+  rsiLongMaxEntry: number;
+  rsiShortMinEntry: number;
+  momentumMaxEmaStretchPct: number;
+  meanReversionMaxHigherTimeframeTrendPct: number;
   scannerMinQuoteVolume: number;
   scannerShortlistSize: number;
   scannerKlineLookback: number;
@@ -191,6 +195,16 @@ export const getBotConfig = (): BotConfig => {
     rsiPeriod: numberValue(process.env.BOT_RSI_PERIOD, 14),
     rsiLongThreshold: numberValue(process.env.BOT_RSI_LONG_THRESHOLD, 55),
     rsiShortThreshold: numberValue(process.env.BOT_RSI_SHORT_THRESHOLD, 45),
+    rsiLongMaxEntry: numberValue(process.env.BOT_RSI_LONG_MAX_ENTRY, 68),
+    rsiShortMinEntry: numberValue(process.env.BOT_RSI_SHORT_MIN_ENTRY, 32),
+    momentumMaxEmaStretchPct: numberValue(
+      process.env.BOT_MOMENTUM_MAX_EMA_STRETCH_PCT,
+      0.0022,
+    ),
+    meanReversionMaxHigherTimeframeTrendPct: numberValue(
+      process.env.BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT,
+      0.0025,
+    ),
     scannerMinQuoteVolume: numberValue(
       process.env.BOT_MIN_QUOTE_VOLUME,
       1_000_000,

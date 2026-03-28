@@ -1245,11 +1245,15 @@ export class BotRunnerService implements OnModuleDestroy {
       return result;
     }
 
+    const confirmation = this.confirmation.getTrend(symbol, this.confirmationInterval);
+
+    if (strategy.id === 'mean_reversion') {
+      return this.applyMeanReversionHigherTimeframeGuard(result, confirmation);
+    }
+
     if (strategy.getConfirmationPolicy() === 'none') {
       return result;
     }
-
-    const confirmation = this.confirmation.getTrend(symbol, this.confirmationInterval);
     const signal = result.signal;
     const needsLongConfirmation =
       signal === 'OPEN_LONG' || signal === 'REVERSE_TO_LONG';
@@ -1327,6 +1331,67 @@ export class BotRunnerService implements OnModuleDestroy {
         ...result,
         signal: 'HOLD',
         reason: `${result.reason}. Старший таймфрейм ${this.confirmationInterval} не подтверждает short`,
+      };
+    }
+
+    return result;
+  }
+
+  private applyMeanReversionHigherTimeframeGuard(
+    result: StrategyResult,
+    confirmation: {
+      isReady: boolean;
+      trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+      trendStrengthPct?: number;
+    },
+  ): StrategyResult {
+    const signal = result.signal;
+    const trendStrengthPct = confirmation.trendStrengthPct ?? 0;
+    const strongHigherTimeframeTrend =
+      confirmation.isReady &&
+      trendStrengthPct >= this.config.meanReversionMaxHigherTimeframeTrendPct;
+
+    if (!strongHigherTimeframeTrend) {
+      return result;
+    }
+
+    if (
+      (signal === 'OPEN_SHORT' || signal === 'REVERSE_TO_SHORT') &&
+      confirmation.trend === 'BULLISH'
+    ) {
+      if (signal === 'REVERSE_TO_SHORT') {
+        return {
+          ...result,
+          signal: 'CLOSE_LONG',
+          forceClose: true,
+          reason: `${result.reason}. Mean reversion не переворачивает позицию в short против сильного bullish higher timeframe`,
+        };
+      }
+
+      return {
+        ...result,
+        signal: 'HOLD',
+        reason: `${result.reason}. Mean reversion пропускает short против сильного bullish higher timeframe`,
+      };
+    }
+
+    if (
+      (signal === 'OPEN_LONG' || signal === 'REVERSE_TO_LONG') &&
+      confirmation.trend === 'BEARISH'
+    ) {
+      if (signal === 'REVERSE_TO_LONG') {
+        return {
+          ...result,
+          signal: 'CLOSE_SHORT',
+          forceClose: true,
+          reason: `${result.reason}. Mean reversion не переворачивает позицию в long против сильного bearish higher timeframe`,
+        };
+      }
+
+      return {
+        ...result,
+        signal: 'HOLD',
+        reason: `${result.reason}. Mean reversion пропускает long против сильного bearish higher timeframe`,
       };
     }
 

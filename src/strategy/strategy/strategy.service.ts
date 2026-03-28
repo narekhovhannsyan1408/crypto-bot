@@ -76,6 +76,8 @@ export class StrategyService implements TradingStrategy {
     }
 
     const { emaFast, emaSlow, rsi, atr, atrPct, trendStrengthPct } = core;
+    const distanceFromFastEmaPct =
+      emaFast > 0 ? (candle.close - emaFast) / emaFast : 0;
     const indicators = {
       emaFast,
       emaSlow,
@@ -83,6 +85,7 @@ export class StrategyService implements TradingStrategy {
       atr,
       atrPct,
       trendStrengthPct,
+      distanceFromFastEmaPct,
     };
 
     if (!positionSide && this.isInCooldown(state)) {
@@ -117,13 +120,25 @@ export class StrategyService implements TradingStrategy {
       };
     }
 
-    const bullishEntry =
-      emaFast > emaSlow && rsi > this.config.rsiLongThreshold;
-    const bearishEntry =
-      emaFast < emaSlow && rsi < this.config.rsiShortThreshold;
+    const bullishEntry = emaFast > emaSlow && rsi > this.config.rsiLongThreshold;
+    const bearishEntry = emaFast < emaSlow && rsi < this.config.rsiShortThreshold;
+    const longEntryTooExtended =
+      rsi > this.config.rsiLongMaxEntry ||
+      distanceFromFastEmaPct > this.config.momentumMaxEmaStretchPct;
+    const shortEntryTooExtended =
+      rsi < this.config.rsiShortMinEntry ||
+      distanceFromFastEmaPct < -this.config.momentumMaxEmaStretchPct;
 
     if (!positionSide) {
       if (bullishEntry) {
+        if (longEntryTooExtended) {
+          return {
+            signal: 'HOLD',
+            reason: 'Momentum Trend пропускает long: импульс уже перегрет и слишком далеко ушёл от EMA',
+            indicators,
+          };
+        }
+
         return {
           signal: 'OPEN_LONG',
           reason: 'Long: fast EMA выше slow EMA, RSI подтверждает импульс',
@@ -137,6 +152,14 @@ export class StrategyService implements TradingStrategy {
       }
 
       if (bearishEntry) {
+        if (shortEntryTooExtended) {
+          return {
+            signal: 'HOLD',
+            reason: 'Momentum Trend пропускает short: импульс уже перегрет и слишком далеко ушёл от EMA',
+            indicators,
+          };
+        }
+
         return {
           signal: 'OPEN_SHORT',
           reason: 'Short: fast EMA ниже slow EMA, RSI подтверждает импульс',

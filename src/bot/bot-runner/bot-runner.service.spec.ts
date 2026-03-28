@@ -484,6 +484,103 @@ describe('BotRunnerService', () => {
     resetBotConfigCache();
   });
 
+  it('blocks mean reversion short against strong bullish higher timeframe', () => {
+    process.env.BOT_CONFIRMATION_INTERVAL = '5m';
+    process.env.BOT_CONFIRMATION_MODE = 'lenient';
+    process.env.BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT = '0.002';
+    resetBotConfigCache();
+
+    confirmationMock.getTrend.mockReturnValueOnce({
+      isReady: true,
+      trend: 'BULLISH',
+      trendStrengthPct: 0.003,
+    });
+
+    const meanReversionStrategy = {
+      id: 'mean_reversion',
+      name: 'Mean Reversion',
+      getConfirmationPolicy: jest.fn().mockReturnValue('none'),
+    };
+
+    const refreshedService = new BotRunnerService(
+      marketMock as any,
+      strategyRegistryMock as any,
+      strategyArbitrationMock as any,
+      confirmationMock as any,
+      traderMock as any,
+      portfolioMock as any,
+      riskManagerMock as any,
+      loggerMock as any,
+      scannerMock as any,
+    );
+
+    const filtered = (refreshedService as any).applyConfirmationFilter(
+      'SOLUSDT',
+      meanReversionStrategy,
+      {
+        signal: 'OPEN_SHORT',
+        reason: 'mean reversion short',
+      },
+    );
+
+    expect(filtered.signal).toBe('HOLD');
+    expect(filtered.reason).toContain('против сильного bullish higher timeframe');
+
+    delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_CONFIRMATION_MODE;
+    delete process.env.BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT;
+    resetBotConfigCache();
+  });
+
+  it('downgrades mean reversion reverse against strong bearish higher timeframe to close-only', () => {
+    process.env.BOT_CONFIRMATION_INTERVAL = '5m';
+    process.env.BOT_CONFIRMATION_MODE = 'lenient';
+    process.env.BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT = '0.002';
+    resetBotConfigCache();
+
+    confirmationMock.getTrend.mockReturnValueOnce({
+      isReady: true,
+      trend: 'BEARISH',
+      trendStrengthPct: 0.003,
+    });
+
+    const meanReversionStrategy = {
+      id: 'mean_reversion',
+      name: 'Mean Reversion',
+      getConfirmationPolicy: jest.fn().mockReturnValue('none'),
+    };
+
+    const refreshedService = new BotRunnerService(
+      marketMock as any,
+      strategyRegistryMock as any,
+      strategyArbitrationMock as any,
+      confirmationMock as any,
+      traderMock as any,
+      portfolioMock as any,
+      riskManagerMock as any,
+      loggerMock as any,
+      scannerMock as any,
+    );
+
+    const filtered = (refreshedService as any).applyConfirmationFilter(
+      'SOLUSDT',
+      meanReversionStrategy,
+      {
+        signal: 'REVERSE_TO_LONG',
+        reason: 'mean reversion reverse',
+      },
+    );
+
+    expect(filtered.signal).toBe('CLOSE_SHORT');
+    expect(filtered.forceClose).toBe(true);
+    expect(filtered.reason).toContain('против сильного bearish higher timeframe');
+
+    delete process.env.BOT_CONFIRMATION_INTERVAL;
+    delete process.env.BOT_CONFIRMATION_MODE;
+    delete process.env.BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT;
+    resetBotConfigCache();
+  });
+
   it('rotates out idle symbols when scanner provides new candidates', () => {
     (service as any).watchedSymbols.add('BTCUSDT');
     (service as any).watchedSymbols.add('ETHUSDT');

@@ -74,6 +74,34 @@ const listValue = (value: string | undefined, fallback: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const DEFAULT_ALLOCATOR_ASSETS = 'BTCUSDT,ETHUSDT';
+const DEFAULT_SMA_PERIODS = '20,50,100,200';
+const MIN_CHECK_INTERVAL_MS = 10_000;
+
+// BTC и BTCUSDT — одно и то же: сигналы считаются по парам к USDT
+const allocatorAssetsValue = (value: string | undefined) => [
+  ...new Set(
+    listValue(value, DEFAULT_ALLOCATOR_ASSETS).map((asset) => {
+      const symbol = asset.toUpperCase();
+      return symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    }),
+  ),
+];
+
+// Без единого корректного периода стратегия не работает — берём стандартный набор
+const smaPeriodsValue = (value: string | undefined) => {
+  const parse = (text: string) =>
+    [
+      ...new Set(
+        listValue(text, DEFAULT_SMA_PERIODS)
+          .map(Number)
+          .filter((period) => Number.isInteger(period) && period > 1),
+      ),
+    ].sort((a, b) => a - b);
+  const periods = parse(value ?? '');
+  return periods.length ? periods : parse(DEFAULT_SMA_PERIODS);
+};
+
 const executionMarketTypeValue = (
   value: string | undefined,
 ): 'spot' | 'futures' | 'hybrid' => {
@@ -258,16 +286,8 @@ export const getBotConfig = (): BotConfig => {
       heartbeatMs: numberValue(process.env.BOT_LOG_HEARTBEAT_MS, 5 * 60_000),
     },
     allocator: {
-      assets: listValue(
-        process.env.BOT_ALLOCATOR_ASSETS,
-        'BTCUSDT,ETHUSDT',
-      ).map((asset) => asset.toUpperCase()),
-      smaPeriods: listValue(
-        process.env.BOT_ALLOCATOR_SMA_PERIODS,
-        '20,50,100,200',
-      )
-        .map(Number)
-        .filter((period) => Number.isInteger(period) && period > 1),
+      assets: allocatorAssetsValue(process.env.BOT_ALLOCATOR_ASSETS),
+      smaPeriods: smaPeriodsValue(process.env.BOT_ALLOCATOR_SMA_PERIODS),
       volTarget: numberValue(process.env.BOT_ALLOCATOR_VOL_TARGET, 0),
       volLookbackDays: numberValue(
         process.env.BOT_ALLOCATOR_VOL_LOOKBACK_DAYS,
@@ -286,9 +306,10 @@ export const getBotConfig = (): BotConfig => {
         process.env.BOT_ALLOCATOR_STATE_FILE,
         resolve(process.cwd(), '.allocator-state.json'),
       ),
-      checkIntervalMs: numberValue(
-        process.env.BOT_ALLOCATOR_CHECK_INTERVAL_MS,
-        5 * 60_000,
+      // Чаще раза в 10 секунд проверять бессмысленно: так можно упереться в лимиты биржи
+      checkIntervalMs: Math.max(
+        numberValue(process.env.BOT_ALLOCATOR_CHECK_INTERVAL_MS, 5 * 60_000),
+        MIN_CHECK_INTERVAL_MS,
       ),
       dataRestBaseUrl: stringValue(
         process.env.BOT_ALLOCATOR_DATA_URL,

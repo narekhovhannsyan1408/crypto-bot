@@ -1,3 +1,4 @@
+import { AppLogger } from '../../observability/app-logger';
 import { AllocatorMarketDataService } from '../market-data/allocator-market-data.service';
 import { AllocatorBroker, AllocatorFill } from './allocator-broker';
 
@@ -9,6 +10,7 @@ export class PaperAllocatorBroker implements AllocatorBroker {
     private readonly marketData: AllocatorMarketDataService,
     private readonly feePct: number,
     private readonly slippagePct: number,
+    private readonly journal?: AppLogger,
   ) {}
 
   getPrice(symbol: string) {
@@ -30,6 +32,12 @@ export class PaperAllocatorBroker implements AllocatorBroker {
   async buy(symbol: string, quoteAmount: number): Promise<AllocatorFill> {
     const price = (await this.getPrice(symbol)) * (1 + this.slippagePct);
     const fee = quoteAmount * this.feePct;
+    this.journal?.debug('broker.paper.fill', `Виртуальная покупка ${symbol}`, {
+      symbol,
+      quoteAmount,
+      price,
+      fee,
+    });
     return {
       symbol,
       side: 'BUY',
@@ -45,6 +53,12 @@ export class PaperAllocatorBroker implements AllocatorBroker {
     const price = (await this.getPrice(symbol)) * (1 - this.slippagePct);
     const gross = quantity * price;
     const fee = gross * this.feePct;
+    this.journal?.debug('broker.paper.fill', `Виртуальная продажа ${symbol}`, {
+      symbol,
+      quantity,
+      price,
+      fee,
+    });
     return {
       symbol,
       side: 'SELL',

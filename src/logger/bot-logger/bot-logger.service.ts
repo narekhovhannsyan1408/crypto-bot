@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { AppLogger } from '../../observability/app-logger';
+import { LogLevel } from '../../observability/log.types';
 import { LiveStreamService } from '../../streaming/live-stream/live-stream.service';
 
 @Injectable()
@@ -13,7 +15,11 @@ export class BotLoggerService {
     error: '\x1b[31m',
   };
 
-  constructor(private readonly liveStream: LiveStreamService) {}
+  constructor(
+    private readonly liveStream: LiveStreamService,
+    // Диагностический журнал; в юнит-тестах может отсутствовать
+    @Optional() private readonly journal?: AppLogger,
+  ) {}
 
   private normalizePayload(
     payload: unknown,
@@ -37,7 +43,9 @@ export class BotLoggerService {
     }
 
     if (Array.isArray(payload)) {
-      return payload.map((item) => this.normalizePayload(item, seen, depth + 1));
+      return payload.map((item) =>
+        this.normalizePayload(item, seen, depth + 1),
+      );
     }
 
     if (typeof payload === 'object') {
@@ -59,26 +67,69 @@ export class BotLoggerService {
 
   logCandle(payload: unknown) {
     this.printBlock('СВЕЧА', 'Новая закрытая свеча', payload, 'candle');
+    this.journal?.debug('market.candle', 'Новая закрытая свеча', payload);
   }
 
   logSignal(payload: unknown) {
     this.printBlock('СИГНАЛ', 'Результат стратегии', payload, 'signal');
+    this.journal?.debug('strategy.signal', 'Результат стратегии', payload);
   }
 
-  logTrade(payload: unknown) {
-    this.printBlock('СДЕЛКА', 'Исполнение торгового действия', payload, 'trade');
+  // event = null: только консоль и дашборд (структурированную запись в журнал делает вызывающий)
+  logTrade(payload: unknown, event: string | null = 'trade.executed') {
+    this.printBlock(
+      'СДЕЛКА',
+      'Исполнение торгового действия',
+      payload,
+      'trade',
+    );
+    if (event)
+      this.journal?.info(event, 'Исполнение торгового действия', payload);
   }
 
   logPortfolio(payload: unknown) {
     this.printBlock('ПОРТФЕЛЬ', 'Состояние портфеля', payload, 'portfolio');
+    this.journal?.debug('portfolio.snapshot', 'Состояние портфеля', payload);
   }
 
-  logInfo(message: string, payload?: unknown) {
+  /** event — машиночитаемое имя события для журнала, например allocator.session.started */
+  logInfo(
+    message: string,
+    payload?: unknown,
+    event: string | null = 'bot.info',
+  ) {
     this.printBlock('ИНФО', message, payload, 'info');
+    if (event) this.journal?.info(event, message, payload);
   }
 
-  logError(message: string, payload?: unknown) {
+  logError(
+    message: string,
+    payload?: unknown,
+    event: string | null = 'bot.error',
+  ) {
     this.printBlock('ОШИБКА', message, payload, 'error', true);
+    if (event) this.persistError(event, message, payload, 'error');
+  }
+
+  // Ошибка может прийти сама по себе или внутри объекта ({ symbol, error })
+  private persistError(
+    event: string,
+    message: string,
+    payload: unknown,
+    level: LogLevel,
+  ) {
+    if (!this.journal) return;
+    if (payload instanceof Error) {
+      this.journal.log(level, event, message, { err: payload });
+      return;
+    }
+    const nested =
+      payload && typeof payload === 'object'
+        ? Object.values(payload as Record<string, unknown>).find(
+            (value) => value instanceof Error,
+          )
+        : undefined;
+    this.journal.log(level, event, message, { data: payload, err: nested });
   }
 
   private printBlock(
@@ -88,7 +139,8 @@ export class BotLoggerService {
     colorKey: keyof BotLoggerService['colors'],
     isError = false,
   ) {
-    const normalized = payload !== undefined ? this.normalizePayload(payload) : undefined;
+    const normalized =
+      payload !== undefined ? this.normalizePayload(payload) : undefined;
     const divider = this.colorize(
       colorKey,
       '============================================================',
@@ -143,10 +195,7 @@ export class BotLoggerService {
         }
 
         const [firstLine, ...rest] = itemLines;
-        return [
-          `${indent}- ${firstLine.trimStart()}`,
-          ...rest,
-        ];
+        return [`${indent}- ${firstLine.trimStart()}`, ...rest];
       });
     }
 

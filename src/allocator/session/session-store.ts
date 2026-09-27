@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 import { getBotConfig } from '../../config/bot-config';
+import { AppLogger } from '../../observability/app-logger';
 import { AllocatorSession, SessionSummary } from './session.types';
 
 type StateFile = {
@@ -26,7 +27,22 @@ const MAX_HISTORY = 50;
 @Injectable()
 export class SessionStore {
   private readonly filePath = getBotConfig().allocator.stateFile;
-  private state: StateFile = this.load();
+  private state: StateFile;
+
+  constructor(private readonly journal: AppLogger) {
+    this.state = this.load();
+    const current = this.state.current;
+    this.journal.info('session.store.loaded', 'Состояние сессий загружено', {
+      path: this.filePath,
+      sessionId: current?.id ?? null,
+      status: current?.status ?? null,
+      mode: current?.mode ?? null,
+      lastRebalanceDay: current?.lastRebalanceDay
+        ? new Date(current.lastRebalanceDay).toISOString().slice(0, 10)
+        : null,
+      historyCount: this.state.history.length,
+    });
+  }
 
   getCurrent() {
     return this.state.current;
@@ -60,6 +76,14 @@ export class SessionStore {
     >;
     if (parsed.version !== 2) {
       // Файл старого формата сохраняем рядом и начинаем с чистого состояния
+      this.journal.warn(
+        'session.store.legacy_format',
+        'Файл состояния старого формата сохранён как .bak',
+        {
+          path: this.filePath,
+          version: parsed.version ?? 1,
+        },
+      );
       copyFileSync(
         this.filePath,
         `${this.filePath}.v${parsed.version ?? 1}.bak`,
@@ -75,10 +99,22 @@ export class SessionStore {
   }
 
   private persist() {
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    // Атомарная запись: сначала во временный файл, затем rename
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, JSON.stringify(this.state));
-    renameSync(tempPath, this.filePath);
+    try {
+      mkdirSync(dirname(this.filePath), { recursive: true });
+      // Атомарная запись: сначала во временный файл, затем rename
+      const tempPath = `${this.filePath}.tmp`;
+      writeFileSync(tempPath, JSON.stringify(this.state));
+      renameSync(tempPath, this.filePath);
+    } catch (error) {
+      this.journal.error(
+        'session.store.persist_failed',
+        'Не удалось сохранить состояние на диск',
+        error,
+        {
+          path: this.filePath,
+        },
+      );
+      throw error;
+    }
   }
 }

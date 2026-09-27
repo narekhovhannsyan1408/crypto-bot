@@ -58,7 +58,14 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family:
-    Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -1285,4 +1292,117 @@ main.container {
   .event-time {
     grid-column: 2;
   }
+}
+
+/* ---------- Загрузка, метки, ошибки ---------- */
+
+.loading {
+  display: grid;
+  gap: 12px;
+}
+
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--border) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-title {
+  height: 32px;
+  width: 60%;
+}
+
+.skeleton-line {
+  height: 16px;
+  width: 90%;
+}
+
+.skeleton-line.short {
+  width: 40%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .status-pill .dot {
+    animation: none !important;
+  }
+}
+
+.mode-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mode-tag[data-tone='real'] {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.benchmark {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 620px;
+}
+
+.benchmark b {
+  color: var(--text);
+}
+
+.bot-error {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  font-size: 14px;
+}
+
+.warning-text {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.show-more {
+  display: block;
+  margin: 12px auto 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 600;
+}
+
+fieldset.field {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+fieldset.field legend {
+  padding: 0;
+  margin-bottom: 6px;
 }

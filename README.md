@@ -1447,23 +1447,46 @@ npm run lint
 
 ```text
 src/
-  backtest/
-    backtest-engine/
-  bot/
-    bot-runner/
-  config/
-  logger/
-    bot-logger/
-  market/
-    binance-market/
-  scanner/
-    symbol-scanner/
-  strategy/
-    strategy/
-  trader/
-    paper-trader/
-    portfolio/
-    risk-manager/
+  main.ts                 точка входа: HTTP-сервер NestJS + запуск бота
+  app.module.ts           AppModule.forRoot(mode): внутридневные модули только в режиме intraday
+  app.setup.ts            общая настройка HTTP (статика, заголовки) для main.ts и e2e
+  allocator/              трендовый аллокатор (основной режим)
+    domain/               чистая логика: сигнал, планировщик ребалансировки, симулятор
+    brokers/              paper и Binance Spot, фабрика с переиспользованием подключения
+    market-data/          публичные данные Binance (с таймаутами)
+    session/              сессии, история капитала и лента действий, хранилище на диске
+    engine/               жизненный цикл бота, сигналы, тексты для пользователя, модели UI
+    api/                  REST-контроллер /api/app и разбор запросов
+    cli/                  npm run allocator:backtest
+  web/
+    public/               страницы: index.html (простой режим), advanced.html
+      js/                 ES-модули: api, chart, dialogs, render, format, main
+    security/             проверка Host/Origin и глобальный guard
+    legacy-dashboard/     API и WebSocket расширенного дашборда
+  backtest/               бэктест внутридневных стратегий (npm run backtest)
+  bot/ market/ scanner/ strategy/ trader/   внутридневные стратегии (режим intraday)
+  config/ logger/ streaming/
+test/app.e2e-spec.ts      сквозные тесты HTTP API
+```
+
+### API простого режима
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| `GET` | `/api/app/state?activity=30` | Состояние бота, сессии, последние события |
+| `GET` | `/api/app/chart?range=day\|week\|month\|all` | История капитала (до 600 точек) и отметки сделок |
+| `GET` | `/api/app/balance?mode=live_real` | Свободный USDT на Binance |
+| `POST` | `/api/app/start` | `{ mode, capitalUsdt, autoStopLossPct }` — запуск |
+| `POST` | `/api/app/stop` | Остановить и продать всё |
+
+Изменяющие запросы принимаются только как `application/json` и только со страницы самого дашборда.
+
+### Проверки
+
+```bash
+npm test
+npm run test:e2e
+npm run build
 ```
 
 ## Ограничения текущей версии

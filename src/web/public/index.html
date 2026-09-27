@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Крипто-бот</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b5bdb'/%3E%3Cpath d='M7 21l6-6 4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="/home.css" />
+    <link rel="stylesheet" href="/css/home.css" />
   </head>
   <body>
     <header class="app-header">
@@ -30,6 +30,13 @@
     </div>
 
     <main class="container">
+      <section class="card loading" id="loading-view" aria-busy="true">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line short"></div>
+        <span class="muted small">Подключаемся к боту…</span>
+      </section>
+
       <!-- Запуск -->
       <section class="card hero" id="start-view" hidden>
         <div class="hero-copy">
@@ -66,9 +73,11 @@
       <section id="session-view" hidden>
         <div class="card summary">
           <div class="summary-main">
+            <span class="mode-tag" id="mode-tag"></span>
             <div class="summary-label" id="summary-label">Сейчас у вас</div>
             <div class="big-number" id="equity-value">—</div>
             <div class="delta" id="profit-value">—</div>
+            <div class="benchmark" id="benchmark" hidden></div>
             <div class="summary-meta" id="summary-meta">—</div>
           </div>
           <div class="summary-side">
@@ -80,15 +89,17 @@
           </div>
         </div>
 
+        <div class="bot-error" id="bot-error" role="alert" hidden></div>
+
         <div class="grid-2">
           <div class="card chart-card">
             <div class="card-head">
               <h2>Как менялись ваши деньги</h2>
               <div class="segmented" id="range-buttons" role="group" aria-label="Период графика">
-                <button type="button" data-range="day">День</button>
-                <button type="button" data-range="week">Неделя</button>
-                <button type="button" data-range="month">Месяц</button>
-                <button type="button" data-range="all" class="active">Всё</button>
+                <button type="button" data-range="day" aria-pressed="false">День</button>
+                <button type="button" data-range="week" aria-pressed="false">Неделя</button>
+                <button type="button" data-range="month" aria-pressed="false">Месяц</button>
+                <button type="button" data-range="all" class="active" aria-pressed="true">Всё</button>
               </div>
             </div>
             <div class="chart" id="chart"></div>
@@ -116,6 +127,7 @@
             <span class="muted small" id="activity-count"></span>
           </div>
           <ol class="timeline" id="activity"></ol>
+          <button type="button" class="show-more" id="show-more" hidden>Показать ещё</button>
         </div>
       </section>
 
@@ -174,6 +186,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-    <script src="/home.js"></script>
+    <script type="module" src="/js/main.js"></script>
   </body>
 </html>

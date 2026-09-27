@@ -1,3 +1,4 @@
+import { Msg, ru } from '../../i18n/messages';
 import { ActivityEntry, AllocatorSession, EquityPoint } from './session.types';
 
 const MAX_ACTIVITY = 500;
@@ -5,13 +6,23 @@ const MAX_EQUITY_POINTS = 4000;
 
 export const appendActivity = (
   session: AllocatorSession,
-  entry: Omit<ActivityEntry, 'id' | 'timestamp'> & { timestamp?: number },
+  entry: Omit<
+    ActivityEntry,
+    'id' | 'timestamp' | 'title' | 'details' | 'text'
+  > & {
+    title: Msg;
+    details?: Msg;
+    timestamp?: number;
+  },
 ) => {
-  const timestamp = entry.timestamp ?? Date.now();
+  const { title, details, timestamp = Date.now(), ...facts } = entry;
   session.activity.unshift({
-    ...entry,
+    ...facts,
     timestamp,
     id: `${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+    title: ru(title),
+    details: details ? ru(details) : undefined,
+    text: { title, details },
   });
   session.activity.length = Math.min(session.activity.length, MAX_ACTIVITY);
 };

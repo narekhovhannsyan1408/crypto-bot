@@ -1,21 +1,31 @@
 // Отрисовка состояния бота. Функции получают данные и обновляют DOM — без побочных запросов.
+// Все тексты — из словаря (t, th), сообщения сервера — через tm.
 
 import {
+  ASSET_COLORS,
+  CLUSTER_NAMES,
+  historyRows,
+  REAL_MODES,
+  renderTimeline,
+  stopReasonText,
+  trendClass,
+  trendKey,
+} from './common.js';
+import {
   clamp,
-  dayHeading,
-  dayKey,
   escapeHtml,
   fmtDateTime,
   fmtMoney,
   fmtPct,
   fmtPrice,
   fmtQty,
-  fmtShortDate,
   fmtSignedMoney,
   fmtTime,
   humanDuration,
-  plural,
+  joinList,
+  shortAddress,
 } from './format.js';
+import { t, th, tm } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,8 +37,13 @@ export const el = {
   startView: $('start-view'),
   heroTitle: $('hero-title'),
   heroLead: $('hero-lead'),
+  step1: $('step-1'),
+  explainerWhat: $('explainer-what'),
   startTestBtn: $('start-test-btn'),
   startRealBtn: $('start-real-btn'),
+  startRealSub: $('start-real-sub'),
+  startSolanaBtn: $('start-solana-btn'),
+  startSolanaSub: $('start-solana-sub'),
   sessionView: $('session-view'),
   modeTag: $('mode-tag'),
   summaryLabel: $('summary-label'),
@@ -55,30 +70,6 @@ export const el = {
   historyBody: $('history-body'),
 };
 
-const DEFAULT_HERO = {
-  title: el.heroTitle.textContent,
-  lead: el.heroLead.textContent,
-};
-const SHORT_MODE = {
-  paper: 'Тест',
-  live_testnet: 'Демо',
-  live_real: 'Реальные деньги',
-};
-const ASSET_COLORS = {
-  BTC: 'var(--btc)',
-  ETH: 'var(--eth)',
-  USDT: 'var(--usdt)',
-};
-const EVENT_ICONS = {
-  buy: '↗',
-  sell: '↘',
-  start: '▶',
-  stop: '■',
-  autostop: '🛡',
-  check: '✓',
-  error: '!',
-};
-
 export function renderApp(app) {
   const session = app.session;
   const running = app.status === 'running';
@@ -91,7 +82,7 @@ export function renderApp(app) {
   if (session) {
     renderSummary(session, running);
     renderBotError(app, running);
-    renderNow(session, running);
+    renderNow(session, running, app.solana);
     renderActivity(session);
   }
   renderHistory(app.history, session);
@@ -99,46 +90,62 @@ export function renderApp(app) {
 
 function renderHeader(app, session, running) {
   if (running) {
-    el.statusPill.dataset.tone = session.mode === 'live_real' ? 'real' : 'test';
-    el.statusText.textContent = `Работает · ${SHORT_MODE[session.mode] ?? session.modeLabel}`;
-    document.title = `${fmtMoney(session.equity)} · Крипто-бот`;
+    el.statusPill.dataset.tone = REAL_MODES.has(session.mode) ? 'real' : 'test';
+    el.statusText.textContent = t('status.running', {
+      mode: t(`mode.short.${session.mode}`),
+    });
+    document.title = `${fmtMoney(session.equity)} · ${t('app.name')}`;
   } else {
     el.statusPill.dataset.tone = 'muted';
-    el.statusText.textContent =
-      app.status === 'stopped' ? 'Остановлен' : 'Не запущен';
-    document.title = 'Крипто-бот';
+    el.statusText.textContent = t(
+      app.status === 'stopped' ? 'status.stopped' : 'status.idle',
+    );
+    document.title = t('app.name');
   }
 }
 
 function renderStartView(app) {
-  const running = app.status === 'running';
-  el.startView.hidden = running;
-  el.startView.classList.toggle('compact', app.status === 'stopped');
-  if (app.status === 'stopped') {
-    el.heroTitle.textContent = 'Бот остановлен. Запустить снова?';
-    el.heroLead.textContent =
-      'Ниже — итог последнего запуска. Новый запуск начнётся с чистого листа.';
-  } else {
-    el.heroTitle.textContent = DEFAULT_HERO.title;
-    el.heroLead.textContent = DEFAULT_HERO.lead;
-  }
+  const stopped = app.status === 'stopped';
+  el.startView.hidden = app.status === 'running';
+  el.startView.classList.toggle('compact', stopped);
+  // Названия активов из настроек: BTC и ETH по умолчанию, SOL — если добавлен
+  const assets = joinList(app.strategy.assets.map((asset) => asset.name));
+  el.heroTitle.textContent = stopped
+    ? t('hero.stoppedTitle')
+    : t('hero.title', { assets });
+  el.step1.innerHTML = th('steps.1', { assets });
+  el.explainerWhat.innerHTML = th('explainer.what', { assets });
+  el.heroLead.textContent = t(stopped ? 'hero.stoppedLead' : 'hero.lead');
 
-  el.startRealBtn.querySelector('.start-sub').textContent = app.readiness
-    .live_real.available
-    ? 'Бот торгует на вашем аккаунте Binance. Возможны убытки — вкладывайте только то, что готовы потерять.'
-    : 'Сначала нужно подключить аккаунт Binance — нажмите, и мы покажем, как это сделать.';
+  el.startRealSub.textContent = t(
+    app.readiness.live_real.available
+      ? 'start.real.subReady'
+      : 'start.real.subSetup',
+  );
+
+  const proof = app.solana.proof;
+  el.startSolanaSub.textContent = [
+    t('start.solana.sub'),
+    t(
+      app.readiness.solana_real.available
+        ? 'start.solana.subBoth'
+        : 'start.solana.subSim',
+    ),
+    proof.enabled && proof.address
+      ? t('start.solana.subProof', {
+          cluster: CLUSTER_NAMES[proof.cluster] ?? proof.cluster,
+        })
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 function renderSummary(session, running) {
-  const real = session.mode === 'live_real';
-  el.modeTag.textContent = real
-    ? 'Реальные деньги · Binance'
-    : session.mode === 'live_testnet'
-      ? 'Демо-счёт Binance · деньги ненастоящие'
-      : 'Тестовый режим · деньги виртуальные';
-  el.modeTag.dataset.tone = real ? 'real' : 'test';
+  el.modeTag.textContent = t(`mode.tag.${session.mode}`);
+  el.modeTag.dataset.tone = REAL_MODES.has(session.mode) ? 'real' : 'test';
 
-  el.summaryLabel.textContent = running ? 'Сейчас у вас' : 'Итог запуска';
+  el.summaryLabel.textContent = t(running ? 'summary.now' : 'summary.result');
   el.equityValue.textContent = fmtMoney(session.equity);
 
   const tone =
@@ -149,43 +156,56 @@ function renderSummary(session, running) {
         : 'neutral';
   const arrow = tone === 'positive' ? '▲' : tone === 'negative' ? '▼' : '•';
   el.profitValue.className = `delta ${tone}`;
-  el.profitValue.textContent = `${arrow} ${fmtSignedMoney(session.profit)} (${fmtPct(session.profitPct)}) ${running ? 'с начала' : 'за запуск'}`;
+  el.profitValue.textContent = `${arrow} ${fmtSignedMoney(session.profit)} (${fmtPct(session.profitPct)}) ${t(running ? 'summary.sinceStart' : 'summary.forRun')}`;
 
   el.benchmark.hidden = !session.benchmark;
   if (session.benchmark) {
     const diff = session.equity - session.benchmark.equity;
     const verdict =
       Math.abs(diff) < session.initialCapital * 0.002
-        ? 'примерно столько же, сколько у бота'
+        ? t('benchmark.same')
         : diff > 0
-          ? `бот впереди на ${fmtMoney(diff)}`
-          : `бот позади на ${fmtMoney(-diff)}`;
-    el.benchmark.innerHTML = `Для сравнения: если бы просто купили ${escapeHtml(
-      session.assets.map((asset) => asset.base).join(' и '),
-    )} на старте — <b>${fmtMoney(session.benchmark.equity)}</b> (${fmtPct(session.benchmark.profitPct)}), ${verdict}.`;
+          ? t('benchmark.ahead', { amount: fmtMoney(diff) })
+          : t('benchmark.behind', { amount: fmtMoney(-diff) });
+    el.benchmark.innerHTML = th('benchmark.text', {
+      assets: joinList(session.assets.map((asset) => asset.base)),
+      equity: fmtMoney(session.benchmark.equity),
+      pct: fmtPct(session.benchmark.profitPct),
+      verdict,
+    });
   }
 
   const period = running
-    ? `работает ${humanDuration(Date.now() - session.startedAt)}`
+    ? t('summary.runningFor', {
+        duration: humanDuration(Date.now() - session.startedAt),
+      })
     : `${fmtDateTime(session.startedAt)} — ${fmtDateTime(session.stoppedAt)}`;
   const fees =
     session.feesPaid > 0
-      ? ` · комиссии биржи ${fmtMoney(session.feesPaid)}`
+      ? t(session.venue === 'Solana' ? 'summary.networkFees' : 'summary.fees', {
+          amount: fmtMoney(session.feesPaid),
+        })
       : '';
-  el.summaryMeta.textContent = `Начали с ${fmtMoney(session.initialCapital)} · ${period}${fees}`;
+  el.summaryMeta.textContent = t('summary.meta', {
+    capital: fmtMoney(session.initialCapital),
+    period,
+    fees,
+  });
 
   el.stopBtn.hidden = !running;
   el.protection.hidden = !running;
   el.stoppedNote.hidden = running;
 
   if (!running) {
-    el.stoppedNote.textContent = `Бот остановлен ${fmtDateTime(session.stoppedAt)}. ${session.stopReason || ''}`;
+    el.stoppedNote.textContent = t('stopped.note', {
+      time: fmtDateTime(session.stoppedAt),
+      reason: stopReasonText(session),
+    });
     return;
   }
 
   if (session.autoStopEquity === null) {
-    el.protection.innerHTML =
-      'Автозащита выключена: бот не остановится сам при убытке. Остановить его можно кнопкой выше.';
+    el.protection.textContent = t('protection.off');
     return;
   }
 
@@ -197,50 +217,53 @@ function renderSummary(session, running) {
   );
   const meterClass = ratio < 0.2 ? 'danger' : ratio < 0.5 ? 'warn' : '';
   el.protection.innerHTML = `
-    🛡 <b>Автозащита включена.</b> Если капитал опустится до <b>${fmtMoney(session.autoStopEquity)}</b>
-    (−${Math.round(session.autoStopLossPct * 100)}% от старта), бот сам продаст всё и остановится.
-    Запас: <b>${fmtMoney(Math.max(cushion, 0))}</b>.
-    <div class="meter ${meterClass}" role="progressbar" aria-label="Запас до автозащиты"
+    ${th('protection.on', {
+      threshold: fmtMoney(session.autoStopEquity),
+      pct: Math.round(session.autoStopLossPct * 100),
+      cushion: fmtMoney(Math.max(cushion, 0)),
+    })}
+    <div class="meter ${meterClass}" role="progressbar" aria-label="${escapeHtml(t('protection.meterLabel'))}"
       aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(ratio * 100)}">
       <span style="width:${(ratio * 100).toFixed(1)}%"></span>
     </div>`;
 }
 
 function renderBotError(app, running) {
+  const session = app.session;
   el.botError.hidden = !(running && app.lastError);
   if (running && app.lastError) {
-    el.botError.innerHTML = `<b>Бот не смог связаться с биржей.</b> ${escapeHtml(
-      app.lastError,
-    )}. Он повторит попытку сам — делать ничего не нужно. Если сообщение не пропадает долго, проверьте интернет.`;
+    el.botError.innerHTML = th('botError.text', {
+      venue: t(session.venue === 'Solana' ? 'venue.solana' : 'venue.exchange'),
+      detail: tm(app.lastError),
+    });
   }
 }
 
-function trendClass(votes, total) {
-  if (votes === null || votes === undefined) return 'none';
-  if (votes === total) return 'up';
-  if (votes / total >= 0.5) return 'mid';
-  return 'down';
-}
-
-function renderNow(session, running) {
-  el.nowTitle.textContent = running
-    ? 'Что сейчас делает бот'
-    : 'Где были деньги в конце';
+function renderNow(session, running, solana) {
+  const quote = session.quoteAsset ?? 'USDT';
+  el.nowTitle.textContent = t(running ? 'now.titleRunning' : 'now.titleStopped');
 
   const invested = session.assets.filter((asset) => asset.weightPct >= 1);
   if (running && session.lastDecisionDay === null) {
-    el.nowSummary.textContent =
-      'Бот анализирует рынок и принимает первое решение…';
+    el.nowSummary.textContent = t('now.firstDecision');
   } else if (invested.length === 0) {
-    el.nowSummary.textContent = running
-      ? 'Все деньги в USDT: рынок сейчас не растёт, бот ждёт восходящего тренда.'
-      : 'Все монеты проданы, деньги в USDT.';
-  } else {
-    const parts = invested.map(
-      (asset) => `${Math.round(asset.weightPct)}% в ${asset.name}`,
+    el.nowSummary.textContent = t(
+      running ? 'now.allCashRunning' : 'now.allCashStopped',
+      { quote },
     );
+  } else {
     const cash = Math.round(session.cashWeightPct);
-    el.nowSummary.textContent = `Держит ${parts.join(' и ')}${cash >= 1 ? `, ${cash}% в USDT` : ''}.`;
+    el.nowSummary.textContent = t('now.holds', {
+      parts: joinList(
+        invested.map((asset) =>
+          t('now.holdPart', {
+            pct: Math.round(asset.weightPct),
+            name: asset.name,
+          }),
+        ),
+      ),
+      cash: cash >= 1 ? t('now.cashPart', { pct: cash, quote }) : '',
+    });
   }
 
   const segments = [
@@ -249,7 +272,7 @@ function renderNow(session, running) {
       label: asset.name,
       pct: asset.weightPct,
     })),
-    { key: 'USDT', label: 'USDT', pct: session.cashWeightPct },
+    { key: quote, label: quote, pct: session.cashWeightPct },
   ];
   el.allocBar.innerHTML = segments
     .filter((segment) => segment.pct > 0.05)
@@ -268,86 +291,78 @@ function renderNow(session, running) {
   const rows = session.assets.map((asset) => {
     const hasSignal = asset.targetWeightPct !== null;
     const badge = hasSignal
-      ? `<span class="trend-badge ${trendClass(asset.trendVotes, asset.trendTotal)}" title="Цена выше ${asset.trendVotes} из ${asset.trendTotal} средних">${escapeHtml(asset.trendLabel)} · ${asset.trendVotes}/${asset.trendTotal}</span>`
-      : '<span class="trend-badge none">Ждёт анализа</span>';
-    const course = asset.price ? ` · курс ${fmtPrice(asset.price)}` : '';
+      ? `<span class="trend-badge ${trendClass(asset.trendVotes, asset.trendTotal)}" title="${escapeHtml(t('trend.tooltip', { votes: asset.trendVotes, total: asset.trendTotal }))}">${escapeHtml(t(trendKey(asset.trendVotes, asset.trendTotal)))} · ${asset.trendVotes}/${asset.trendTotal}</span>`
+      : `<span class="trend-badge none">${escapeHtml(t('asset.waiting'))}</span>`;
+    const rate = asset.price
+      ? t('asset.rate', { price: fmtPrice(asset.price) })
+      : '';
     const holding =
       asset.quantity > 0
-        ? `${fmtQty(asset.quantity)} ${escapeHtml(asset.base)}${course}`
-        : `Не куплен${course}`;
+        ? `${fmtQty(asset.quantity)} ${asset.base}${rate}`
+        : t('asset.notBought', { rate });
     return `
       <div class="asset">
         <span class="asset-icon" style="background:${ASSET_COLORS[asset.base] ?? 'var(--accent)'}">${escapeHtml(asset.base)}</span>
         <div class="asset-name">${escapeHtml(asset.name)}${badge}</div>
         <div class="asset-value">${fmtMoney(asset.value)}</div>
-        <div class="asset-sub">${holding}</div>
-        <div class="asset-sub asset-target">${hasSignal ? `цель ${Math.round(asset.targetWeightPct)}%` : ''}</div>
+        <div class="asset-sub">${escapeHtml(holding)}</div>
+        <div class="asset-sub asset-target">${hasSignal ? escapeHtml(t('asset.target', { pct: Math.round(asset.targetWeightPct) })) : ''}</div>
       </div>`;
   });
   rows.push(`
     <div class="asset">
-      <span class="asset-icon" style="background:${ASSET_COLORS.USDT}">$</span>
-      <div class="asset-name">Доллары (USDT)</div>
+      <span class="asset-icon" style="background:${ASSET_COLORS[quote] ?? ASSET_COLORS.USDT}">$</span>
+      <div class="asset-name">${escapeHtml(t('asset.cash', { quote }))}</div>
       <div class="asset-value">${fmtMoney(session.cash)}</div>
-      <div class="asset-sub">Свободные деньги бота</div>
+      <div class="asset-sub">${escapeHtml(t('asset.cashSub'))}</div>
       <div class="asset-sub asset-target"></div>
     </div>`);
+  if (session.venue === 'Solana') {
+    const tokens = th('now.solanaTokens', {
+      tokens: solana.tokens
+        .map((token) => `${token.base} → ${token.symbol}`)
+        .join(', '),
+    });
+    const wallet =
+      session.mode === 'solana_real' && solana.walletAddress
+        ? ` ${th('now.wallet', { address: shortAddress(solana.walletAddress) })}`
+        : '';
+    rows.push(`<div class="chain-note">${tokens}${wallet}</div>`);
+  }
   el.assetList.innerHTML = rows.join('');
 
   el.nextDecision.hidden = !running || !session.nextDecisionAt;
   if (running && session.nextDecisionAt) {
     const next = new Date(session.nextDecisionAt);
-    const day =
-      next.toDateString() === new Date().toDateString() ? 'сегодня' : 'завтра';
-    const prices = session.pricesStale
-      ? ` <span class="warning-text">⚠ Цены не обновлялись с ${fmtTime(session.pricesUpdatedAt ?? Date.now())} — проверьте интернет.</span>`
-      : session.pricesUpdatedAt
-        ? ` Цены обновлены в ${fmtTime(session.pricesUpdatedAt)}.`
+    const today = next.toDateString() === new Date().toDateString();
+    const proof = solana.proof;
+    const proofNote =
+      proof.enabled && proof.address
+        ? ` ${th('next.proof', {
+            cluster: CLUSTER_NAMES[proof.cluster] ?? proof.cluster,
+          })}`
         : '';
-    el.nextDecision.innerHTML = `Следующее решение: <b>${day} около ${fmtTime(session.nextDecisionAt)}</b> (через ${humanDuration(session.nextDecisionAt - Date.now())}). Между решениями бот следит за ценами и автозащитой.${prices}`;
+    const prices = session.pricesStale
+      ? ` <span class="warning-text">${th('next.pricesStale', {
+          time: fmtTime(session.pricesUpdatedAt ?? Date.now()),
+        })}</span>`
+      : session.pricesUpdatedAt
+        ? ` ${th('next.pricesUpdated', { time: fmtTime(session.pricesUpdatedAt) })}`
+        : '';
+    el.nextDecision.innerHTML = `${th('next.decision', {
+      day: t(today ? 'next.today' : 'next.tomorrow'),
+      time: fmtTime(session.nextDecisionAt),
+      duration: humanDuration(session.nextDecisionAt - Date.now()),
+    })}${proofNote}${prices}`;
   }
 }
 
 function renderActivity(session) {
-  const items = session.activity;
-  el.activityCount.textContent = `${session.activityTotal} ${plural(session.activityTotal, ['событие', 'события', 'событий'])}`;
-  el.showMore.hidden = items.length >= session.activityTotal;
-
-  if (items.length === 0) {
-    el.activity.innerHTML = '<li class="empty">Пока ничего не произошло.</li>';
-    return;
-  }
-
-  let currentDay = null;
-  const html = [];
-  for (const entry of items) {
-    const key = dayKey(entry.timestamp);
-    if (key !== currentDay) {
-      currentDay = key;
-      html.push(
-        `<li class="day">${escapeHtml(dayHeading(entry.timestamp))}</li>`,
-      );
-    }
-    let facts = '';
-    if (
-      (entry.kind === 'buy' || entry.kind === 'sell') &&
-      entry.quantity !== undefined
-    ) {
-      const base = entry.symbol ? entry.symbol.replace(/USDT$/, '') : '';
-      facts = `<div class="event-facts">${fmtQty(entry.quantity)} ${escapeHtml(base)} по ${fmtPrice(entry.price)} · ${entry.kind === 'buy' ? 'потрачено' : 'получено'} ${fmtMoney(entry.quoteAmount)} · комиссия ${fmtMoney(entry.fee || 0)}</div>`;
-    }
-    html.push(`
-      <li class="event">
-        <span class="event-icon ${escapeHtml(entry.kind)}" aria-hidden="true">${EVENT_ICONS[entry.kind] ?? '•'}</span>
-        <div>
-          <div class="event-title">${escapeHtml(entry.title)}</div>
-          ${entry.details ? `<div class="event-details">${escapeHtml(entry.details)}</div>` : ''}
-          ${facts}
-        </div>
-        <time class="event-time" datetime="${new Date(entry.timestamp).toISOString()}">${fmtTime(entry.timestamp)}</time>
-      </li>`);
-  }
-  el.activity.innerHTML = html.join('');
+  el.activityCount.textContent = t('activity.count', {
+    count: session.activityTotal,
+  });
+  el.showMore.hidden = session.activity.length >= session.activityTotal;
+  el.activity.innerHTML = renderTimeline(session.activity, session.venue);
 }
 
 function renderHistory(history, session) {
@@ -355,16 +370,5 @@ function renderHistory(history, session) {
     (item) => !session || item.id !== session.id,
   );
   el.historyCard.hidden = rows.length === 0;
-  el.historyBody.innerHTML = rows
-    .map(
-      (item) => `
-      <tr>
-        <td>${fmtShortDate(item.startedAt)} — ${fmtShortDate(item.stoppedAt)}</td>
-        <td>${escapeHtml(item.modeLabel)}</td>
-        <td>${fmtMoney(item.initialCapital)}</td>
-        <td>${fmtMoney(item.finalEquity)}</td>
-        <td class="${item.profit >= 0 ? 'positive-text' : 'negative-text'}">${fmtSignedMoney(item.profit)} (${fmtPct(item.profitPct)})</td>
-      </tr>`,
-    )
-    .join('');
+  el.historyBody.innerHTML = historyRows(rows);
 }

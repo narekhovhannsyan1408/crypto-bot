@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LocalizedError, msg } from '../../i18n/messages';
 import {
   computeTrendSignal,
   getRequiredHistoryDays,
@@ -27,17 +28,15 @@ export class SignalService {
           now,
         );
         if (closes.at(-1)?.day !== day) {
-          throw new Error(
-            `Дневная свеча ${symbol} за ${new Date(day).toISOString().slice(0, 10)} ещё не доступна`,
-          );
+          throw new LocalizedError(msg('err.candleNotReady', { symbol, day }));
         }
         const signal = computeTrendSignal(
           closes.map((item) => item.close),
           params,
         );
         if (!signal.isReady) {
-          throw new Error(
-            `Недостаточно истории для сигнала ${symbol}: ${closes.length} дней`,
+          throw new LocalizedError(
+            msg('err.notEnoughHistory', { symbol, count: closes.length }),
           );
         }
         return {

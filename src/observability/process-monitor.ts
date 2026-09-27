@@ -29,6 +29,17 @@ export const describeConfig = (config: BotConfig) => ({
     stateFile: config.allocator.stateFile,
     dataRestBaseUrl: config.allocator.dataRestBaseUrl,
   },
+  solana: {
+    rpcUrl: config.solana.rpcUrl,
+    jupiterApiUrl: config.solana.jupiterApiUrl,
+    walletConfigured: Boolean(
+      config.solana.privateKey || config.solana.keypairPath,
+    ),
+    allowReal: config.solana.allowReal,
+    slippageBps: config.solana.slippageBps,
+    proofEnabled: config.solana.proof.enabled,
+    proofCluster: config.solana.proof.cluster,
+  },
   feePct: config.feePct,
   slippagePct: config.slippagePct,
   logging: config.logging,

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Крипто-бот</title>
+    <title>Crypto Bot</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b5bdb'/%3E%3Cpath d='M7 21l6-6 4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/css/home.css" />
   </head>
@@ -14,19 +14,20 @@
           <span class="brand-logo" aria-hidden="true">
             <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" /><path d="M7 21l6-6 4 4 8-9" /></svg>
           </span>
-          <span class="brand-name">Крипто-бот</span>
+          <span class="brand-name" data-i18n="app.name">Crypto Bot</span>
         </div>
         <div class="header-right">
           <span class="status-pill" id="status-pill" data-tone="muted">
-            <span class="dot"></span><span id="status-text">Загрузка…</span>
+            <span class="dot"></span><span id="status-text" data-i18n="status.loading">Loading…</span>
           </span>
-          <a class="header-link" href="/advanced">Для специалистов</a>
+          <div id="lang-switch"></div>
+          <a class="header-link" href="/advanced" data-i18n="header.advanced">Advanced</a>
         </div>
       </div>
     </header>
 
-    <div class="offline-banner" id="offline-banner" hidden>
-      Нет связи с ботом. Проверьте, что программа запущена — страница обновится сама.
+    <div class="offline-banner" id="offline-banner" data-i18n="offline.banner" hidden>
+      No connection to the bot. Make sure the program is running — the page will refresh by itself.
     </div>
 
     <main class="container">
@@ -34,38 +35,44 @@
         <div class="skeleton skeleton-title"></div>
         <div class="skeleton skeleton-line"></div>
         <div class="skeleton skeleton-line short"></div>
-        <span class="muted small">Подключаемся к боту…</span>
+        <span class="muted small" data-i18n="loading.text">Connecting to the bot…</span>
       </section>
 
       <!-- Запуск -->
       <section class="card hero" id="start-view" hidden>
         <div class="hero-copy">
-          <h1 id="hero-title">Бот сам решает, когда держать Bitcoin и Ethereum, а когда переждать в долларах</h1>
+          <h1 id="hero-title">The bot decides when to hold Bitcoin and Ethereum and when to wait it out in dollars</h1>
           <p class="lead" id="hero-lead">
-            Раз в сутки он проверяет, растёт рынок или падает, и сам покупает или продаёт.
-            Вам нужно только выбрать режим и нажать «Начать».
+            Once a day it checks whether the market is rising or falling, then buys or sells on its own.
           </p>
         </div>
         <div class="start-actions">
           <button class="start-button start-test" id="start-test-btn" type="button">
             <span class="start-icon" aria-hidden="true">▶</span>
             <span>
-              <span class="start-title">Начать в тестовом режиме</span>
-              <span class="start-sub">Виртуальные деньги и настоящие цены. Никакого риска — можно спокойно посмотреть, как работает бот.</span>
+              <span class="start-title" data-i18n="start.test.title">Start in test mode</span>
+              <span class="start-sub" data-i18n="start.test.sub">Virtual money and real prices. No risk — see how the bot works at your own pace.</span>
             </span>
           </button>
           <button class="start-button start-real" id="start-real-btn" type="button">
             <span class="start-icon" aria-hidden="true">▶</span>
             <span>
-              <span class="start-title">Начать с реальными деньгами</span>
-              <span class="start-sub">Бот торгует на вашем аккаунте Binance. Возможны убытки — вкладывайте только то, что готовы потерять.</span>
+              <span class="start-title" data-i18n="start.real.title">Start with real money</span>
+              <span class="start-sub" id="start-real-sub"></span>
+            </span>
+          </button>
+          <button class="start-button start-solana" id="start-solana-btn" type="button">
+            <span class="start-icon" aria-hidden="true">◎</span>
+            <span>
+              <span class="start-title" data-i18n="start.solana.title">Start on Solana</span>
+              <span class="start-sub" id="start-solana-sub"></span>
             </span>
           </button>
         </div>
         <ol class="steps">
-          <li><span class="step-num">1</span><span><b>Каждый день</b> бот оценивает тренд Bitcoin и Ethereum.</span></li>
-          <li><span class="step-num">2</span><span><b>Рынок растёт</b> — держит монеты. <b>Падает</b> — продаёт и ждёт в USDT (цифровой доллар).</span></li>
-          <li><span class="step-num">3</span><span><b>Вы видите</b> каждое действие и можете остановить бота одной кнопкой.</span></li>
+          <li><span class="step-num">1</span><span id="step-1"></span></li>
+          <li><span class="step-num">2</span><span data-i18n-html="steps.2"></span></li>
+          <li><span class="step-num">3</span><span data-i18n-html="steps.3"></span></li>
         </ol>
       </section>
 
@@ -74,7 +81,7 @@
         <div class="card summary">
           <div class="summary-main">
             <span class="mode-tag" id="mode-tag"></span>
-            <div class="summary-label" id="summary-label">Сейчас у вас</div>
+            <div class="summary-label" id="summary-label"></div>
             <div class="big-number" id="equity-value">—</div>
             <div class="delta" id="profit-value">—</div>
             <div class="benchmark" id="benchmark" hidden></div>
@@ -82,7 +89,7 @@
           </div>
           <div class="summary-side">
             <button class="stop-button" id="stop-btn" type="button">
-              <span aria-hidden="true">■</span> Остановить и продать всё
+              <span aria-hidden="true">■</span> <span data-i18n="stop.button">Stop and sell everything</span>
             </button>
             <div class="protection" id="protection"></div>
             <div class="stopped-note" id="stopped-note" hidden></div>
@@ -94,25 +101,25 @@
         <div class="grid-2">
           <div class="card chart-card">
             <div class="card-head">
-              <h2>Как менялись ваши деньги</h2>
-              <div class="segmented" id="range-buttons" role="group" aria-label="Период графика">
-                <button type="button" data-range="day" aria-pressed="false">День</button>
-                <button type="button" data-range="week" aria-pressed="false">Неделя</button>
-                <button type="button" data-range="month" aria-pressed="false">Месяц</button>
-                <button type="button" data-range="all" class="active" aria-pressed="true">Всё</button>
+              <h2 data-i18n="chart.title">How your money changed</h2>
+              <div class="segmented" id="range-buttons" role="group" data-i18n-attr="aria-label:chart.rangeLabel">
+                <button type="button" data-range="day" aria-pressed="false" data-i18n="chart.range.day">Day</button>
+                <button type="button" data-range="week" aria-pressed="false" data-i18n="chart.range.week">Week</button>
+                <button type="button" data-range="month" aria-pressed="false" data-i18n="chart.range.month">Month</button>
+                <button type="button" data-range="all" class="active" aria-pressed="true" data-i18n="chart.range.all">All</button>
               </div>
             </div>
             <div class="chart" id="chart"></div>
             <div class="chart-legend">
-              <span><i class="lg-line"></i>Ваш капитал</span>
-              <span><i class="lg-base"></i>Сумма на старте</span>
-              <span><i class="lg-buy"></i>Покупка</span>
-              <span><i class="lg-sell"></i>Продажа</span>
+              <span><i class="lg-line"></i><span data-i18n="chart.legend.equity">Your capital</span></span>
+              <span><i class="lg-base"></i><span data-i18n="chart.legend.base">Starting amount</span></span>
+              <span><i class="lg-buy"></i><span data-i18n="chart.legend.buy">Buy</span></span>
+              <span><i class="lg-sell"></i><span data-i18n="chart.legend.sell">Sell</span></span>
             </div>
           </div>
 
           <div class="card now-card">
-            <h2 id="now-title">Что сейчас делает бот</h2>
+            <h2 id="now-title"></h2>
             <p class="now-summary" id="now-summary"></p>
             <div class="alloc-bar" id="alloc-bar"></div>
             <div class="alloc-legend" id="alloc-legend"></div>
@@ -123,20 +130,26 @@
 
         <div class="card">
           <div class="card-head">
-            <h2>Что делал бот</h2>
+            <h2 data-i18n="activity.title">What the bot did</h2>
             <span class="muted small" id="activity-count"></span>
           </div>
           <ol class="timeline" id="activity"></ol>
-          <button type="button" class="show-more" id="show-more" hidden>Показать ещё</button>
+          <button type="button" class="show-more" id="show-more" data-i18n="activity.showMore" hidden>Show more</button>
         </div>
       </section>
 
       <section class="card" id="history-card" hidden>
-        <h2>Прошлые запуски</h2>
+        <h2 data-i18n="history.title">Past runs</h2>
         <div class="table-wrap">
           <table class="history-table">
             <thead>
-              <tr><th>Период</th><th>Режим</th><th>Начали с</th><th>Закончили с</th><th>Результат</th></tr>
+              <tr>
+                <th data-i18n="history.period">Period</th>
+                <th data-i18n="history.mode">Mode</th>
+                <th data-i18n="history.start">Started with</th>
+                <th data-i18n="history.end">Ended with</th>
+                <th data-i18n="history.result">Result</th>
+              </tr>
             </thead>
             <tbody id="history-body"></tbody>
           </table>
@@ -145,41 +158,42 @@
 
       <section class="card explainer">
         <details>
-          <summary>Как работает бот — простыми словами</summary>
+          <summary data-i18n="explainer.summary">How the bot works — in plain words</summary>
           <div class="explainer-body">
-            <p><b>Что покупает.</b> Только Bitcoin и Ethereum — две самые крупные и ликвидные криптовалюты. Капитал делится между ними поровну. Другие монеты на истории не давали преимущества, а рисков у них больше.</p>
-            <p><b>Как решает.</b> Раз в сутки, после закрытия дня (00:00 по UTC), бот сравнивает цену с её средним значением за 20, 50, 100 и 200 дней. Цена выше всех четырёх средних — рынок растёт, бот держит монету. Ниже всех — рынок падает, бот продаёт её и ждёт в USDT. Сигналы смешанные — держит часть.</p>
-            <p><b>Сколько сделок.</b> Немного — обычно несколько в месяц. Биржа берёт комиссию около 0,1% с каждой сделки, она уже учтена в результате.</p>
-            <p><b>Что было на истории.</b> С 2018 по 2026 год такой подход давал в среднем около +42% в год против +23% у простой покупки и хранения. Но бывали тяжёлые периоды: капитал временно проседал почти вдвое, а в 2018 и 2022 годах бот терял 25–30% за год. <b>Прошлые результаты не гарантируют будущих.</b></p>
-            <p><b>Автозащита.</b> При запуске можно выбрать порог: если капитал упадёт ниже него, бот сам продаст всё и остановится. Слишком строгий порог может остановить бота на обычной временной просадке, после которой рынок бы восстановился.</p>
-            <p><b>Ваши остальные деньги.</b> В реальном режиме бот управляет только суммой, которую вы ему выделили, и монетами, которые купил сам. Остальные средства на аккаунте Binance он не трогает.</p>
+            <p id="explainer-what"></p>
+            <p data-i18n-html="explainer.how"></p>
+            <p data-i18n-html="explainer.trades"></p>
+            <p data-i18n-html="explainer.history"></p>
+            <p data-i18n-html="explainer.autostop"></p>
+            <p data-i18n-html="explainer.solana"></p>
+            <p data-i18n-html="explainer.otherMoney"></p>
           </div>
         </details>
       </section>
 
-      <footer class="footer">Это программа для автоматической торговли, а не инвестиционная рекомендация.</footer>
+      <footer class="footer" data-i18n="footer">This is an automated trading program, not investment advice.</footer>
     </main>
 
     <dialog class="modal" id="start-dialog">
       <form method="dialog" class="modal-body" id="start-form" novalidate>
-        <h2 id="start-dialog-title">Запуск</h2>
+        <h2 id="start-dialog-title"></h2>
         <div id="start-dialog-content"></div>
         <p class="form-error" id="start-error" hidden></p>
         <div class="modal-actions">
-          <button type="button" class="btn-secondary" id="start-cancel">Отмена</button>
-          <button type="submit" class="btn-primary" id="start-confirm">Начать</button>
+          <button type="button" class="btn-secondary" id="start-cancel" data-i18n="dialog.cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="start-confirm" data-i18n="dialog.start">Start</button>
         </div>
       </form>
     </dialog>
 
     <dialog class="modal" id="stop-dialog">
       <form method="dialog" class="modal-body" id="stop-form">
-        <h2>Остановить бота?</h2>
-        <p id="stop-dialog-text">Бот продаст все свои монеты в USDT и остановится. Результат зафиксируется.</p>
+        <h2 data-i18n="stop.title">Stop the bot?</h2>
+        <p id="stop-dialog-text"></p>
         <p class="form-error" id="stop-error" hidden></p>
         <div class="modal-actions">
-          <button type="button" class="btn-secondary" id="stop-cancel">Продолжить работу</button>
-          <button type="submit" class="btn-danger" id="stop-confirm">Да, остановить и продать всё</button>
+          <button type="button" class="btn-secondary" id="stop-cancel" data-i18n="stop.keep">Keep running</button>
+          <button type="submit" class="btn-danger" id="stop-confirm" data-i18n="stop.confirm">Yes, stop and sell everything</button>
         </div>
       </form>
     </dialog>

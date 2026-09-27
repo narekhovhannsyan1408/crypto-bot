@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LocalizedError, msg } from '../../i18n/messages';
 import axios, {
   AxiosError,
   AxiosInstance,
@@ -110,13 +111,17 @@ export class AllocatorMarketDataService {
     for (const item of response.data) {
       const price = Number(item.price);
       if (!Number.isFinite(price) || price <= 0) {
-        throw new Error(`Некорректная цена ${item.symbol}: ${item.price}`);
+        throw new LocalizedError(
+          msg('err.priceInvalid', { symbol: item.symbol, price: item.price }),
+        );
       }
       prices[item.symbol] = price;
     }
     for (const symbol of symbols) {
       if (prices[symbol] === undefined) {
-        throw new Error(`Binance не вернул цену ${symbol}`);
+        throw new LocalizedError(
+          msg('err.priceMissing', { source: 'Binance', symbol }),
+        );
       }
     }
     return prices;

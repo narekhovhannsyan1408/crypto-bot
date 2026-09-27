@@ -62,6 +62,18 @@ const executionModeValue = (
   return 'paper';
 };
 
+// По умолчанию — трендовый аллокатор; старые внутридневные стратегии только явно
+const strategyModeValue = (
+  value: string | undefined,
+): 'intraday' | 'trend_allocator' =>
+  value?.trim().toLowerCase() === 'intraday' ? 'intraday' : 'trend_allocator';
+
+const listValue = (value: string | undefined, fallback: string) =>
+  (value?.trim() ? value : fallback)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const executionMarketTypeValue = (
   value: string | undefined,
 ): 'spot' | 'futures' | 'hybrid' => {
@@ -71,7 +83,22 @@ const executionMarketTypeValue = (
   return 'spot';
 };
 
+export type AllocatorConfig = {
+  assets: string[];
+  smaPeriods: number[];
+  volTarget: number;
+  volLookbackDays: number;
+  rebalanceThresholdPct: number;
+  minOrderUsdt: number;
+  paperInitialBalance: number;
+  stateFile: string;
+  checkIntervalMs: number;
+  dataRestBaseUrl: string;
+};
+
 export type BotConfig = {
+  strategyMode: 'intraday' | 'trend_allocator';
+  allocator: AllocatorConfig;
   symbol: string;
   interval: string;
   confirmationInterval: string | null;
@@ -148,6 +175,35 @@ export const getBotConfig = (): BotConfig => {
   }
 
   cachedConfig = {
+    strategyMode: strategyModeValue(process.env.BOT_STRATEGY_MODE),
+    allocator: {
+      assets: listValue(process.env.BOT_ALLOCATOR_ASSETS, 'BTCUSDT,ETHUSDT').map(
+        (asset) => asset.toUpperCase(),
+      ),
+      smaPeriods: listValue(process.env.BOT_ALLOCATOR_SMA_PERIODS, '20,50,100,200')
+        .map(Number)
+        .filter((period) => Number.isInteger(period) && period > 1),
+      volTarget: numberValue(process.env.BOT_ALLOCATOR_VOL_TARGET, 0),
+      volLookbackDays: numberValue(process.env.BOT_ALLOCATOR_VOL_LOOKBACK_DAYS, 30),
+      rebalanceThresholdPct: numberValue(
+        process.env.BOT_ALLOCATOR_REBALANCE_THRESHOLD_PCT,
+        0.1,
+      ),
+      minOrderUsdt: numberValue(process.env.BOT_ALLOCATOR_MIN_ORDER_USDT, 10),
+      paperInitialBalance: numberValue(
+        process.env.BOT_ALLOCATOR_PAPER_BALANCE,
+        numberValue(process.env.BOT_INITIAL_BALANCE, 1_000),
+      ),
+      stateFile: stringValue(
+        process.env.BOT_ALLOCATOR_STATE_FILE,
+        resolve(process.cwd(), '.allocator-state.json'),
+      ),
+      checkIntervalMs: numberValue(process.env.BOT_ALLOCATOR_CHECK_INTERVAL_MS, 5 * 60_000),
+      dataRestBaseUrl: stringValue(
+        process.env.BOT_ALLOCATOR_DATA_URL,
+        'https://api.binance.com',
+      ),
+    },
     symbol: stringValue(process.env.BOT_SYMBOL, 'BTCUSDT'),
     interval: stringValue(process.env.BOT_INTERVAL, '1m'),
     confirmationInterval: process.env.BOT_CONFIRMATION_INTERVAL?.trim() || null,

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Crypto Bot Dashboard</title>
+    <title>Crypto Bot — расширенный режим</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -18,17 +18,46 @@
         <div class="topbar-actions">
           <div class="status-chip" id="connection-status">Подключение...</div>
           <div class="status-chip subtle" id="data-freshness">—</div>
+          <a href="/" class="secondary-button">← Простой режим</a>
           <button id="refresh-button" class="secondary-button">Обновить snapshot</button>
-          <button id="liquidate-spot-assets-button" class="danger-button">
+          <button id="liquidate-spot-assets-button" class="danger-button intraday-only">
             Продать все spot-активы
           </button>
-          <button id="panic-button" class="danger-button">
+          <button id="panic-button" class="danger-button intraday-only">
             Экстренно закрыть все позиции
           </button>
         </div>
       </header>
 
-      <section class="panel">
+      <section class="panel" id="allocator-panel" hidden>
+        <div class="panel-header">
+          <h2>Трендовый аллокатор</h2>
+          <span class="status-chip subtle" id="allocator-status">—</span>
+        </div>
+        <section class="cards-grid" id="allocator-metrics"></section>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Актив</th>
+                <th>Тренд</th>
+                <th>Целевая доля</th>
+                <th>Текущая доля</th>
+                <th>Количество</th>
+                <th>Цена</th>
+                <th>Стоимость, USDT</th>
+              </tr>
+            </thead>
+            <tbody id="allocator-assets"></tbody>
+          </table>
+        </div>
+        <div class="topbar-actions">
+          <button id="allocator-rebalance-button" class="secondary-button">Ребалансировать сейчас</button>
+          <button id="allocator-stop-button" class="danger-button">Остановить и продать всё в USDT</button>
+        </div>
+      </section>
+
+      <section class="panel intraday-only">
         <div class="panel-header">
           <h2>Портфель и Балансы</h2>
           <span class="muted">Ключевые метрики бота и Binance</span>
@@ -36,7 +65,7 @@
         <section class="cards-grid" id="metrics-grid"></section>
       </section>
 
-      <section class="panel">
+      <section class="panel intraday-only">
         <div class="panel-header">
           <h2>Режим исполнения</h2>
           <span class="muted">Статус среды, routing и синхронизация с Binance</span>
@@ -122,7 +151,7 @@
         </div>
       </section>
 
-      <section class="two-column">
+      <section class="two-column intraday-only">
         <div class="panel">
           <div class="panel-header">
             <h2>Открытые позиции</h2>
@@ -169,7 +198,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel intraday-only">
         <div class="panel-header">
           <h2>Автоподбор стратегии</h2>
           <span class="muted">Какая стратегия выбрана и почему</span>

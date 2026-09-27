@@ -688,3 +688,17 @@ th {
     flex-direction: column;
   }
 }
+
+body.allocator-mode .intraday-only {
+  display: none;
+}
+
+a.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}

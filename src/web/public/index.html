@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Крипто-бот</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b5bdb'/%3E%3Cpath d='M7 21l6-6 4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/css/home.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="container header-row">
+        <div class="brand">
+          <span class="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" /><path d="M7 21l6-6 4 4 8-9" /></svg>
+          </span>
+          <span class="brand-name">Крипто-бот</span>
+        </div>
+        <div class="header-right">
+          <span class="status-pill" id="status-pill" data-tone="muted">
+            <span class="dot"></span><span id="status-text">Загрузка…</span>
+          </span>
+          <a class="header-link" href="/advanced">Для специалистов</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="offline-banner" id="offline-banner" hidden>
+      Нет связи с ботом. Проверьте, что программа запущена — страница обновится сама.
+    </div>
+
+    <main class="container">
+      <section class="card loading" id="loading-view" aria-busy="true">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line short"></div>
+        <span class="muted small">Подключаемся к боту…</span>
+      </section>
+
+      <!-- Запуск -->
+      <section class="card hero" id="start-view" hidden>
+        <div class="hero-copy">
+          <h1 id="hero-title">Бот сам решает, когда держать Bitcoin и Ethereum, а когда переждать в долларах</h1>
+          <p class="lead" id="hero-lead">
+            Раз в сутки он проверяет, растёт рынок или падает, и сам покупает или продаёт.
+            Вам нужно только выбрать режим и нажать «Начать».
+          </p>
+        </div>
+        <div class="start-actions">
+          <button class="start-button start-test" id="start-test-btn" type="button">
+            <span class="start-icon" aria-hidden="true">▶</span>
+            <span>
+              <span class="start-title">Начать в тестовом режиме</span>
+              <span class="start-sub">Виртуальные деньги и настоящие цены. Никакого риска — можно спокойно посмотреть, как работает бот.</span>
+            </span>
+          </button>
+          <button class="start-button start-real" id="start-real-btn" type="button">
+            <span class="start-icon" aria-hidden="true">▶</span>
+            <span>
+              <span class="start-title">Начать с реальными деньгами</span>
+              <span class="start-sub">Бот торгует на вашем аккаунте Binance. Возможны убытки — вкладывайте только то, что готовы потерять.</span>
+            </span>
+          </button>
+        </div>
+        <ol class="steps">
+          <li><span class="step-num">1</span><span><b>Каждый день</b> бот оценивает тренд Bitcoin и Ethereum.</span></li>
+          <li><span class="step-num">2</span><span><b>Рынок растёт</b> — держит монеты. <b>Падает</b> — продаёт и ждёт в USDT (цифровой доллар).</span></li>
+          <li><span class="step-num">3</span><span><b>Вы видите</b> каждое действие и можете остановить бота одной кнопкой.</span></li>
+        </ol>
+      </section>
+
+      <!-- Сессия -->
+      <section id="session-view" hidden>
+        <div class="card summary">
+          <div class="summary-main">
+            <span class="mode-tag" id="mode-tag"></span>
+            <div class="summary-label" id="summary-label">Сейчас у вас</div>
+            <div class="big-number" id="equity-value">—</div>
+            <div class="delta" id="profit-value">—</div>
+            <div class="benchmark" id="benchmark" hidden></div>
+            <div class="summary-meta" id="summary-meta">—</div>
+          </div>
+          <div class="summary-side">
+            <button class="stop-button" id="stop-btn" type="button">
+              <span aria-hidden="true">■</span> Остановить и продать всё
+            </button>
+            <div class="protection" id="protection"></div>
+            <div class="stopped-note" id="stopped-note" hidden></div>
+          </div>
+        </div>
+
+        <div class="bot-error" id="bot-error" role="alert" hidden></div>
+
+        <div class="grid-2">
+          <div class="card chart-card">
+            <div class="card-head">
+              <h2>Как менялись ваши деньги</h2>
+              <div class="segmented" id="range-buttons" role="group" aria-label="Период графика">
+                <button type="button" data-range="day" aria-pressed="false">День</button>
+                <button type="button" data-range="week" aria-pressed="false">Неделя</button>
+                <button type="button" data-range="month" aria-pressed="false">Месяц</button>
+                <button type="button" data-range="all" class="active" aria-pressed="true">Всё</button>
+              </div>
+            </div>
+            <div class="chart" id="chart"></div>
+            <div class="chart-legend">
+              <span><i class="lg-line"></i>Ваш капитал</span>
+              <span><i class="lg-base"></i>Сумма на старте</span>
+              <span><i class="lg-buy"></i>Покупка</span>
+              <span><i class="lg-sell"></i>Продажа</span>
+            </div>
+          </div>
+
+          <div class="card now-card">
+            <h2 id="now-title">Что сейчас делает бот</h2>
+            <p class="now-summary" id="now-summary"></p>
+            <div class="alloc-bar" id="alloc-bar"></div>
+            <div class="alloc-legend" id="alloc-legend"></div>
+            <div class="asset-list" id="asset-list"></div>
+            <div class="next-decision" id="next-decision"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Что делал бот</h2>
+            <span class="muted small" id="activity-count"></span>
+          </div>
+          <ol class="timeline" id="activity"></ol>
+          <button type="button" class="show-more" id="show-more" hidden>Показать ещё</button>
+        </div>
+      </section>
+
+      <section class="card" id="history-card" hidden>
+        <h2>Прошлые запуски</h2>
+        <div class="table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr><th>Период</th><th>Режим</th><th>Начали с</th><th>Закончили с</th><th>Результат</th></tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card explainer">
+        <details>
+          <summary>Как работает бот — простыми словами</summary>
+          <div class="explainer-body">
+            <p><b>Что покупает.</b> Только Bitcoin и Ethereum — две самые крупные и ликвидные криптовалюты. Капитал делится между ними поровну. Другие монеты на истории не давали преимущества, а рисков у них больше.</p>
+            <p><b>Как решает.</b> Раз в сутки, после закрытия дня (00:00 по UTC), бот сравнивает цену с её средним значением за 20, 50, 100 и 200 дней. Цена выше всех четырёх средних — рынок растёт, бот держит монету. Ниже всех — рынок падает, бот продаёт её и ждёт в USDT. Сигналы смешанные — держит часть.</p>
+            <p><b>Сколько сделок.</b> Немного — обычно несколько в месяц. Биржа берёт комиссию около 0,1% с каждой сделки, она уже учтена в результате.</p>
+            <p><b>Что было на истории.</b> С 2018 по 2026 год такой подход давал в среднем около +42% в год против +23% у простой покупки и хранения. Но бывали тяжёлые периоды: капитал временно проседал почти вдвое, а в 2018 и 2022 годах бот терял 25–30% за год. <b>Прошлые результаты не гарантируют будущих.</b></p>
+            <p><b>Автозащита.</b> При запуске можно выбрать порог: если капитал упадёт ниже него, бот сам продаст всё и остановится. Слишком строгий порог может остановить бота на обычной временной просадке, после которой рынок бы восстановился.</p>
+            <p><b>Ваши остальные деньги.</b> В реальном режиме бот управляет только суммой, которую вы ему выделили, и монетами, которые купил сам. Остальные средства на аккаунте Binance он не трогает.</p>
+          </div>
+        </details>
+      </section>
+
+      <footer class="footer">Это программа для автоматической торговли, а не инвестиционная рекомендация.</footer>
+    </main>
+
+    <dialog class="modal" id="start-dialog">
+      <form method="dialog" class="modal-body" id="start-form" novalidate>
+        <h2 id="start-dialog-title">Запуск</h2>
+        <div id="start-dialog-content"></div>
+        <p class="form-error" id="start-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="start-cancel">Отмена</button>
+          <button type="submit" class="btn-primary" id="start-confirm">Начать</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="stop-dialog">
+      <form method="dialog" class="modal-body" id="stop-form">
+        <h2>Остановить бота?</h2>
+        <p id="stop-dialog-text">Бот продаст все свои монеты в USDT и остановится. Результат зафиксируется.</p>
+        <p class="form-error" id="stop-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="stop-cancel">Продолжить работу</button>
+          <button type="submit" class="btn-danger" id="stop-confirm">Да, остановить и продать всё</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>

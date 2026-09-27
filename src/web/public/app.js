@@ -29,6 +29,12 @@ const elements = {
   liquidateSpotAssetsButton: document.getElementById('liquidate-spot-assets-button'),
   refreshButton: document.getElementById('refresh-button'),
   refreshExecutionButton: document.getElementById('refresh-execution-button'),
+  allocatorPanel: document.getElementById('allocator-panel'),
+  allocatorStatus: document.getElementById('allocator-status'),
+  allocatorMetrics: document.getElementById('allocator-metrics'),
+  allocatorAssets: document.getElementById('allocator-assets'),
+  allocatorRebalanceButton: document.getElementById('allocator-rebalance-button'),
+  allocatorStopButton: document.getElementById('allocator-stop-button'),
 };
 
 function connect() {
@@ -84,6 +90,32 @@ function connect() {
       );
     }
   });
+
+  const sendAllocatorCommand = (payload) => {
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+      window.alert('Нет активного WebSocket-соединения с dashboard');
+      return;
+    }
+    state.socket.send(JSON.stringify(payload));
+  };
+
+  elements.allocatorRebalanceButton.onclick = () => {
+    sendAllocatorCommand({ type: 'allocator_rebalance_now' });
+  };
+
+  elements.allocatorStopButton.onclick = () => {
+    const phrase = window.prompt(
+      'Бот продаст все свои монеты в USDT и остановится. Для подтверждения введи SELL ALL',
+    );
+    if (phrase !== 'SELL ALL') {
+      return;
+    }
+    sendAllocatorCommand({
+      type: 'allocator_pause_liquidate',
+      confirmationPhrase: phrase,
+      reason: 'Остановка аллокатора из web dashboard',
+    });
+  };
 
   elements.panicButton.onclick = () => {
     const isConfirmed = window.confirm(
@@ -289,6 +321,7 @@ function renderAll() {
       : '—';
   }
 
+  renderAllocator();
   renderMetrics();
   renderExecution();
   renderPositions();
@@ -299,6 +332,72 @@ function renderAll() {
   renderLogFilters();
   renderLogs();
   renderChart();
+}
+
+function renderAllocator() {
+  const allocator = state.runtime?.allocator;
+  const isAllocatorMode = state.runtime?.strategyMode === 'trend_allocator';
+  document.body.classList.toggle('allocator-mode', isAllocatorMode);
+  elements.allocatorPanel.hidden = !isAllocatorMode;
+  if (!isAllocatorMode || !allocator) {
+    return;
+  }
+
+  elements.allocatorStatus.textContent = [allocator.статус, allocator.режим, allocator.сигнал]
+    .filter(Boolean)
+    .join(' · ');
+  const metrics = [
+    ['Капитал аллокатора', allocator.капитал, 'USDT + стоимость монет в кармане'],
+    ['Стартовый капитал', allocator.стартовыйКапитал, 'С чего начал карман'],
+    ['Результат %', allocator.результатВПроцентах, 'Изменение капитала с начала'],
+    ['USDT в кармане', allocator.usdt, 'Свободные средства аллокатора'],
+    ['Последний сигнал', allocator.последнийСигнал || '—', 'Дневная свеча (UTC), по которой выставлены доли'],
+  ];
+  if (allocator.ошибка) {
+    metrics.push(['Ошибка', allocator.ошибка, 'Последняя ошибка цикла']);
+  }
+
+  elements.allocatorMetrics.innerHTML = metrics
+    .map(([label, value, hint]) => {
+      const tone =
+        label === 'Результат %' && typeof value === 'number'
+          ? value >= 0
+            ? 'positive'
+            : 'negative'
+          : '';
+      const formatted =
+        label === 'Результат %' && typeof value === 'number'
+          ? formatSignedNumber(value)
+          : typeof value === 'number'
+            ? formatNumber(value)
+            : escapeHtml(value ?? '—');
+      return `
+        <div class="metric-card ${tone}">
+          <div class="label">${escapeHtml(label)}</div>
+          <div class="value">${formatted}</div>
+          <div class="metric-subtitle">${escapeHtml(hint)}</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  elements.allocatorAssets.innerHTML =
+    (allocator.активы || [])
+      .map(
+        (asset) => `
+        <tr>
+          <td>${escapeHtml(asset.символ)}</td>
+          <td>${escapeHtml(asset.тренд)}</td>
+          <td>${asset.целевойВес === null ? '—' : `${formatNumber(asset.целевойВес)}%`}</td>
+          <td>${formatNumber(asset.текущийВес)}%</td>
+          <td>${formatNumber(asset.количество)}</td>
+          <td>${formatNumber(asset.цена)}</td>
+          <td>${formatNumber(asset.стоимость)}</td>
+        </tr>
+      `,
+      )
+      .join('') ||
+    `<tr><td colspan="7">${renderEmptyState('Сигналы ещё не рассчитаны.', 'Первая ребалансировка произойдёт сразу после запуска.')}</td></tr>`;
 }
 
 function renderExecution() {

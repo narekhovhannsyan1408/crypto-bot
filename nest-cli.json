@@ -5,7 +5,7 @@
   "compilerOptions": {
     "assets": [
       {
-        "include": "dashboard/public/**/*",
+        "include": "web/public/**/*",
         "outDir": "dist"
       }
     ],

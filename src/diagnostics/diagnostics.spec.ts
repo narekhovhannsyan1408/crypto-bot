@@ -33,7 +33,7 @@ describe('log reader', () => {
     expect(parseTimeArg('2026-09-27 10:00')).toBe(
       Date.parse('2026-09-27T10:00'),
     );
-    expect(() => parseTimeArg('вчера')).toThrow();
+    expect(() => parseTimeArg('yesterday')).toThrow();
   });
 
   it('matches event patterns with wildcards', () => {
@@ -62,7 +62,7 @@ describe('log reader', () => {
       `${lines([
         rec('2026-09-27T01:00:00.000Z', 'binance.http.failed', 'warn'),
         rec('2026-09-27T02:00:00.000Z', 'process.heartbeat', 'debug'),
-      ])}не json\n`,
+      ])}not json\n`,
     );
 
     const all = await readLogs({ dir });
@@ -103,11 +103,11 @@ describe('log analysis', () => {
   it('groups identical errors that differ only by numbers', () => {
     const analysis = analyzeLogs([
       rec('2026-09-27T01:00:00.000Z', 'allocator.order.failed', 'error', {
-        msg: 'Ордер BUY BTCUSDT не исполнен',
+        msg: 'Order BUY BTCUSDT not executed',
         err: { name: 'InsufficientFunds', message: 'balance 12.5 < 500' },
       }),
       rec('2026-09-27T01:05:00.000Z', 'allocator.order.failed', 'error', {
-        msg: 'Ордер BUY BTCUSDT не исполнен',
+        msg: 'Order BUY BTCUSDT not executed',
         err: { name: 'InsufficientFunds', message: 'balance 3.1 < 500' },
       }),
     ]);
@@ -135,10 +135,10 @@ describe('log analysis', () => {
       now,
     ).join('\n');
 
-    expect(hints).toContain('Решение за 2026-09-26 не принято');
-    expect(hints).toContain('процесс, похоже, сейчас не запущен');
-    expect(hints).toContain('Binance отклонял ордера');
-    expect(hints).toContain('незакоммиченными изменениями');
+    expect(hints).toContain('No decision was made for 2026-09-26');
+    expect(hints).toContain('the process does not seem to be running now');
+    expect(hints).toContain('Binance rejected orders');
+    expect(hints).toContain('uncommitted changes');
   });
 
   it('formats a record compactly with correlation ids', () => {

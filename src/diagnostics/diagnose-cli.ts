@@ -79,7 +79,7 @@ const parseArgs = (argv: string[]) => {
       index += 1;
     } else {
       throw new Error(
-        'Использование: npm run diagnose -- [--since 48h|7d|2026-09-27] [--dir logs]',
+        'Usage: npm run diagnose -- [--since 48h|7d|2026-09-27] [--dir logs]',
       );
     }
   }
@@ -99,7 +99,7 @@ const section = (title: string) => `\n## ${title}\n`;
 
 const renderGroups = (groups: RecordGroup[], limit: number) =>
   groups.length === 0
-    ? '_нет_'
+    ? '_none_'
     : groups
         .slice(0, limit)
         .map((group) => {
@@ -116,12 +116,12 @@ const renderGroups = (groups: RecordGroup[], limit: number) =>
           const data =
             sample.data === undefined
               ? ''
-              : `\n  данные: \`${JSON.stringify(sample.data).slice(0, 300)}\``;
+              : `\n  data: \`${JSON.stringify(sample.data).slice(0, 300)}\``;
           return (
             `- **${group.count}×** \`${group.event}\` — ${sample.msg}` +
             (sample.err ? ` → ${sample.err.name}: ${sample.err.message}` : '') +
             data +
-            `\n  первый ${group.firstTs}, последний ${group.lastTs}${ids ? `, пример: ${ids}` : ''}` +
+            `\n  first ${group.firstTs}, last ${group.lastTs}${ids ? `, example: ${ids}` : ''}` +
             stack
           );
         })
@@ -133,12 +133,12 @@ async function main() {
   const now = Date.now();
   const out: string[] = [];
 
-  out.push('# Диагностика crypto-bot');
+  out.push('# crypto-bot diagnostics');
   out.push(
-    `Сформировано: ${iso(now)} · период журнала: с ${iso(options.since)} · время везде UTC`,
+    `Generated: ${iso(now)} · journal since ${iso(options.since)} · all times in UTC`,
   );
 
-  out.push(section('Сборка и настройки'));
+  out.push(section('Build and settings'));
   out.push('```json');
   out.push(
     JSON.stringify(
@@ -149,19 +149,19 @@ async function main() {
   );
   out.push('```');
 
-  out.push(section('Состояние бота (файл состояния)'));
+  out.push(section('Bot state (state file)'));
   const state = readState(config.allocator.stateFile);
   let stateSummary: StateSummary | null = null;
   if (!state) {
     out.push(
-      `Файл ${config.allocator.stateFile} не найден — бот ещё ни разу не запускался в этом режиме.`,
+      `${config.allocator.stateFile} not found — the bot has never run in this mode.`,
     );
   } else if (state.version !== 2) {
     out.push(
-      `Файл состояния не читается или старого формата (version=${state.version}).`,
+      `The state file is unreadable or has an old format (version=${state.version}).`,
     );
   } else if (!state.current) {
-    out.push('Сессий ещё не было.');
+    out.push('No sessions yet.');
   } else {
     const session = state.current;
     const lastPoint = session.equityHistory.at(-1);
@@ -173,15 +173,15 @@ async function main() {
     };
     out.push(
       [
-        `- сессия \`${session.id}\`, режим **${session.mode}**, статус **${session.status}**`,
-        `- запущена ${iso(session.startedAt)}${session.stoppedAt ? `, остановлена ${iso(session.stoppedAt)}: ${session.stopReason}` : ''}`,
-        `- стартовый капитал ${session.initialCapital} USDT, автозащита ${session.autoStopLossPct > 0 ? `−${session.autoStopLossPct * 100}%` : 'выключена'}`,
-        `- сейчас в учёте: USDT ${session.cash.toFixed(2)}, монеты ${JSON.stringify(session.quantities)}, комиссии ${session.feesPaid.toFixed(2)}`,
-        `- последнее ежедневное решение: ${day(session.lastRebalanceDay)} (ожидается ${day(expectedDay)})`,
-        `- последняя точка капитала: ${iso(lastPoint?.timestamp)} = ${lastPoint?.equity.toFixed(2) ?? '—'} USDT (всего точек ${session.equityHistory.length})`,
+        `- session \`${session.id}\`, mode **${session.mode}**, status **${session.status}**`,
+        `- started ${iso(session.startedAt)}${session.stoppedAt ? `, stopped ${iso(session.stoppedAt)}: ${session.stopReason}` : ''}`,
+        `- starting capital ${session.initialCapital} USDT, auto-protection ${session.autoStopLossPct > 0 ? `−${session.autoStopLossPct * 100}%` : 'off'}`,
+        `- in the records now: cash ${session.cash.toFixed(2)}, coins ${JSON.stringify(session.quantities)}, fees ${session.feesPaid.toFixed(2)}`,
+        `- last daily decision: ${day(session.lastRebalanceDay)} (expected ${day(expectedDay)})`,
+        `- last equity point: ${iso(lastPoint?.timestamp)} = ${lastPoint?.equity.toFixed(2) ?? '—'} (${session.equityHistory.length} points in total)`,
       ].join('\n'),
     );
-    out.push('\nПоследние события ленты (новые сверху):');
+    out.push('\nLatest feed entries (newest first):');
     for (const entry of session.activity.slice(0, 10)) {
       out.push(
         `- ${iso(entry.timestamp)} [${entry.kind}] ${entry.title}${entry.details ? ` — ${entry.details}` : ''}`,
@@ -189,7 +189,7 @@ async function main() {
     }
     if (state.history?.length) {
       out.push(
-        `\nПрошлых сессий: ${state.history.length}. Последняя: ${JSON.stringify(state.history[0])}`,
+        `\nPast sessions: ${state.history.length}. The last one: ${JSON.stringify(state.history[0])}`,
       );
     }
   }
@@ -201,43 +201,43 @@ async function main() {
   });
   const analysis = analyzeLogs(records);
 
-  out.push(section('Подсказки'));
+  out.push(section('Hints'));
   const hints = buildHints(analysis, stateSummary, now);
   out.push(
     hints.length
       ? hints.map((hint) => `- ${hint}`).join('\n')
-      : '- Явных проблем не найдено.',
+      : '- No obvious problems found.',
   );
 
-  out.push(section('Сводка журнала'));
+  out.push(section('Journal summary'));
   out.push(
     [
-      `- папка: ${options.dir}, файлов: ${files.length}, записей: ${analysis.total}${malformedLines ? `, битых строк: ${malformedLines}` : ''}`,
-      `- с ${analysis.firstTs ?? '—'} по ${analysis.lastTs ?? '—'}`,
-      `- по уровням: ${JSON.stringify(analysis.byLevel)}`,
-      `- частые события: ${analysis.topEvents.map(([event, count]) => `${event} ${count}`).join(', ') || '—'}`,
+      `- folder: ${options.dir}, files: ${files.length}, records: ${analysis.total}${malformedLines ? `, malformed lines: ${malformedLines}` : ''}`,
+      `- from ${analysis.firstTs ?? '—'} to ${analysis.lastTs ?? '—'}`,
+      `- by level: ${JSON.stringify(analysis.byLevel)}`,
+      `- frequent events: ${analysis.topEvents.map(([event, count]) => `${event} ${count}`).join(', ') || '—'}`,
     ].join('\n'),
   );
 
-  out.push(section('Ошибки (сгруппированы)'));
+  out.push(section('Errors (grouped)'));
   out.push(renderGroups(analysis.errorGroups, 15));
 
-  out.push(section('Предупреждения (сгруппированы)'));
+  out.push(section('Warnings (grouped)'));
   out.push(renderGroups(analysis.warningGroups, 15));
 
-  out.push(section('Простои процесса (нет записей дольше 15 минут)'));
+  out.push(section('Process downtime (no records for more than 15 minutes)'));
   out.push(
     analysis.gaps.length
       ? analysis.gaps
           .map(
             (gap) =>
-              `- ${gap.from} → ${gap.to} (${gap.minutes} мин)${gap.crossesUtcMidnight ? ' — **пропущено ежедневное решение в 00:00 UTC**' : ''}`,
+              `- ${gap.from} → ${gap.to} (${gap.minutes} min)${gap.crossesUtcMidnight ? ' — **the 00:00 UTC daily decision was missed**' : ''}`,
           )
           .join('\n')
-      : '_нет_',
+      : '_none_',
   );
 
-  out.push(section('Запуски процесса'));
+  out.push(section('Process starts'));
   out.push(
     analysis.processStarts.length
       ? analysis.processStarts
@@ -247,13 +247,13 @@ async function main() {
               gitDirty?: boolean;
               version?: string;
             };
-            return `- ${record.ts} pid=${record.pid} commit=${data?.gitCommit ?? '?'}${data?.gitDirty ? ' (есть незакоммиченные изменения)' : ''} version=${data?.version ?? '?'}`;
+            return `- ${record.ts} pid=${record.pid} commit=${data?.gitCommit ?? '?'}${data?.gitDirty ? ' (uncommitted changes)' : ''} version=${data?.version ?? '?'}`;
           })
           .join('\n')
-      : '_нет_',
+      : '_none_',
   );
 
-  out.push(section('Хронология ключевых событий (последние 40)'));
+  out.push(section('Timeline of key events (last 40)'));
   out.push('```');
   out.push(
     analysis.decisions
@@ -265,13 +265,13 @@ async function main() {
   );
   out.push('```');
 
-  out.push(section('Как копать дальше'));
+  out.push(section('How to dig deeper'));
   out.push(
     [
-      '- все события одной операции: `npm run logs -- --op <opId> --full`',
-      '- все, что вызвал HTTP-запрос: `npm run logs -- --request <requestId> --full`',
-      '- решения бота за неделю: `npm run logs -- --since 7d --event "allocator.rebalance.*,allocator.order.*"`',
-      '- только проблемы: `npm run logs -- --since 7d --level warn`',
+      '- everything in one operation: `npm run logs -- --op <opId> --full`',
+      '- everything an HTTP request caused: `npm run logs -- --request <requestId> --full`',
+      '- the bot\'s decisions for a week: `npm run logs -- --since 7d --event "allocator.rebalance.*,allocator.order.*"`',
+      '- problems only: `npm run logs -- --since 7d --level warn`',
     ].join('\n'),
   );
 

@@ -158,7 +158,7 @@ export const buildHints = (
 
   if (analysis.total === 0) {
     hints.push(
-      'Журнал за период пуст: процесс не запускался, либо BOT_LOG_DIR указывает на другую папку.',
+      'The journal is empty for this period: the process did not run, or BOT_LOG_DIR points to another folder.',
     );
   }
 
@@ -166,7 +166,7 @@ export const buildHints = (
     count('process.uncaught_exception') + count('process.bootstrap_failed');
   if (crashes > 0) {
     hints.push(
-      `Процесс падал ${crashes} раз — смотри стек в группе ошибок process.*.`,
+      `The process crashed ${crashes} time(s) — see the stack in the process.* error group.`,
     );
   }
 
@@ -177,13 +177,13 @@ export const buildHints = (
       now - (expectedDay + DAY_MS) > 30 * 60_000
     ) {
       hints.push(
-        `Решение за ${new Date(expectedDay).toISOString().slice(0, 10)} не принято — смотри allocator.rebalance.failed/deferred и простои процесса.`,
+        `No decision was made for ${new Date(expectedDay).toISOString().slice(0, 10)} — see allocator.rebalance.failed/deferred and the process downtime.`,
       );
     }
     const lastTs = analysis.lastTs ? Date.parse(analysis.lastTs) : null;
     if (lastTs !== null && now - lastTs > DEFAULT_GAP_MS) {
       hints.push(
-        `Сессия в файле состояния «running», но последняя запись журнала была ${Math.round((now - lastTs) / 60_000)} мин назад — процесс, похоже, сейчас не запущен.`,
+        `The state file says the session is running, but the last journal entry was ${Math.round((now - lastTs) / 60_000)} min ago — the process does not seem to be running now.`,
       );
     }
   }
@@ -191,47 +191,47 @@ export const buildHints = (
   const midnightGaps = analysis.gaps.filter((gap) => gap.crossesUtcMidnight);
   if (midnightGaps.length > 0) {
     hints.push(
-      `Процесс не работал в момент ежедневного решения (00:00 UTC) ${midnightGaps.length} раз — компьютер спал или программа была закрыта.`,
+      `The process was not running at the daily decision time (00:00 UTC) ${midnightGaps.length} time(s) — the computer was asleep or the app was closed.`,
     );
   } else if (analysis.gaps.length > 0) {
     hints.push(
-      `Найдено простоев процесса: ${analysis.gaps.length} (см. раздел «Простои»).`,
+      `Process downtime periods found: ${analysis.gaps.length} (see the Downtime section).`,
     );
   }
 
   if (count('binance.http.failed') > 0) {
     hints.push(
-      `Сбои запросов к Binance: ${count('binance.http.failed')}. Если их много подряд — проблемы с интернетом или Binance недоступен из этой сети.`,
+      `Failed Binance requests: ${count('binance.http.failed')}. Many in a row mean internet problems, or Binance is not reachable from this network.`,
     );
   }
   if (count('broker.binance.order_failed') > 0) {
     hints.push(
-      'Binance отклонял ордера — смотри err.message в broker.binance.order_failed (частые причины: InsufficientFunds, MIN_NOTIONAL, LOT_SIZE, неверные права API-ключа).',
+      'Binance rejected orders — see err.message in broker.binance.order_failed (common causes: InsufficientFunds, MIN_NOTIONAL, LOT_SIZE, wrong API key permissions).',
     );
   }
   if (count('broker.binance.connect_failed') > 0) {
     hints.push(
-      'Не удавалось подключиться к Binance с ключами — проверь ключи, права и IP-ограничения.',
+      'Could not connect to Binance with the keys — check the keys, their permissions and IP restrictions.',
     );
   }
   if (count('allocator.autostop.triggered') > 0) {
     hints.push(
-      'Срабатывала автозащита — бот продал всё по порогу убытка (allocator.autostop.triggered).',
+      'Auto-protection triggered — the bot sold everything at the loss threshold (allocator.autostop.triggered).',
     );
   }
   if (count('allocator.autostop.skipped_stale_prices') > 0) {
     hints.push(
-      'Автозащита пропускалась из-за устаревших цен — были проблемы с получением цен.',
+      'Auto-protection was skipped because of stale prices — there were problems getting prices.',
     );
   }
   if (count('allocator.reconcile.adjusted') > 0) {
     hints.push(
-      'Учёт бота уменьшался по балансу биржи — средства перемещали вручную или был сбой учёта.',
+      'Session records were reduced to the exchange balance — funds were moved manually or the records were off.',
     );
   }
   if (count('session.store.persist_failed') > 0) {
     hints.push(
-      'Не удавалось записать файл состояния — проверь место на диске и права на папку.',
+      'The state file could not be written — check the free disk space and folder permissions.',
     );
   }
   const lastStart = analysis.processStarts.at(-1);
@@ -240,7 +240,7 @@ export const buildHints = (
     | undefined;
   if (startData?.gitDirty) {
     hints.push(
-      `Последний запуск был с незакоммиченными изменениями (коммит ${startData.gitCommit ?? '?'}) — код мог отличаться от репозитория.`,
+      `The last start had uncommitted changes (commit ${startData.gitCommit ?? '?'}) — the code may differ from the repository.`,
     );
   }
 

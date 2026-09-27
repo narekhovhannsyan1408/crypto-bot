@@ -214,7 +214,7 @@ describe('AllocatorEngine', () => {
     expect(session.assets.map((asset) => asset.trendVotes)).toEqual([2, 2]);
     const buys = session.activity.filter((entry) => entry.kind === 'buy');
     expect(buys).toHaveLength(2);
-    expect(buys[0].details).toContain('Рынок растёт');
+    expect(buys[0].details).toContain('The market is rising');
   });
 
   it('writes a traceable journal for every decision and order', async () => {
@@ -307,7 +307,7 @@ describe('AllocatorEngine', () => {
     expect(logger.logTrade).not.toHaveBeenCalled();
     expect(session.cash).toBe(500);
     expect(session.activity[0].kind).toBe('check');
-    expect(session.activity[0].details).toContain('Всё в USDT');
+    expect(session.activity[0].details).toContain('Everything is in USDT');
   });
 
   it('retries the daily decision with a growing pause when Binance is unavailable', async () => {
@@ -381,7 +381,7 @@ describe('AllocatorEngine', () => {
     const session = sessionOf(state);
 
     expect(state.status).toBe('stopped');
-    expect(session.stopReason).toContain('Автозащита');
+    expect(session.stopReason).toContain('Auto-protection');
     expect(session.activity[0].kind).toBe('autostop');
     expect(session.benchmark?.profitPct).toBe(-40);
   });
@@ -444,7 +444,7 @@ describe('AllocatorEngine', () => {
     const session = sessionOf(engine.getAppState());
 
     expect(result.success).toBe(true);
-    expect(session.modeLabel).toBe('Solana · симуляция');
+    expect(session.modeLabel).toBe('Solana · simulation');
     expect(session.quoteAsset).toBe('USDC');
     expect(logger.logTrade).toHaveBeenCalledTimes(2);
     expect(jupiter.getQuote).toHaveBeenCalledWith(
@@ -470,7 +470,7 @@ describe('AllocatorEngine', () => {
     const session = sessionOf(engine.getAppState());
 
     expect(session.cash).toBe(500);
-    expect(session.activity[0].details).toContain('Всё в USDC');
+    expect(session.activity[0].details).toContain('Everything is in USDC');
   });
 
   it('publishes each daily decision to Solana before trading', async () => {

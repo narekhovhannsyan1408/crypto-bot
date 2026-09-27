@@ -11,7 +11,7 @@ class ShutdownLogger implements BeforeApplicationShutdown {
   constructor(private readonly logger: AppLogger) {}
 
   beforeApplicationShutdown(signal?: string) {
-    this.logger.info('process.shutdown', 'Приложение останавливается', {
+    this.logger.info('process.shutdown', 'Application is shutting down', {
       signal: signal ?? null,
     });
   }

@@ -39,7 +39,7 @@ export const parseTimeArg = (value: string, now = Date.now()) => {
   const parsed = Date.parse(value.trim().replace(' ', 'T'));
   if (!Number.isFinite(parsed)) {
     throw new Error(
-      `Не понимаю время «${value}». Примеры: 30m, 6h, 2d, 2026-09-27T10:00`,
+      `Cannot parse the time "${value}". Examples: 30m, 6h, 2d, 2026-09-27T10:00`,
     );
   }
   return parsed;

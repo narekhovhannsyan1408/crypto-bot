@@ -63,7 +63,7 @@ export class AllocatorMarketDataService {
         this.journal.log(
           'warn',
           'binance.http.failed',
-          `Запрос к Binance не удался: ${config.url}`,
+          `Binance request failed: ${config.url}`,
           {
             durationMs: config.startedAt
               ? performance.now() - config.startedAt

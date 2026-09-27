@@ -14,7 +14,7 @@ const MAX_STACK_LINES = 15;
 export const scrubText = (text: string) => {
   const scrubbed = text.replace(SECRET_IN_TEXT, '$1[REDACTED]');
   return scrubbed.length > MAX_STRING
-    ? `${scrubbed.slice(0, MAX_STRING)}…[+${scrubbed.length - MAX_STRING} символов]`
+    ? `${scrubbed.slice(0, MAX_STRING)}…[+${scrubbed.length - MAX_STRING} chars]`
     : scrubbed;
 };
 
@@ -35,7 +35,7 @@ export const compactStack = (stack: string) => {
   return [
     head,
     ...kept,
-    ...(hidden > 0 ? [`    … скрыто кадров библиотек: ${hidden}`] : []),
+    ...(hidden > 0 ? [`    … ${hidden} library frames hidden`] : []),
   ].join('\n');
 };
 
@@ -109,10 +109,10 @@ export const sanitize = (
     return undefined;
   if (value instanceof Error) return serializeError(value);
   if (value instanceof Date) return value.toISOString();
-  if (depth >= MAX_DEPTH) return '[слишком глубоко]';
+  if (depth >= MAX_DEPTH) return '[too deep]';
 
   if (typeof value === 'object') {
-    if (seen.has(value)) return '[циклическая ссылка]';
+    if (seen.has(value)) return '[circular]';
     seen.add(value);
 
     if (Array.isArray(value)) {
@@ -120,7 +120,7 @@ export const sanitize = (
         .slice(0, MAX_ARRAY)
         .map((item) => sanitize(item, depth + 1, seen));
       if (value.length > MAX_ARRAY)
-        items.push(`[…ещё ${value.length - MAX_ARRAY}]`);
+        items.push(`[…${value.length - MAX_ARRAY} more]`);
       return items;
     }
 

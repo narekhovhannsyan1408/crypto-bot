@@ -83,7 +83,9 @@ export class LiveStreamService {
       return null;
     }
 
-    const value = (payload as Record<string, unknown>).капитал;
+    // equity — аллокатор, капитал — старый внутридневной режим
+    const record = payload as Record<string, unknown>;
+    const value = record.equity ?? record.капитал;
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       return null;
     }

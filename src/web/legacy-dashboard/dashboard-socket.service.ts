@@ -8,7 +8,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { AllocatorEngine } from '../../allocator/engine/allocator-engine.service';
 import { getBotConfig } from '../../config/bot-config';
-import { Msg, msg, ru } from '../../i18n/messages';
+import { en, Msg, msg } from '../../i18n/messages';
 import { LiveStreamService } from '../../streaming/live-stream/live-stream.service';
 import { createTrustChecker } from '../security/request-guard';
 import { LegacyRuntimeService } from './legacy-runtime.service';
@@ -51,7 +51,7 @@ export class DashboardSocketService
     allocator_pause_liquidate: async (message) => {
       if (message.confirmationPhrase !== 'SELL ALL') {
         return this.error(
-          'Для остановки бота нужно подтверждение фразой SELL ALL',
+          'Stopping the bot needs the confirmation phrase SELL ALL',
         );
       }
       return this.toPayload(
@@ -60,45 +60,45 @@ export class DashboardSocketService
     },
     emergency_close_all: async (message) => {
       const result = await this.intraday().emergencyCloseAllPositions(
-        message.reason || 'Экстренное закрытие через live dashboard',
+        message.reason || 'Emergency close from the live dashboard',
       );
-      return { статус: 'успешно', закрытоПозиций: result.closedPositions };
+      return { status: 'ok', closedPositions: result.closedPositions };
     },
     liquidate_spot_assets: async (message) => {
       if (message.confirmationPhrase !== 'LIQUIDATE SPOT') {
         return this.error(
-          'Для ликвидации всех внешних spot-активов нужно подтверждение фразой LIQUIDATE SPOT',
+          'Liquidating all external spot assets needs the confirmation phrase LIQUIDATE SPOT',
         );
       }
       const result = await this.intraday().liquidateAllSpotAssets(
         message.reason ||
-          'Ликвидация всех внешних spot-активов через live dashboard',
+          'Liquidation of all external spot assets from the live dashboard',
       );
       return {
-        статус: result.success ? 'успешно' : 'не выполнено',
-        сообщение: result.message,
-        проданныеАктивы: result.soldAssets,
-        пропущенныеАктивы: result.skippedAssets,
+        status: result.success ? 'ok' : 'failed',
+        message: result.message,
+        soldAssets: result.soldAssets,
+        skippedAssets: result.skippedAssets,
         execution: result.status,
       };
     },
     close_position: async (message) => {
       if (!message.symbol || !message.strategyId) {
-        return this.error('Для закрытия позиции нужны symbol и strategyId');
+        return this.error('Closing a position needs symbol and strategyId');
       }
       const result = await this.intraday().closePosition(
         message.symbol,
         message.strategyId,
-        message.reason || 'Ручное закрытие позиции через live dashboard',
+        message.reason || 'Manual close from the live dashboard',
       );
       return {
-        статус: result.closed ? 'успешно' : 'не выполнено',
-        сообщение: result.reason,
+        status: result.closed ? 'ok' : 'failed',
+        message: result.reason,
       };
     },
     set_execution_mode: async (message) => {
       if (!message.mode || !message.marketType) {
-        return this.error('Для переключения режима нужны mode и marketType');
+        return this.error('Switching the mode needs mode and marketType');
       }
       const result = await this.intraday().setExecutionMode(
         message.mode,
@@ -106,14 +106,14 @@ export class DashboardSocketService
         message.confirmationPhrase,
       );
       return {
-        статус: result.success ? 'успешно' : 'не выполнено',
-        сообщение: result.message,
+        status: result.success ? 'ok' : 'failed',
+        message: result.message,
         execution: result.status,
       };
     },
     refresh_execution_status: async () => {
       const result = await this.intraday().refreshExecutionStatus();
-      return { статус: 'успешно', execution: result.status };
+      return { status: 'ok', execution: result.status };
     },
   };
 
@@ -204,7 +204,7 @@ export class DashboardSocketService
       const handler = message.type ? this.commands[message.type] : undefined;
       const payload = handler
         ? await handler(message)
-        : this.error(`Неизвестная команда: ${message.type ?? '—'}`);
+        : this.error(`Unknown command: ${message.type ?? '—'}`);
       this.send(socket, {
         type: 'command_result',
         payload: { ...payload, snapshot: this.runtime.build() },
@@ -223,7 +223,7 @@ export class DashboardSocketService
     const runner = this.runtime.intradayRunner;
     if (!runner) {
       throw new Error(
-        'Команда доступна только в режиме BOT_STRATEGY_MODE=intraday',
+        'This command is only available with BOT_STRATEGY_MODE=intraday',
       );
     }
     return runner;
@@ -231,14 +231,14 @@ export class DashboardSocketService
 
   private toPayload(result: { success: boolean; message: Msg }) {
     return {
-      статус: result.success ? 'успешно' : 'не выполнено',
-      сообщение: ru(result.message),
+      status: result.success ? 'ok' : 'failed',
+      message: en(result.message),
       i18n: result.message,
     };
   }
 
   private error(message: string) {
-    return { статус: 'ошибка', сообщение: message };
+    return { status: 'error', message };
   }
 
   private broadcast(message: unknown) {

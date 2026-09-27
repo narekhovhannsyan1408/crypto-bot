@@ -15,7 +15,7 @@ const resolveEnvPath = () => {
     const explicitEnvPath = resolve(configuredEnvPath);
     if (!existsSync(explicitEnvPath)) {
       throw new Error(
-        `Указанный BOT_ENV_FILE не найден: ${explicitEnvPath}. Исправь путь или убери BOT_ENV_FILE.`,
+        `BOT_ENV_FILE not found: ${explicitEnvPath}. Fix the path or remove BOT_ENV_FILE.`,
       );
     }
 

@@ -70,13 +70,13 @@ describe('Solana wallet', () => {
   it('never echoes key material in errors', () => {
     const broken = `${bs58.encode(keypair.secretKey).slice(0, 40)}0OIl`;
 
-    expect(() => parseSecretKey(broken)).toThrow('не распознан');
+    expect(() => parseSecretKey(broken)).toThrow("wasn't recognized");
     try {
       parseSecretKey(broken);
     } catch (error) {
       expect((error as Error).message).not.toContain(broken.slice(0, 10));
     }
-    expect(() => parseSecretKey('[1,2,3]')).toThrow('64 байта');
+    expect(() => parseSecretKey('[1,2,3]')).toThrow('64 bytes');
   });
 
   it('links transactions to the right cluster in the explorer', () => {

@@ -244,7 +244,7 @@ describe('SolanaJupiterAllocatorBroker', () => {
     );
 
     await expect(broker.buy('BTCUSDT', 500)).rejects.toThrow(
-      'отклонила своп до отправки',
+      'rejected the swap before sending',
     );
     expect(connection.getSignatureStatuses).not.toHaveBeenCalled();
   });
@@ -269,7 +269,9 @@ describe('SolanaJupiterAllocatorBroker', () => {
       .mockResolvedValueOnce(990)
       .mockResolvedValue(1_001);
 
-    await expect(broker.buy('BTCUSDT', 500)).rejects.toThrow('не попал в блок');
+    await expect(broker.buy('BTCUSDT', 500)).rejects.toThrow(
+      "didn't make it into a block",
+    );
     expect(connection.getTransaction).not.toHaveBeenCalled();
   });
 
@@ -333,6 +335,8 @@ describe('SolanaJupiterAllocatorBroker', () => {
     const { broker, connection } = setup();
     connection.getBalance.mockResolvedValue(1_000_000);
 
-    await expect(broker.assertCanTrade()).rejects.toThrow('комиссий сети');
+    await expect(broker.assertCanTrade()).rejects.toThrow(
+      'network fees need at least',
+    );
   });
 });

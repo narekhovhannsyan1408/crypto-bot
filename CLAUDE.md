@@ -27,7 +27,9 @@ The interface is in English (default), Russian and Armenian. All texts live in t
 `src/web/public/i18n/{en,ru,hy}.json`, read by both the page (`js/i18n.js`) and the server
 (`src/i18n/messages.ts`). The server never sends finished text: the activity feed, stop reasons, API
 errors and mode readiness are `{ key, params }` messages (`msg()`, `LocalizedError`), and the page
-translates them. The journal and the `title`/`details` fields of entries get the Russian rendering.
+translates them. Everything written for developers — the terminal output, the diagnostic journal, error
+`message`s and the `title`/`details` fields of new entries — is in English (`en()`); entries saved before
+that keep their Russian text.
 
 - New text: add the key to all three dictionaries with the same placeholders — `src/i18n/i18n.spec.ts`
   checks this, and also that every key used in code exists in the dictionary.
@@ -137,7 +139,7 @@ After `npm run build` the same tools are `node dist/diagnostics/diagnose-cli.js`
 ### When the logs are not enough
 
 Add events through `AppLogger` (`src/observability/app-logger.ts`), named
-`<area>.<object>.<action>`, with data in `data` and the error as a separate argument. Inside engine
+`<area>.<object>.<action>`, with an English message, data in `data` and the error as a separate argument. Inside engine
 operations the context (`opId`, `sessionId`) is added automatically. Add every new event to the table
 above. Don't log keys or full balance responses without a reason.
 

@@ -82,7 +82,7 @@ export class JupiterClient {
         this.journal.log(
           'warn',
           'solana.jupiter.failed',
-          `Запрос к Jupiter не удался: ${config.url}`,
+          `Jupiter request failed: ${config.url}`,
           {
             durationMs: config.startedAt
               ? performance.now() - config.startedAt

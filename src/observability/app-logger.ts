@@ -14,7 +14,7 @@ export type LogFields = {
  * Диагностический журнал: структурированные события в JSON Lines.
  *
  * event — стабильное машиночитаемое имя (например, allocator.order.filled),
- * msg — короткое описание по-русски. Контекст текущей операции добавляется сам.
+ * msg — короткое описание на английском. Контекст текущей операции добавляется сам.
  * Логгер никогда не бросает исключений: сбой записи не должен ронять бота.
  */
 export class AppLogger {
@@ -58,7 +58,7 @@ export class AppLogger {
       if (!this.writeFailed) {
         this.writeFailed = true;
         process.stderr.write(
-          `[ЛОГИ] Не удалось записать лог: ${error instanceof Error ? error.message : String(error)}\n`,
+          `[LOGS] Failed to write the log: ${error instanceof Error ? error.message : String(error)}\n`,
         );
       }
     }
@@ -103,7 +103,7 @@ export class AppLogger {
       });
       return result;
     } catch (error) {
-      this.log('warn', `${event}_failed`, `${msg}: ошибка`, {
+      this.log('warn', `${event}_failed`, `${msg}: failed`, {
         durationMs: performance.now() - startedAt,
         err: error,
       });

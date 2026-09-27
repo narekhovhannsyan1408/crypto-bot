@@ -33,7 +33,7 @@ export class SessionStore {
   constructor(private readonly journal: AppLogger) {
     this.state = this.load();
     const current = this.state.current;
-    this.journal.info('session.store.loaded', 'Состояние сессий загружено', {
+    this.journal.info('session.store.loaded', 'Session state loaded', {
       path: this.filePath,
       sessionId: current?.id ?? null,
       status: current?.status ?? null,
@@ -78,7 +78,7 @@ export class SessionStore {
     } catch (error) {
       // Молча начать с чистого листа нельзя: в файле может быть сессия с реальными деньгами
       throw new Error(
-        `Файл состояния бота повреждён: ${this.filePath}. Исправьте его или переименуйте, чтобы начать с чистого состояния (${error instanceof Error ? error.message : String(error)})`,
+        `The bot state file is corrupted: ${this.filePath}. Fix it, or rename it to start from a clean state (${error instanceof Error ? error.message : String(error)})`,
         { cause: error },
       );
     }
@@ -86,7 +86,7 @@ export class SessionStore {
       // Файл старого формата сохраняем рядом и начинаем с чистого состояния
       this.journal.warn(
         'session.store.legacy_format',
-        'Файл состояния старого формата сохранён как .bak',
+        'Old-format state file saved as .bak',
         {
           path: this.filePath,
           version: parsed.version ?? 1,
@@ -112,7 +112,7 @@ export class SessionStore {
     if (migrated || unparsed) {
       this.journal.info(
         'session.store.texts_migrated',
-        'Старые записи ленты переведены в ключи словаря',
+        'Old feed entries migrated to dictionary keys',
         { migrated, unparsed },
       );
     }
@@ -129,7 +129,7 @@ export class SessionStore {
     } catch (error) {
       this.journal.error(
         'session.store.persist_failed',
-        'Не удалось сохранить состояние на диск',
+        'Failed to save the state to disk',
         error,
         {
           path: this.filePath,

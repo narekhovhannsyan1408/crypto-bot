@@ -26,7 +26,7 @@ export type ActivityEntry = {
   id: string;
   timestamp: number;
   kind: ActivityKind;
-  // Русский текст — для диагностики и старых записей; страница переводит text
+  // Английский текст для диагностики (у записей до перевода — русский); страница переводит text
   title: string;
   details?: string;
   text?: { title: Msg; details?: Msg };

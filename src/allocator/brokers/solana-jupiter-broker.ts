@@ -129,7 +129,7 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
         ),
       ),
     );
-    this.journal?.debug('broker.solana.balance', 'Остатки кошелька Solana', {
+    this.journal?.debug('broker.solana.balance', 'Solana wallet balances', {
       mode: this.mode,
       wallet: wallet.publicKey.toBase58(),
       balances,
@@ -246,7 +246,7 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
     if (this.mode === 'solana_sim') {
       this.journal?.debug(
         'broker.solana.sim_fill',
-        `Виртуальный своп ${side} ${symbol} по котировке Jupiter`,
+        `Virtual swap ${side} ${symbol} at the Jupiter quote`,
         context,
       );
       return {
@@ -258,7 +258,7 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
 
     this.journal?.info(
       'broker.solana.swap_request',
-      `Своп ${side} ${symbol} через Jupiter`,
+      `Swap ${side} ${symbol} via Jupiter`,
       context,
     );
     try {
@@ -266,7 +266,7 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
       this.journal?.log(
         'info',
         'broker.solana.swap_confirmed',
-        `Своп ${side} ${symbol} подтверждён`,
+        `Swap ${side} ${symbol} confirmed`,
         {
           durationMs: performance.now() - startedAt,
           data: {
@@ -286,7 +286,7 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
       this.journal?.log(
         'error',
         'broker.solana.swap_failed',
-        `Своп ${side} ${symbol} не исполнен`,
+        `Swap ${side} ${symbol} not executed`,
         {
           durationMs: performance.now() - startedAt,
           data: {
@@ -330,12 +330,12 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
       // Ответ RPC потерялся, но транзакция могла уйти — исход покажет её статус
       this.journal?.warn(
         'broker.solana.send_uncertain',
-        'Нет ответа на отправку свопа, проверяем статус',
+        'No response to the swap send, checking its status',
         { txId },
         error,
       );
     }
-    this.journal?.info('broker.solana.swap_sent', 'Своп отправлен в сеть', {
+    this.journal?.info('broker.solana.swap_sent', 'Swap sent to the network', {
       txId,
       url: explorerTxUrl(txId, chainTx.cluster),
       lastValidBlockHeight: swap.lastValidBlockHeight,
@@ -348,7 +348,7 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
       // Своп уже в блокчейне: без деталей учитываем по котировке, а не теряем сделку
       this.journal?.warn(
         'broker.solana.meta_unavailable',
-        'RPC не отдал детали подтверждённого свопа, учёт по котировке',
+        'RPC returned no details of the confirmed swap, booking it from the quote',
         { txId },
       );
       return {

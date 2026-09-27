@@ -1,4 +1,4 @@
-import { Msg, ru } from '../../i18n/messages';
+import { en, Msg } from '../../i18n/messages';
 import { AllocatorMode, quoteAssetOf, venueOf } from '../allocator-mode';
 import { baseAssetOf } from '../brokers/allocator-broker';
 import { downsampleEquity } from '../session/session-helpers';
@@ -100,7 +100,7 @@ export const buildAppState = (ctx: ViewContext) => {
     solana: ctx.solana,
     history: ctx.history.map((item) => ({
       ...item,
-      modeLabel: ru(modeLabelMsg(item.mode)),
+      modeLabel: en(modeLabelMsg(item.mode)),
       profit: round(item.finalEquity - item.initialCapital),
       profitPct: round((item.finalEquity / item.initialCapital - 1) * 100),
     })),
@@ -161,7 +161,7 @@ export const buildAppState = (ctx: ViewContext) => {
     session: {
       id: session.id,
       mode: session.mode,
-      modeLabel: ru(modeLabelMsg(session.mode)),
+      modeLabel: en(modeLabelMsg(session.mode)),
       venue: venueOf(session.mode),
       quoteAsset: quoteAssetOf(session.mode),
       startedAt: session.startedAt,
@@ -278,32 +278,32 @@ export const buildChart = (
 /** Снимок для расширенного дашборда (/advanced). */
 export const buildLegacySnapshot = (state: AppState, smaPeriods: number[]) => {
   if (!state.session) {
-    return { статус: 'не запущен', ошибка: state.lastError };
+    return { status: 'not started', error: state.lastError };
   }
   const { session } = state;
   return {
-    статус: session.stoppedAt ? 'остановлен' : 'работает',
-    режим: session.modeLabel,
-    капитал: session.equity,
-    стартовыйКапитал: session.initialCapital,
-    результатВПроцентах: session.profitPct,
+    status: session.stoppedAt ? 'stopped' : 'running',
+    mode: session.modeLabel,
+    equity: session.equity,
+    initialCapital: session.initialCapital,
+    returnPct: session.profitPct,
     usdt: session.cash,
-    активы: session.assets.map((asset) => ({
-      символ: asset.symbol,
-      количество: round(asset.quantity, 8),
-      цена: asset.price,
-      стоимость: asset.value,
-      текущийВес: asset.weightPct,
-      целевойВес: asset.targetWeightPct,
-      тренд:
+    assets: session.assets.map((asset) => ({
+      symbol: asset.symbol,
+      quantity: round(asset.quantity, 8),
+      price: asset.price,
+      value: asset.value,
+      weightPct: asset.weightPct,
+      targetWeightPct: asset.targetWeightPct,
+      trend:
         asset.trendVotes === null
-          ? 'нет данных'
-          : `выше ${asset.trendVotes}/${asset.trendTotal} SMA`,
+          ? 'no data'
+          : `above ${asset.trendVotes}/${asset.trendTotal} SMA`,
     })),
-    последнийСигнал: session.lastDecisionDay
+    lastDecision: session.lastDecisionDay
       ? new Date(session.lastDecisionDay).toISOString().slice(0, 10)
       : null,
-    сигнал: `ансамбль SMA ${smaPeriods.join('/')}`,
-    ошибка: state.lastError,
+    signal: `SMA ensemble ${smaPeriods.join('/')}`,
+    error: state.lastError,
   };
 };

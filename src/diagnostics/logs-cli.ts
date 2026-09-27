@@ -11,20 +11,20 @@ import { LogLevel } from '../observability/log.types';
 import { formatRecord } from './log-format';
 import { LogQuery, parseTimeArg, readLogs } from './log-reader';
 
-const USAGE = `Использование: npm run logs -- [опции]
+const USAGE = `Usage: npm run logs -- [options]
 
-  --since <6h|2d|2026-09-27T10:00>   С какого момента (по умолчанию 24h)
-  --until <...>                      До какого момента
-  --level <trace|debug|info|warn|error|fatal>  Минимальный уровень (по умолчанию debug)
-  --event <шаблон[,шаблон]>          Имена событий, * — любая подстрока (allocator.*, *.failed)
-  --session <id>                     Только события сессии
-  --op <opId>                        Только одна операция (tick-…, start-…)
-  --request <requestId>              Только один HTTP-запрос (заголовок X-Request-Id)
-  --grep <текст>                     Поиск подстроки в записи
-  --limit <N>                        Последние N записей (по умолчанию 200, 0 — все)
-  --full                             Показывать данные и стек полностью
-  --json                             Сырые JSON-строки
-  --dir <путь>                       Папка журнала (по умолчанию BOT_LOG_DIR или ./logs)
+  --since <6h|2d|2026-09-27T10:00>   From when (default 24h)
+  --until <...>                      Until when
+  --level <trace|debug|info|warn|error|fatal>  Minimum level (default debug)
+  --event <pattern[,pattern]>        Event names, * matches any substring (allocator.*, *.failed)
+  --session <id>                     Only events of one session
+  --op <opId>                        Only one operation (tick-…, start-…)
+  --request <requestId>              Only one HTTP request (X-Request-Id header)
+  --grep <text>                      Substring search in the record
+  --limit <N>                        Last N records (default 200, 0 = all)
+  --full                             Show data and stacks in full
+  --json                             Raw JSON lines
+  --dir <path>                       Journal folder (default BOT_LOG_DIR or ./logs)
 `;
 
 type Options = { query: LogQuery; limit: number; full: boolean; json: boolean };
@@ -45,7 +45,7 @@ const parseArgs = (argv: string[]): Options => {
     const flag = argv[index];
     const value = () => {
       const next = argv[index + 1];
-      if (next === undefined) throw new Error(`Для ${flag} нужно значение`);
+      if (next === undefined) throw new Error(`${flag} needs a value`);
       index += 1;
       return next;
     };
@@ -94,7 +94,7 @@ const parseArgs = (argv: string[]): Options => {
         process.exit(0);
         break;
       default:
-        throw new Error(`Неизвестная опция: ${flag}\n\n${USAGE}`);
+        throw new Error(`Unknown option: ${flag}\n\n${USAGE}`);
     }
   }
   return options;
@@ -111,12 +111,12 @@ async function main() {
   }
 
   console.log(
-    `Журнал: ${options.query.dir} · файлов ${files.length} · найдено ${records.length}` +
+    `Journal: ${options.query.dir} · ${files.length} files · ${records.length} found` +
       (records.length > shown.length
-        ? ` · показаны последние ${shown.length}`
+        ? ` · showing the last ${shown.length}`
         : '') +
-      (malformedLines ? ` · битых строк ${malformedLines}` : '') +
-      ' · время UTC\n',
+      (malformedLines ? ` · ${malformedLines} malformed lines` : '') +
+      ' · times in UTC\n',
   );
   for (const record of shown) {
     console.log(formatRecord(record, options.full));

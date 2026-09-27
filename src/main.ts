@@ -16,8 +16,8 @@ installProcessMonitor(logger, config);
 async function bootstrap() {
   const appModule = AppModule.forRoot(config.strategyMode);
   const nestLogger = new NestLoggerBridge(logger);
-  console.log(`[СИСТЕМА] Запуск, режим стратегии: ${config.strategyMode}`);
-  console.log(`[СИСТЕМА] Диагностический журнал: ${config.logging.dir}`);
+  console.log(`[SYSTEM] Starting, strategy mode: ${config.strategyMode}`);
+  console.log(`[SYSTEM] Diagnostic journal: ${config.logging.dir}`);
 
   let app:
     | NestExpressApplication
@@ -31,7 +31,7 @@ async function bootstrap() {
     );
     await httpApp.listen(config.dashboardPort, config.dashboardHost);
     console.log(
-      `[DASHBOARD] Откройте http://${config.dashboardHost}:${config.dashboardPort}`,
+      `[DASHBOARD] Open http://${config.dashboardHost}:${config.dashboardPort}`,
     );
     app = httpApp;
   } else {
@@ -41,7 +41,7 @@ async function bootstrap() {
     app.enableShutdownHooks();
   }
 
-  logger.info('process.ready', 'Приложение готово к работе', {
+  logger.info('process.ready', 'Application is ready', {
     strategyMode: config.strategyMode,
   });
 
@@ -53,7 +53,11 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  logger.fatal('process.bootstrap_failed', 'Приложение не запустилось', error);
-  console.error('[КРИТИЧЕСКАЯ_ОШИБКА][bootstrap]', error);
+  logger.fatal(
+    'process.bootstrap_failed',
+    'Application failed to start',
+    error,
+  );
+  console.error('[FATAL][bootstrap]', error);
   process.exit(1);
 });

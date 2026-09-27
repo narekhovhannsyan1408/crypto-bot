@@ -1,4 +1,4 @@
-import { Msg, ru } from '../../i18n/messages';
+import { en, Msg } from '../../i18n/messages';
 import { ActivityEntry, AllocatorSession, EquityPoint } from './session.types';
 
 const MAX_ACTIVITY = 500;
@@ -20,8 +20,8 @@ export const appendActivity = (
     ...facts,
     timestamp,
     id: `${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
-    title: ru(title),
-    details: details ? ru(details) : undefined,
+    title: en(title),
+    details: details ? en(details) : undefined,
     text: { title, details },
   });
   session.activity.length = Math.min(session.activity.length, MAX_ACTIVITY);

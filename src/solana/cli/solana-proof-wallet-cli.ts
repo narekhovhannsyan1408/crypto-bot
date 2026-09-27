@@ -9,14 +9,14 @@ const LOW_BALANCE_SOL = 0.05;
 const AIRDROP_SOL = 1;
 
 const HELP = `
-Кошелёк для журнала решений в Solana (Memo-программа).
+Wallet for the Solana decision journal (Memo program).
 
-  npm run solana:proof-wallet            создать кошелёк (если нет), показать адрес и баланс,
-                                         в devnet/testnet запросить бесплатные SOL
-  npm run solana:proof-wallet -- --help  эта справка
+  npm run solana:proof-wallet            create the wallet (if missing), show its address and balance,
+                                         request free SOL on devnet/testnet
+  npm run solana:proof-wallet -- --help  this help
 
-Файл ключа: SOLANA_PROOF_KEYPAIR_PATH (по умолчанию .solana/proof-keypair.json, в .gitignore).
-Сеть: SOLANA_PROOF_CLUSTER (devnet по умолчанию), RPC: SOLANA_PROOF_RPC_URL.
+Key file: SOLANA_PROOF_KEYPAIR_PATH (default .solana/proof-keypair.json, git-ignored).
+Network: SOLANA_PROOF_CLUSTER (devnet by default), RPC: SOLANA_PROOF_RPC_URL.
 `;
 
 async function main() {
@@ -36,20 +36,20 @@ async function main() {
     writeFileSync(path, JSON.stringify(Array.from(keypair.secretKey)), {
       mode: 0o600,
     });
-    console.log(`Создан новый кошелёк: ${shownPath}`);
+    console.log(`Created a new wallet: ${shownPath}`);
   }
 
   const address = keypair.publicKey.toBase58();
   const connection = createConnection(settings.rpcUrl);
-  console.log(`Адрес:  ${address}`);
-  console.log(`Сеть:   ${settings.cluster} (${settings.rpcUrl})`);
+  console.log(`Address: ${address}`);
+  console.log(`Network: ${settings.cluster} (${settings.rpcUrl})`);
 
   let balance =
     (await connection.getBalance(keypair.publicKey)) / LAMPORTS_PER_SOL;
-  console.log(`Баланс: ${balance} SOL`);
+  console.log(`Balance: ${balance} SOL`);
 
   if (balance < LOW_BALANCE_SOL && settings.cluster !== 'mainnet-beta') {
-    console.log(`Запрашиваю ${AIRDROP_SOL} SOL в ${settings.cluster}…`);
+    console.log(`Requesting ${AIRDROP_SOL} SOL on ${settings.cluster}…`);
     try {
       const txId = await connection.requestAirdrop(
         keypair.publicKey,
@@ -59,22 +59,22 @@ async function main() {
       await connection.confirmTransaction({ signature: txId, ...latest });
       balance =
         (await connection.getBalance(keypair.publicKey)) / LAMPORTS_PER_SOL;
-      console.log(`Готово, баланс: ${balance} SOL`);
+      console.log(`Done, balance: ${balance} SOL`);
     } catch (error) {
       console.log(
-        `Faucet отказал (${error instanceof Error ? error.message : String(error)}).\n` +
-          `Пополните кошелёк вручную: https://faucet.solana.com — адрес ${address}, сеть ${settings.cluster}.`,
+        `The faucet refused (${error instanceof Error ? error.message : String(error)}).\n` +
+          `Top the wallet up manually at https://faucet.solana.com — address ${address}, network ${settings.cluster}.`,
       );
     }
   } else if (balance < LOW_BALANCE_SOL) {
     console.log(
-      `Мало SOL для записей в основной сети: переведите немного SOL на ${address}.`,
+      `Not enough SOL for mainnet records: send a little SOL to ${address}.`,
     );
   }
 
   if (!settings.enabled) {
     console.log(
-      '\nЧтобы бот публиковал решения, добавьте в .env строку SOLANA_PROOF_ENABLED=true и перезапустите бота.',
+      '\nTo make the bot publish its decisions, add SOLANA_PROOF_ENABLED=true to .env and restart the bot.',
     );
   }
 }

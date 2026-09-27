@@ -144,11 +144,11 @@ describe('Web API (e2e)', () => {
     const legacy = await api().get('/api/state').set('Host', HOST).expect(200);
     const runtime = (
       legacy.body as {
-        runtime: { strategyMode: string; allocator: { статус: string } };
+        runtime: { strategyMode: string; allocator: { status: string } };
       }
     ).runtime;
     expect(runtime.strategyMode).toBe('trend_allocator');
-    expect(runtime.allocator.статус).toBe('работает');
+    expect(runtime.allocator.status).toBe('running');
 
     const stopped = await api()
       .post('/api/app/stop')

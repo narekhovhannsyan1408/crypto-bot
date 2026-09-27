@@ -8,7 +8,7 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import { getBotConfig, SolanaCluster } from '../config/bot-config';
-import { errorMsg, Msg, ru } from '../i18n/messages';
+import { en, errorMsg, Msg } from '../i18n/messages';
 import { AppLogger } from '../observability/app-logger';
 import {
   DecisionProof,
@@ -71,8 +71,8 @@ export class SolanaProofService {
       this.problem = errorMsg(error);
       this.journal.warn(
         'solana.proof.unavailable',
-        'Журнал решений в Solana включён, но кошелёк не загружен',
-        { cluster: this.settings.cluster, problem: ru(this.problem) },
+        'Solana decision journal is enabled, but its wallet is not loaded',
+        { cluster: this.settings.cluster, problem: en(this.problem) },
       );
     }
   }
@@ -111,7 +111,7 @@ export class SolanaProofService {
       maxRetries: 5,
     });
     const cluster = this.settings.cluster;
-    this.journal.info('solana.proof.sent', 'Решение отправлено в Solana', {
+    this.journal.info('solana.proof.sent', 'Decision sent to Solana', {
       txId,
       cluster,
       url: explorerTxUrl(txId, cluster),
@@ -129,14 +129,14 @@ export class SolanaProofService {
         }
         this.journal.info(
           'solana.proof.confirmed',
-          'Решение подтверждено в Solana',
+          'Decision confirmed on Solana',
           { txId, cluster },
         );
       })
       .catch((error: unknown) =>
         this.journal.warn(
           'solana.proof.unconfirmed',
-          'Запись решения не подтвердилась',
+          'Decision record was not confirmed',
           { txId, cluster },
           error,
         ),

@@ -66,30 +66,24 @@ export class BotLoggerService {
   }
 
   logCandle(payload: unknown) {
-    this.printBlock('СВЕЧА', 'Новая закрытая свеча', payload, 'candle');
-    this.journal?.debug('market.candle', 'Новая закрытая свеча', payload);
+    this.printBlock('CANDLE', 'New closed candle', payload, 'candle');
+    this.journal?.debug('market.candle', 'New closed candle', payload);
   }
 
   logSignal(payload: unknown) {
-    this.printBlock('СИГНАЛ', 'Результат стратегии', payload, 'signal');
-    this.journal?.debug('strategy.signal', 'Результат стратегии', payload);
+    this.printBlock('SIGNAL', 'Strategy result', payload, 'signal');
+    this.journal?.debug('strategy.signal', 'Strategy result', payload);
   }
 
   // event = null: только консоль и дашборд (структурированную запись в журнал делает вызывающий)
   logTrade(payload: unknown, event: string | null = 'trade.executed') {
-    this.printBlock(
-      'СДЕЛКА',
-      'Исполнение торгового действия',
-      payload,
-      'trade',
-    );
-    if (event)
-      this.journal?.info(event, 'Исполнение торгового действия', payload);
+    this.printBlock('TRADE', 'Trade executed', payload, 'trade');
+    if (event) this.journal?.info(event, 'Trade executed', payload);
   }
 
   logPortfolio(payload: unknown) {
-    this.printBlock('ПОРТФЕЛЬ', 'Состояние портфеля', payload, 'portfolio');
-    this.journal?.debug('portfolio.snapshot', 'Состояние портфеля', payload);
+    this.printBlock('PORTFOLIO', 'Portfolio state', payload, 'portfolio');
+    this.journal?.debug('portfolio.snapshot', 'Portfolio state', payload);
   }
 
   /** event — машиночитаемое имя события для журнала, например allocator.session.started */
@@ -98,7 +92,7 @@ export class BotLoggerService {
     payload?: unknown,
     event: string | null = 'bot.info',
   ) {
-    this.printBlock('ИНФО', message, payload, 'info');
+    this.printBlock('INFO', message, payload, 'info');
     if (event) this.journal?.info(event, message, payload);
   }
 
@@ -107,7 +101,7 @@ export class BotLoggerService {
     payload?: unknown,
     event: string | null = 'bot.error',
   ) {
-    this.printBlock('ОШИБКА', message, payload, 'error', true);
+    this.printBlock('ERROR', message, payload, 'error', true);
     if (event) this.persistError(event, message, payload, 'error');
   }
 
@@ -185,7 +179,7 @@ export class BotLoggerService {
 
     if (Array.isArray(value)) {
       if (value.length === 0) {
-        return [`${indent}(пусто)`];
+        return [`${indent}(empty)`];
       }
 
       return value.flatMap((item) => {
@@ -203,7 +197,7 @@ export class BotLoggerService {
       const entries = Object.entries(value as Record<string, unknown>);
 
       if (entries.length === 0) {
-        return [`${indent}(пустой объект)`];
+        return [`${indent}(empty object)`];
       }
 
       return entries.flatMap(([key, entryValue]) => {
@@ -239,7 +233,7 @@ export class BotLoggerService {
     }
 
     if (typeof value === 'boolean') {
-      return value ? 'да' : 'нет';
+      return value ? 'yes' : 'no';
     }
 
     if (value === null || value === undefined) {
@@ -250,15 +244,10 @@ export class BotLoggerService {
   }
 
   private getTimestamp() {
-    return new Date().toLocaleString('ru-RU', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
+    // 2026-09-27 20:23:41 — местное время в формате, понятном на любом языке
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   }
 
   private colorize(colorKey: keyof BotLoggerService['colors'], text: string) {
@@ -266,9 +255,9 @@ export class BotLoggerService {
   }
 
   private mapTagToEventType(tag: string) {
-    if (tag === 'СДЕЛКА') return 'trade' as const;
-    if (tag === 'ПОРТФЕЛЬ') return 'portfolio' as const;
-    if (tag === 'ИНФО') return 'system' as const;
+    if (tag === 'TRADE') return 'trade' as const;
+    if (tag === 'PORTFOLIO') return 'portfolio' as const;
+    if (tag === 'INFO') return 'system' as const;
     return 'log' as const;
   }
 }

@@ -49,7 +49,7 @@ describe('sanitize', () => {
     const result = sanitize(cyclic) as { items: unknown[]; self: unknown };
 
     expect(result.items).toHaveLength(51);
-    expect(result.self).toBe('[циклическая ссылка]');
+    expect(result.self).toBe('[circular]');
     expect((sanitize('a'.repeat(5000)) as string).length).toBeLessThan(2100);
   });
 
@@ -65,7 +65,7 @@ describe('sanitize', () => {
 
     expect(compact).toContain('signal.service.ts');
     expect(compact).not.toContain('node_modules');
-    expect(compact).toContain('скрыто кадров библиотек: 2');
+    expect(compact).toContain('2 library frames hidden');
   });
 
   it('keeps request details of HTTP errors', () => {

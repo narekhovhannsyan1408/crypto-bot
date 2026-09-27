@@ -119,16 +119,19 @@ export const renderMsg = (lang: Lang, message: Msg): string => {
   );
 };
 
-/** Русский текст сообщения — для журнала, консоли и старых полей состояния. */
+/** Английский текст сообщения — для журнала, консоли и текстовых полей состояния. */
+export const en = (message: Msg) => renderMsg('en', message);
+
+/** Русский текст сообщения (тесты словаря, разбор старых записей). */
 export const ru = (message: Msg) => renderMsg('ru', message);
 
 /**
  * Ошибка, которую можно показать пользователю на любом языке. В журнал и в
- * error.message попадает русский текст, в интерфейс — ключ сообщения.
+ * error.message попадает английский текст, в интерфейс — ключ сообщения.
  */
 export class LocalizedError extends Error {
   constructor(readonly msg: Msg) {
-    super(ru(msg));
+    super(en(msg));
     this.name = 'LocalizedError';
   }
 }

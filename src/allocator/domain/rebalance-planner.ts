@@ -69,7 +69,7 @@ export const planRebalance = (input: RebalancePlanInput): RebalancePlan => {
     if (Math.abs(delta) < input.minOrderUsdt) {
       skipped.push({
         symbol: holding.symbol,
-        reason: `Разница ${delta.toFixed(2)} USDT меньше минимального ордера ${input.minOrderUsdt} USDT`,
+        reason: `Difference ${delta.toFixed(2)} USDT is below the minimum order of ${input.minOrderUsdt} USDT`,
       });
       continue;
     }
@@ -111,8 +111,7 @@ export const planRebalance = (input: RebalancePlanInput): RebalancePlan => {
         }
         skipped.push({
           symbol: order.symbol,
-          reason:
-            'Недостаточно свободного USDT для покупки минимального объёма',
+          reason: 'Not enough free USDT for the minimum order',
         });
         return false;
       }),

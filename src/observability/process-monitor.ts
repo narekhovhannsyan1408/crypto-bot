@@ -18,7 +18,7 @@ export const describeConfig = (config: BotConfig) => ({
   },
   dashboard: config.dashboardEnabled
     ? `http://${config.dashboardHost}:${config.dashboardPort}`
-    : 'выключен',
+    : 'disabled',
   allocator: {
     assets: config.allocator.assets,
     smaPeriods: config.allocator.smaPeriods,
@@ -54,7 +54,7 @@ export const installProcessMonitor = (logger: AppLogger, config: BotConfig) => {
   const loopDelay = monitorEventLoopDelay({ resolution: 20 });
   loopDelay.enable();
 
-  logger.info('process.started', 'Процесс бота запущен', {
+  logger.info('process.started', 'Bot process started', {
     ...getBuildInfo(),
     pid: process.pid,
     cwd: process.cwd(),
@@ -63,7 +63,7 @@ export const installProcessMonitor = (logger: AppLogger, config: BotConfig) => {
 
   const heartbeat = setInterval(() => {
     const memory = process.memoryUsage();
-    logger.debug('process.heartbeat', 'Процесс работает', {
+    logger.debug('process.heartbeat', 'Process is alive', {
       uptimeSec: Math.round((Date.now() - startedAt) / 1000),
       rssMb: Math.round(memory.rss / MB),
       heapUsedMb: Math.round(memory.heapUsed / MB),
@@ -76,23 +76,19 @@ export const installProcessMonitor = (logger: AppLogger, config: BotConfig) => {
   heartbeat.unref();
 
   process.on('uncaughtException', (error) => {
-    logger.fatal(
-      'process.uncaught_exception',
-      'Необработанное исключение',
-      error,
-    );
-    console.error('[КРИТИЧЕСКАЯ_ОШИБКА][uncaughtException]', error);
+    logger.fatal('process.uncaught_exception', 'Uncaught exception', error);
+    console.error('[FATAL][uncaughtException]', error);
   });
   process.on('unhandledRejection', (reason) => {
     logger.error(
       'process.unhandled_rejection',
-      'Необработанный отказ промиса',
+      'Unhandled promise rejection',
       reason,
     );
-    console.error('[КРИТИЧЕСКАЯ_ОШИБКА][unhandledRejection]', reason);
+    console.error('[FATAL][unhandledRejection]', reason);
   });
   process.on('exit', (code) => {
-    logger.info('process.exit', 'Процесс завершается', {
+    logger.info('process.exit', 'Process is exiting', {
       code,
       uptimeSec: Math.round((Date.now() - startedAt) / 1000),
     });

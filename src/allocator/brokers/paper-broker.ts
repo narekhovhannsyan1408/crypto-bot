@@ -33,7 +33,7 @@ export class PaperAllocatorBroker implements AllocatorBroker {
   async buy(symbol: string, quoteAmount: number): Promise<AllocatorFill> {
     const price = (await this.getPrice(symbol)) * (1 + this.slippagePct);
     const fee = quoteAmount * this.feePct;
-    this.journal?.debug('broker.paper.fill', `Виртуальная покупка ${symbol}`, {
+    this.journal?.debug('broker.paper.fill', `Virtual buy ${symbol}`, {
       symbol,
       quoteAmount,
       price,
@@ -54,7 +54,7 @@ export class PaperAllocatorBroker implements AllocatorBroker {
     const price = (await this.getPrice(symbol)) * (1 - this.slippagePct);
     const gross = quantity * price;
     const fee = gross * this.feePct;
-    this.journal?.debug('broker.paper.fill', `Виртуальная продажа ${symbol}`, {
+    this.journal?.debug('broker.paper.fill', `Virtual sell ${symbol}`, {
       symbol,
       quantity,
       price,

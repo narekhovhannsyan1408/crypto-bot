@@ -9,7 +9,7 @@ export const formatRecord = (record: LogRecord, full: boolean) => {
     record.requestId ? `req=${record.requestId}` : null,
     record.sessionId ? `session=${record.sessionId}` : null,
   ].filter(Boolean);
-  const head = `${record.ts.replace('T', ' ').replace('Z', '')} ${record.level.toUpperCase().padEnd(5)} ${record.event}${ids.length ? ` [${ids.join(' ')}]` : ''}${record.durationMs !== undefined ? ` (${record.durationMs} мс)` : ''}`;
+  const head = `${record.ts.replace('T', ' ').replace('Z', '')} ${record.level.toUpperCase().padEnd(5)} ${record.event}${ids.length ? ` [${ids.join(' ')}]` : ''}${record.durationMs !== undefined ? ` (${record.durationMs} ms)` : ''}`;
   const lines = [`${head}\n    ${record.msg}`];
   if (record.data !== undefined) {
     const data = full

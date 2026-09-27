@@ -663,7 +663,14 @@ function renderHistory(app) {
 
 // ---------- Системный журнал ----------
 
+// Русские метки — события старого внутридневного режима и записи до перевода журнала
 const LOG_TYPES = {
+  TRADE: 'trade',
+  PORTFOLIO: 'portfolio',
+  SIGNAL: 'signal',
+  INFO: 'info',
+  ERROR: 'error',
+  CANDLE: 'candle',
   СДЕЛКА: 'trade',
   ПОРТФЕЛЬ: 'portfolio',
   СИГНАЛ: 'signal',
@@ -673,6 +680,19 @@ const LOG_TYPES = {
 };
 // Постоянные заголовки событий переводятся, свободный текст остаётся как есть
 const LOG_TITLES = {
+  'Trade executed': 'adv.logs.titles.trade',
+  'Portfolio state': 'adv.logs.titles.portfolio',
+  'Strategy result': 'adv.logs.titles.signal',
+  'New closed candle': 'adv.logs.titles.candle',
+  'Bot is waiting to be started from the web interface': 'adv.logs.titles.idle',
+  'Bot started from the web interface': 'adv.logs.titles.started',
+  'Bot stopped': 'adv.logs.titles.stopped',
+  'Auto-protection triggered': 'adv.logs.titles.autostop',
+  'Daily decision': 'adv.logs.titles.decision',
+  'Failed to make the daily decision': 'adv.logs.titles.decisionFailed',
+  'Bot resumed after a restart': 'adv.logs.titles.resumed',
+  'Failed to refresh prices': 'adv.logs.titles.pricesFailed',
+  'Failed to reconcile the balance with the exchange': 'adv.logs.titles.reconcileFailed',
   'Исполнение торгового действия': 'adv.logs.titles.trade',
   'Состояние портфеля': 'adv.logs.titles.portfolio',
   'Результат стратегии': 'adv.logs.titles.signal',
@@ -744,12 +764,17 @@ function setSocketStatus(connected) {
 
 function commandResultText(payload) {
   if (payload?.i18n) return tm(payload.i18n);
+  // Русские поля — ответы сервера до перевода журнала на английский
   const status = {
+    ok: t('adv.command.ok'),
+    failed: t('adv.command.failed'),
+    error: t('adv.command.error'),
     успешно: t('adv.command.ok'),
     'не выполнено': t('adv.command.failed'),
     ошибка: t('adv.command.error'),
-  }[payload?.статус];
-  return [status, payload?.сообщение].filter(Boolean).join(': ') || t('adv.command.done');
+  }[payload?.status ?? payload?.статус];
+  const message = payload?.message ?? payload?.сообщение;
+  return [status, message].filter(Boolean).join(': ') || t('adv.command.done');
 }
 
 function connectSocket() {

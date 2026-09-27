@@ -8,7 +8,7 @@ import {
   Msg,
   msg,
   MsgParam,
-  ru,
+  en,
 } from '../../i18n/messages';
 import { newId, runWithLogContext } from '../../observability/log-context';
 import { SolanaProofService } from '../../solana/solana-proof.service';
@@ -145,13 +145,13 @@ export class AllocatorEngine implements OnModuleDestroy {
       const session = this.session;
       if (!session || session.status !== 'running') {
         this.logger.logInfo(
-          'Бот ожидает запуска из веб-интерфейса',
+          'Bot is waiting to be started from the web interface',
           undefined,
           null,
         );
         this.journal.info(
           'allocator.idle',
-          'Нет запущенной сессии, бот ждёт запуска',
+          'No running session, the bot is waiting to be started',
           {
             lastSessionStatus: session?.status ?? null,
           },
@@ -161,7 +161,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       if (session.mode === 'live_real' && !this.config.allowLiveReal) {
         this.lastError = msg('resume.blockedLive');
         this.logger.logError(
-          ru(this.lastError),
+          en(this.lastError),
           undefined,
           'allocator.session.resume_blocked',
         );
@@ -170,7 +170,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       if (session.mode === 'solana_real' && !this.config.solana.allowReal) {
         this.lastError = msg('resume.blockedSolana');
         this.logger.logError(
-          ru(this.lastError),
+          en(this.lastError),
           undefined,
           'allocator.session.resume_blocked',
         );
@@ -188,18 +188,18 @@ export class AllocatorEngine implements OnModuleDestroy {
         } catch (error) {
           this.fail(
             'allocator.reconcile.failed',
-            'Не удалось сверить баланс с биржей',
+            'Failed to reconcile the balance with the exchange',
             error,
           );
         }
       });
 
       this.logger.logInfo(
-        'Работа бота возобновлена после перезапуска',
+        'Bot resumed after a restart',
         {
-          режим: ru(modeLabelMsg(session.mode)),
-          стартовыйКапитал: session.initialCapital,
-          последнееРешение: session.lastRebalanceDay
+          mode: en(modeLabelMsg(session.mode)),
+          initialCapital: session.initialCapital,
+          lastDecision: session.lastRebalanceDay
             ? isoDay(session.lastRebalanceDay)
             : null,
           cash: session.cash,
@@ -216,14 +216,14 @@ export class AllocatorEngine implements OnModuleDestroy {
     return this.operation('start', async () => {
       this.journal.info(
         'allocator.session.start_requested',
-        'Запрос на запуск бота',
+        'Bot start requested',
         options,
       );
       const result = await this.exclusive(() => this.startSession(options));
       if (!result.success) {
         this.journal.warn(
           'allocator.session.start_rejected',
-          ru(result.message),
+          en(result.message),
           options,
         );
       }
@@ -245,7 +245,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     if (this.tickInFlight) {
       this.journal.debug(
         'allocator.tick.skipped',
-        'Предыдущая проверка ещё идёт',
+        'Previous check is still running',
       );
       return;
     }
@@ -294,7 +294,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     await this.exclusive(() => this.refreshPrices()).catch((error: unknown) =>
       this.journal.debug(
         'allocator.prices.ui_refresh_failed',
-        'Не удалось обновить цены для страницы',
+        'Failed to refresh prices for the page',
         {
           error: describeError(error),
         },
@@ -367,7 +367,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     } catch (error) {
       this.journal.warn(
         'allocator.balance.failed',
-        `Не удалось получить баланс ${venueOf(mode)}`,
+        `Failed to get the ${venueOf(mode)} balance`,
         { mode },
         error,
       );
@@ -482,7 +482,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       } catch (error) {
         this.journal.warn(
           'allocator.balance.failed',
-          'Не удалось проверить баланс при запуске',
+          'Failed to check the balance at start',
           undefined,
           error,
         );
@@ -531,11 +531,11 @@ export class AllocatorEngine implements OnModuleDestroy {
       { sessionId: session.id, mode: session.mode },
       async () => {
         this.logger.logInfo(
-          'Бот запущен из веб-интерфейса',
+          'Bot started from the web interface',
           {
-            режим: ru(modeLabelMsg(options.mode)),
-            капиталUSDT: capital,
-            автозащита: autoStop > 0 ? `−${autoStop * 100}%` : 'выключена',
+            mode: en(modeLabelMsg(options.mode)),
+            capitalUsdt: capital,
+            autoProtection: autoStop > 0 ? `−${autoStop * 100}%` : 'off',
             assets: this.settings.assets,
             smaPeriods: this.settings.smaPeriods,
           },
@@ -569,7 +569,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     await this.refreshPrices().catch((error: unknown) =>
       this.fail(
         'allocator.prices.refresh_failed',
-        'Не удалось обновить цены при остановке',
+        'Failed to refresh prices while stopping',
         error,
       ),
     );
@@ -577,7 +577,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     const now = Date.now();
     session.status = 'stopped';
     session.stoppedAt = now;
-    session.stopReason = ru(reason);
+    session.stopReason = en(reason);
     session.stopReasonMsg = reason;
     appendEquityPoint(
       session.equityHistory,
@@ -603,14 +603,14 @@ export class AllocatorEngine implements OnModuleDestroy {
       stoppedAt: now,
       initialCapital: session.initialCapital,
       finalEquity: equity,
-      stopReason: ru(reason),
+      stopReason: en(reason),
       stopReasonMsg: reason,
     });
     this.logger.logInfo(
-      kind === 'autostop' ? 'Сработала автозащита' : 'Бот остановлен',
+      kind === 'autostop' ? 'Auto-protection triggered' : 'Bot stopped',
       {
-        причина: ru(reason),
-        итогUSDT: round(equity),
+        reason: en(reason),
+        finalUsdt: round(equity),
         initialCapital: session.initialCapital,
         cash: session.cash,
         quantities: session.quantities,
@@ -624,7 +624,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     if (unsold.length) {
       this.journal.error(
         'allocator.session.stop_unsold',
-        'Остановлено, но часть монет не продана',
+        'Stopped, but some coins were not sold',
         undefined,
         { unsold, quantities: session.quantities },
       );
@@ -692,7 +692,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       } else {
         this.journal.debug(
           'allocator.rebalance.deferred',
-          'Ждём паузу перед повторной попыткой',
+          'Waiting before the next retry',
           {
             day: isoDay(day),
             failures: this.retry.failures,
@@ -712,37 +712,32 @@ export class AllocatorEngine implements OnModuleDestroy {
       this.store.saveCurrent(session);
       const equity = this.equity(session);
       this.logger.logPortfolio({
-        стратегия: STRATEGY_NAME,
-        капитал: round(equity),
-        баланс: round(session.cash),
-        результатВПроцентах: round((equity / session.initialCapital - 1) * 100),
+        strategy: STRATEGY_NAME,
+        equity: round(equity),
+        cash: round(session.cash),
+        returnPct: round((equity / session.initialCapital - 1) * 100),
       });
     } catch (error) {
       this.fail(
         'allocator.prices.refresh_failed',
-        'Не удалось обновить цены',
+        'Failed to refresh prices',
         error,
       );
     }
 
-    this.journal.log(
-      'debug',
-      'allocator.cycle.completed',
-      'Проверка завершена',
-      {
-        durationMs: performance.now() - startedAt,
-        data: {
-          decisionDay: isoDay(day),
-          decisionDone: session.lastRebalanceDay === day,
-          equity: round(this.equity(session)),
-          cash: round(session.cash),
-          quantities: session.quantities,
-          prices: this.prices,
-          pricesAgeMs: this.pricesAt ? Date.now() - this.pricesAt : null,
-          lastError: this.lastError,
-        },
+    this.journal.log('debug', 'allocator.cycle.completed', 'Check completed', {
+      durationMs: performance.now() - startedAt,
+      data: {
+        decisionDay: isoDay(day),
+        decisionDone: session.lastRebalanceDay === day,
+        equity: round(this.equity(session)),
+        cash: round(session.cash),
+        quantities: session.quantities,
+        prices: this.prices,
+        pricesAgeMs: this.pricesAt ? Date.now() - this.pricesAt : null,
+        lastError: this.lastError,
       },
-    );
+    });
   }
 
   private canAttemptRebalance(day: number, now: number) {
@@ -766,10 +761,10 @@ export class AllocatorEngine implements OnModuleDestroy {
     );
     this.retry.nextAttemptAt = now + delay;
     this.lastError = errorMsg(error);
-    this.logger.logError('Не удалось принять ежедневное решение', error, null);
+    this.logger.logError('Failed to make the daily decision', error, null);
     this.journal.warn(
       'allocator.rebalance.failed',
-      'Не удалось принять ежедневное решение, будет повтор',
+      'Failed to make the daily decision, will retry',
       {
         day: isoDay(day),
         failures: this.retry.failures,
@@ -792,7 +787,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     const assets = this.settings.assets;
     this.journal.info(
       'allocator.rebalance.started',
-      'Ежедневное решение: старт',
+      'Daily decision: started',
       {
         day: isoDay(day),
         attempt: this.retry.failures + 1,
@@ -805,14 +800,10 @@ export class AllocatorEngine implements OnModuleDestroy {
       day,
       now,
     );
-    this.journal.info(
-      'allocator.rebalance.signals',
-      'Сигналы тренда рассчитаны',
-      {
-        day: isoDay(day),
-        signals,
-      },
-    );
+    this.journal.info('allocator.rebalance.signals', 'Trend signals computed', {
+      day: isoDay(day),
+      signals,
+    });
     await this.refreshPrices();
 
     const allocationPerAsset = 1 / assets.length;
@@ -842,7 +833,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     });
     this.journal.info(
       'allocator.rebalance.plan',
-      `План: ордеров ${plan.orders.length}`,
+      `Plan: ${plan.orders.length} orders`,
       {
         equity: plan.equity,
         cash: session.cash,
@@ -855,16 +846,16 @@ export class AllocatorEngine implements OnModuleDestroy {
       },
     );
     this.logger.logInfo(
-      'Ежедневное решение бота',
+      'Daily decision',
       {
-        день: isoDay(day),
-        капитал: round(plan.equity),
-        сигналы: signals.map((signal) => ({
-          символ: signal.symbol,
-          закрытие: signal.close,
-          целеваяДоляВМонете: `${(signal.exposure * 100).toFixed(0)}%`,
+        day: isoDay(day),
+        equity: round(plan.equity),
+        signals: signals.map((signal) => ({
+          symbol: signal.symbol,
+          close: signal.close,
+          targetShareOfSlice: `${(signal.exposure * 100).toFixed(0)}%`,
         })),
-        ордеров: plan.orders.length,
+        orders: plan.orders.length,
       },
       null,
     );
@@ -907,13 +898,13 @@ export class AllocatorEngine implements OnModuleDestroy {
           }),
         );
         this.logger.logError(
-          `Не удалось исполнить ордер ${order.side} ${order.symbol}`,
+          `Failed to execute order ${order.side} ${order.symbol}`,
           error,
           null,
         );
         this.journal.error(
           'allocator.order.failed',
-          `Ордер ${order.side} ${order.symbol} не исполнен`,
+          `Order ${order.side} ${order.symbol} not executed`,
           error,
           {
             order,
@@ -950,7 +941,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     this.journal.log(
       'info',
       'allocator.rebalance.completed',
-      'Ежедневное решение принято',
+      'Daily decision made',
       {
         durationMs: performance.now() - startedAt,
         data: {
@@ -986,7 +977,7 @@ export class AllocatorEngine implements OnModuleDestroy {
         this.staleAutoStopReported = true;
         this.journal.warn(
           'allocator.autostop.skipped_stale_prices',
-          'Автозащита пропущена: нет свежих цен',
+          'Auto-protection skipped: no fresh prices',
           {
             pricesAgeMs: this.pricesAt ? Date.now() - this.pricesAt : null,
             prices: this.prices,
@@ -999,7 +990,7 @@ export class AllocatorEngine implements OnModuleDestroy {
 
     const equity = this.equity(session);
     const threshold = session.initialCapital * (1 - session.autoStopLossPct);
-    this.journal.trace('allocator.autostop.checked', 'Проверка автозащиты', {
+    this.journal.trace('allocator.autostop.checked', 'Auto-protection check', {
       equity,
       threshold,
     });
@@ -1008,7 +999,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     }
     this.journal.warn(
       'allocator.autostop.triggered',
-      'Капитал ниже порога автозащиты',
+      'Capital is below the auto-protection threshold',
       {
         equity,
         threshold,
@@ -1039,13 +1030,13 @@ export class AllocatorEngine implements OnModuleDestroy {
       } catch (error) {
         unsold.push(baseAssetOf(symbol));
         this.logger.logError(
-          `Не удалось продать ${symbol} при остановке`,
+          `Failed to sell ${symbol} while stopping`,
           error,
           null,
         );
         this.journal.error(
           'allocator.order.failed',
-          `Не удалось продать ${symbol} при остановке`,
+          `Failed to sell ${symbol} while stopping`,
           error,
           {
             symbol,
@@ -1085,7 +1076,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     }
     this.journal.debug(
       'allocator.reconcile.checked',
-      'Сверка учёта с балансом биржи',
+      'Session records reconciled with the exchange balance',
       {
         balances,
         adjustments,
@@ -1094,7 +1085,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     if (adjustments.length > 0) {
       this.journal.warn(
         'allocator.reconcile.adjusted',
-        'Учёт бота уменьшен по балансу биржи',
+        'Session records reduced to the exchange balance',
         {
           before,
           after: { cash: session.cash, quantities: session.quantities },
@@ -1150,7 +1141,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       true,
     );
     this.store.saveCurrent(session);
-    this.journal.info('allocator.order.filled', ru(text.title), {
+    this.journal.info('allocator.order.filled', en(text.title), {
       fill,
       order: order ?? null,
       after: {
@@ -1160,16 +1151,17 @@ export class AllocatorEngine implements OnModuleDestroy {
     });
     this.logger.logTrade(
       {
-        действие: fill.side === 'BUY' ? 'КУПИТЬ' : 'ПРОДАТЬ',
-        символ: fill.symbol,
-        стратегия: STRATEGY_NAME,
+        action: fill.side,
+        symbol: fill.symbol,
+        strategy: STRATEGY_NAME,
         strategyId: 'trend_allocator',
-        сторона: 'ЛОНГ',
-        цена: round(fill.price, 4),
-        количество: round(fill.quantity, 8),
-        суммаUSDT: round(fill.quoteAmount),
-        комиссия: round(fill.fee, 6),
-        причина: `${text.details ? ru(text.details) : ''} [${session.mode}]`,
+        side: 'LONG',
+        price: round(fill.price, 4),
+        quantity: round(fill.quantity, 8),
+        amount: round(fill.quoteAmount),
+        quote: quoteAssetOf(session.mode),
+        fee: round(fill.fee, 6),
+        reason: `${text.details ? en(text.details) : ''} [${session.mode}]`,
       },
       null,
     );
@@ -1224,7 +1216,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     } catch (error) {
       this.journal.warn(
         'solana.proof.failed',
-        'Не удалось записать решение в Solana',
+        'Failed to write the decision to Solana',
         { day: isoDay(day) },
         error,
       );

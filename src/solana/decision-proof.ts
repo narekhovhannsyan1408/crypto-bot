@@ -59,7 +59,7 @@ export const encodeDecisionMemo = (proof: DecisionProof) => {
   }
   if (Buffer.byteLength(memo) > MAX_MEMO_BYTES) {
     throw new Error(
-      `Запись решения не помещается в транзакцию (${Buffer.byteLength(memo)} байт)`,
+      `The decision record does not fit into a transaction (${Buffer.byteLength(memo)} bytes)`,
     );
   }
   return memo;

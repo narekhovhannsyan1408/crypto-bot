@@ -72,14 +72,10 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
         Number(free[asset] ?? 0),
       ]),
     );
-    this.journal?.debug(
-      'broker.binance.balance',
-      'Свободные остатки на Binance',
-      {
-        mode: this.mode,
-        balances,
-      },
-    );
+    this.journal?.debug('broker.binance.balance', 'Free balances on Binance', {
+      mode: this.mode,
+      balances,
+    });
     return balances;
   }
 
@@ -122,7 +118,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     const context = { mode: this.mode, symbol, side, ...request };
     this.journal?.info(
       'broker.binance.order_request',
-      `Отправка ордера ${side} ${symbol}`,
+      `Sending order ${side} ${symbol}`,
       context,
     );
     try {
@@ -130,7 +126,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
       this.journal?.log(
         'info',
         'broker.binance.order_response',
-        `Ответ Binance: ${side} ${symbol}`,
+        `Binance response: ${side} ${symbol}`,
         {
           durationMs: performance.now() - startedAt,
           data: {
@@ -149,7 +145,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
       this.journal?.log(
         'error',
         'broker.binance.order_failed',
-        `Binance отклонил ордер ${side} ${symbol}`,
+        `Binance rejected order ${side} ${symbol}`,
         {
           durationMs: performance.now() - startedAt,
           data: context,
@@ -228,7 +224,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
       this.clientPromise = null;
       this.journal?.error(
         'broker.binance.connect_failed',
-        'Не удалось подключиться к Binance',
+        'Failed to connect to Binance',
         error,
         {
           mode: this.mode,
@@ -276,7 +272,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     this.journal?.log(
       'info',
       'broker.binance.connected',
-      'Подключение к Binance установлено',
+      'Connected to Binance',
       {
         durationMs: performance.now() - startedAt,
         data: {

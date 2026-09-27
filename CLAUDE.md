@@ -1,113 +1,149 @@
-# crypto-bot — заметки для Claude
+# crypto-bot — notes for Claude
 
-Бот для Binance на NestJS/TypeScript. Основной режим — **трендовый аллокатор** BTC/ETH
-(`src/allocator`), управление из веб-интерфейса (`src/web/public`). Старые внутридневные
-стратегии (`src/bot`, `src/strategy`, `src/trader`) включаются только `BOT_STRATEGY_MODE=intraday`
-и на истории убыточны.
+A NestJS/TypeScript bot. The main mode is the **trend allocator** for BTC/ETH (plus SOL via
+`BOT_ALLOCATOR_ASSETS`) in `src/allocator`, executing on Binance or on Solana through Jupiter
+(`src/solana`, broker `solana-jupiter-broker.ts`), controlled from the web interface
+(`src/web/public`). The legacy intraday strategies (`src/bot`, `src/strategy`, `src/trader`) run only
+with `BOT_STRATEGY_MODE=intraday` and lose money on history.
 
-## Команды
+## Commands
 
 ```bash
-npm test                      # юнит-тесты
-npm run test:e2e              # HTTP API целиком (supertest)
-npm run build                 # сборка в dist/
-npm run start:dev             # запуск, дашборд http://127.0.0.1:3200
-npm run allocator:backtest    # бэктест аллокатора на истории Binance
-npm run diagnose -- --since 7d   # отчёт для расследования (см. ниже)
-npm run logs -- --help           # фильтр журнала
+npm test                      # unit tests
+npm run test:e2e              # full HTTP API (supertest)
+npm run build                 # build into dist/
+npm run start:dev             # run; dashboard at http://127.0.0.1:3200
+npm run allocator:backtest    # backtest the allocator on Binance history
+npm run diagnose -- --since 7d   # investigation report (see below)
+npm run logs -- --help           # journal filter
 ```
 
-Правила: не печатать содержимое `.env` (там ключи Binance), не запускать `live_real`,
-не удалять `.allocator-state.json` пользователя без его согласия.
+Rules: never print the contents of `.env` (it holds Binance keys and the Solana wallet key), never
+run `live_real` or `solana_real`, never delete the user's `.allocator-state.json` without consent.
 
-## Расследование проблем
+## Interface languages
 
-Если пользователь пишет «что-то пошло не так», начинать всегда с отчёта:
+The interface is in English (default), Russian and Armenian. All texts live in the dictionaries
+`src/web/public/i18n/{en,ru,hy}.json`, read by both the page (`js/i18n.js`) and the server
+(`src/i18n/messages.ts`). The server never sends finished text: the activity feed, stop reasons, API
+errors and mode readiness are `{ key, params }` messages (`msg()`, `LocalizedError`), and the page
+translates them. The journal and the `title`/`details` fields of entries get the Russian rendering.
+
+- New text: add the key to all three dictionaries with the same placeholders — `src/i18n/i18n.spec.ts`
+  checks this, and also that every key used in code exists in the dictionary.
+- Entries saved before the translation are parsed back on load by the Russian templates
+  (`src/i18n/legacy-text.ts`). If you change a Russian wording in `narr.*`, old entries with the
+  previous text stay untranslated — add an alias to `ALIASES`.
+
+## Investigating problems
+
+When the user says "something went wrong", always start with the report:
 
 ```bash
 npm run diagnose -- --since 7d
 ```
 
-В нём: сборка и коммит, настройки без секретов, состояние сессии из `.allocator-state.json`,
-**подсказки**, сгруппированные ошибки и предупреждения, простои процесса, хронология решений.
-Дальше — точечно через `npm run logs`:
+It contains the build and commit, settings without secrets, the session state from
+`.allocator-state.json`, **hints**, grouped errors and warnings, process downtime and the decision
+timeline. Then drill down with `npm run logs`:
 
 ```bash
-npm run logs -- --op <opId> --full          # всё, что произошло в одной операции
-npm run logs -- --request <requestId> --full  # всё, что вызвал HTTP-запрос (X-Request-Id)
+npm run logs -- --op <opId> --full          # everything that happened in one operation
+npm run logs -- --request <requestId> --full  # everything an HTTP request caused (X-Request-Id)
 npm run logs -- --session <sessionId> --level info --limit 0
 npm run logs -- --since 3d --event "allocator.rebalance.*,allocator.order.*"
 npm run logs -- --since 7d --level warn
 ```
 
-После `npm run build` те же инструменты: `node dist/diagnostics/diagnose-cli.js`,
+After `npm run build` the same tools are `node dist/diagnostics/diagnose-cli.js` and
 `node dist/diagnostics/logs-cli.js`.
 
-### Где лежит журнал
+### Where the journal lives
 
-- `logs/app-YYYY-MM-DD.jsonl` (день по UTC), части `app-YYYY-MM-DD.N.jsonl` при превышении
-  `BOT_LOG_MAX_FILE_MB`; хранится `BOT_LOG_RETENTION_DAYS` дней (по умолчанию 14).
-- Папка меняется через `BOT_LOG_DIR`, уровень — `BOT_LOG_LEVEL` (по умолчанию `debug`;
-  `trace` добавляет опросы страницы, успешные запросы к Binance и служебные сообщения Nest).
-- Одна строка — один JSON: `ts, level, event, msg, pid, requestId?, op?, opId?, sessionId?, mode?, durationMs?, data?, err?`.
-- Секреты маскируются автоматически (`src/observability/sanitize.ts`): ключи с
-  secret/key/token/signature → `[REDACTED]`, `signature=` в тексте ошибок тоже.
+- `logs/app-YYYY-MM-DD.jsonl` (UTC day), parts `app-YYYY-MM-DD.N.jsonl` above `BOT_LOG_MAX_FILE_MB`;
+  kept for `BOT_LOG_RETENTION_DAYS` days (14 by default).
+- The folder is set by `BOT_LOG_DIR`, the level by `BOT_LOG_LEVEL` (default `debug`; `trace` adds page
+  polls, successful Binance requests and Nest internals).
+- One line is one JSON: `ts, level, event, msg, pid, requestId?, op?, opId?, sessionId?, mode?, durationMs?, data?, err?`.
+- Secrets are masked automatically (`src/observability/sanitize.ts`): keys containing
+  secret/key/token/signature → `[REDACTED]`, and `signature=` in error text too. That is why on-chain
+  transaction ids are logged as `txId`.
 
-### Как связаны события
+### How events are linked
 
-- `opId` — одна операция движка: `start-…`, `stop-…`, `autostop-…`, `tick-…` (раз в 5 минут),
-  `resume-…` (после рестарта), `manual_rebalance-…`.
-- `requestId` — один HTTP-запрос; тот же id в заголовке ответа `X-Request-Id`.
-  Запуск/остановка из интерфейса дают и `requestId`, и `opId`.
-- `sessionId` — сессия бота (от «Начать» до «Остановить»), совпадает с `id` в файле состояния.
+- `opId` — one engine operation: `start-…`, `stop-…`, `autostop-…`, `tick-…` (every 5 minutes),
+  `resume-…` (after a restart), `manual_rebalance-…`.
+- `requestId` — one HTTP request; the same id is in the `X-Request-Id` response header. Start/stop
+  from the interface have both `requestId` and `opId`.
+- `sessionId` — a bot session (from Start to Stop), equal to `id` in the state file.
 
-### Каталог событий
+### Event catalogue
 
-| Событие | Уровень | Что значит |
+| Event | Level | Meaning |
 | --- | --- | --- |
-| `process.started` / `process.ready` | info | Старт: версия, коммит, `gitDirty`, настройки |
-| `process.heartbeat` | debug | Каждые 5 мин: uptime, память, задержка event loop. Пропуски = процесс не работал |
-| `process.shutdown` / `process.exit` | info | Штатная остановка |
-| `process.uncaught_exception` / `process.unhandled_rejection` / `process.bootstrap_failed` | fatal/error | Падения |
-| `session.store.loaded` / `session.store.persist_failed` | info/error | Файл состояния |
-| `allocator.idle` / `allocator.session.resumed` / `allocator.session.resume_blocked` | info/error | Поведение после рестарта |
-| `allocator.session.start_requested` / `started` / `start_rejected` | info/warn | Запуск и причина отказа |
-| `allocator.rebalance.started` / `signals` / `plan` / `completed` | info | Ежедневное решение: сигналы SMA, цены, план ордеров |
-| `allocator.rebalance.failed` / `deferred` | warn/debug | Решение не принято; `nextAttemptAt` — когда повтор |
-| `allocator.order.filled` / `allocator.order.failed` | info/error | Исполнение ордера (fill, order, остатки после) |
-| `allocator.cycle.completed` | debug | Итог проверки: капитал, цены, возраст цен, lastError |
-| `allocator.autostop.triggered` / `skipped_stale_prices` | warn | Автозащита: сработала / пропущена без свежих цен |
-| `allocator.session.stopped` / `autostopped` / `stop_unsold` | info/error | Остановка и что не удалось продать |
-| `allocator.reconcile.adjusted` | warn | Учёт уменьшен по балансу Binance (деньги двигали вручную) |
-| `allocator.prices.refresh_failed` | warn | Не удалось получить цены |
-| `binance.http.failed` | warn | Публичный REST Binance: url, params, код, ответ |
-| `broker.binance.connected` / `connect_failed` | info/error | Подключение с ключами (live_testnet/live_real) |
-| `broker.binance.order_request` / `order_response` / `order_failed` | info/error | Реальный ордер: что отправили и что ответила биржа |
-| `broker.binance.balance` / `broker.paper.fill` | debug | Остатки на бирже / виртуальные сделки |
-| `http.request` | info/warn/error | Команды API; 4xx/5xx; для 403 — host/origin/contentType |
-| `nest.*` | warn/error | Ошибки NestJS (исключения в контроллерах и т.п.) |
-| `bot.info` / `bot.error` / `trade.executed` / `strategy.signal` / `market.candle` / `portfolio.snapshot` | разные | Режим intraday (старые стратегии) |
+| `process.started` / `process.ready` | info | Start: version, commit, `gitDirty`, settings |
+| `process.heartbeat` | debug | Every 5 min: uptime, memory, event-loop delay. Gaps = the process was not running |
+| `process.shutdown` / `process.exit` | info | Normal shutdown |
+| `process.uncaught_exception` / `process.unhandled_rejection` / `process.bootstrap_failed` | fatal/error | Crashes |
+| `session.store.loaded` / `session.store.persist_failed` | info/error | State file |
+| `session.store.texts_migrated` | info | Old Russian feed entries got dictionary keys (`unparsed` — not recognized) |
+| `allocator.idle` / `allocator.session.resumed` / `allocator.session.resume_blocked` | info/error | Behaviour after a restart |
+| `allocator.session.start_requested` / `started` / `start_rejected` | info/warn | Start and why it was refused |
+| `allocator.rebalance.started` / `signals` / `plan` / `completed` | info | Daily decision: SMA signals, prices, order plan |
+| `allocator.rebalance.failed` / `deferred` | warn/debug | No decision yet; `nextAttemptAt` — when it retries |
+| `allocator.order.filled` / `allocator.order.failed` | info/error | Order execution (fill, order, balances after) |
+| `allocator.cycle.completed` | debug | Check summary: equity, prices, price age, lastError |
+| `allocator.autostop.triggered` / `skipped_stale_prices` | warn | Auto-protection: triggered / skipped without fresh prices |
+| `allocator.session.stopped` / `autostopped` / `stop_unsold` | info/error | Stop and what could not be sold |
+| `allocator.reconcile.adjusted` | warn | Records reduced to the exchange/wallet balance (funds moved manually) |
+| `allocator.prices.refresh_failed` | warn | Prices could not be fetched |
+| `binance.http.failed` | warn | Public Binance REST: url, params, code, response |
+| `broker.binance.connected` / `connect_failed` | info/error | Connection with keys (live_testnet/live_real) |
+| `broker.binance.order_request` / `order_response` / `order_failed` | info/error | Real order: what was sent and what the exchange answered |
+| `broker.binance.balance` / `broker.paper.fill` | debug | Exchange balances / virtual fills |
+| `broker.solana.sim_fill` | debug | Virtual swap on a Jupiter quote (solana_sim) |
+| `broker.solana.swap_request` / `swap_sent` / `swap_confirmed` | info | Real swap: quote and route, txId, actual balance changes |
+| `broker.solana.swap_failed` | error | Swap not executed; `definitelyNotExecuted=true` — funds were certainly not debited |
+| `broker.solana.send_uncertain` / `meta_unavailable` | warn | No answer to the send (status resolved by txId) / fill booked from the quote |
+| `broker.solana.balance` | debug | Solana wallet balances (USDC and tokens) |
+| `solana.jupiter.failed` | warn | Jupiter API request failed: url, code, response |
+| `solana.proof.sent` / `confirmed` | info | Decision written to Solana (Memo): txId, explorer link |
+| `solana.proof.failed` / `unconfirmed` / `unavailable` | warn | Decision record not sent / not confirmed / journal wallet not loaded |
+| `http.request` | info/warn/error | API commands; 4xx/5xx; for 403 — host/origin/contentType |
+| `nest.*` | warn/error | NestJS errors (exceptions in controllers and so on) |
+| `bot.info` / `bot.error` / `trade.executed` / `strategy.signal` / `market.candle` / `portfolio.snapshot` | various | Intraday mode (legacy strategies) |
 
-### Симптом → куда смотреть
+### Symptom → where to look
 
-- **Бот ничего не купил.** `allocator.rebalance.signals` (exposure = 0 → рынок не в тренде, это норма),
-  `allocator.rebalance.plan` (`skipped` — меньше минимального ордера), `allocator.rebalance.failed`.
-- **Решение за день не принято.** Простои в отчёте с пометкой «пропущено ежедневное решение»
-  (компьютер спал), `allocator.rebalance.failed` / `deferred`, `binance.http.failed`.
-- **Бот неожиданно продал всё.** `allocator.autostop.triggered` (equity, threshold, prices),
-  `allocator.session.stopped` с `requestId` — значит, остановили из интерфейса.
-- **Биржа отклоняет ордера.** `broker.binance.order_failed` → `err.name/message`
-  (InsufficientFunds, MIN_NOTIONAL, LOT_SIZE, права ключа), рядом `allocator.order.failed` с планом.
-- **Учёт не совпадает с Binance.** `allocator.reconcile.adjusted`, `broker.binance.balance`.
-- **Страница не открывается / 403.** `http.request` уровня warn: host/origin — проверка
+- **The bot bought nothing.** `allocator.rebalance.signals` (exposure = 0 → no trend, which is
+  normal), `allocator.rebalance.plan` (`skipped` — below the minimum order), `allocator.rebalance.failed`.
+- **No decision for the day.** Downtime in the report marked "daily decision missed" (the computer
+  slept), `allocator.rebalance.failed` / `deferred`, `binance.http.failed`.
+- **The bot suddenly sold everything.** `allocator.autostop.triggered` (equity, threshold, prices);
+  `allocator.session.stopped` with a `requestId` means it was stopped from the interface.
+- **A Solana swap failed.** `broker.solana.swap_failed` (`definitelyNotExecuted`), next to it
+  `broker.solana.swap_sent` with the `txId` and a link — check the transaction in Solana Explorer.
+- **A decision was not written on-chain.** `solana.proof.failed` (usually no SOL in the journal wallet —
+  `npm run solana:proof-wallet`), `solana.proof.unavailable`.
+- **The exchange rejects orders.** `broker.binance.order_failed` → `err.name/message`
+  (InsufficientFunds, MIN_NOTIONAL, LOT_SIZE, key permissions), with `allocator.order.failed` and the plan.
+- **Records don't match Binance.** `allocator.reconcile.adjusted`, `broker.binance.balance`.
+- **The page doesn't open / 403.** `http.request` at warn level: host/origin — the check in
   `src/web/security`.
-- **Процесс падал или зависал.** `process.uncaught_exception`, `process.bootstrap_failed`,
-  большой `eventLoopDelayMaxMs` в `process.heartbeat`, простои.
-- **Поведение не совпадает с кодом.** `process.started.data.gitCommit` и `gitDirty`.
+- **The process crashed or hung.** `process.uncaught_exception`, `process.bootstrap_failed`, a large
+  `eventLoopDelayMaxMs` in `process.heartbeat`, downtime.
+- **Behaviour doesn't match the code.** `process.started.data.gitCommit` and `gitDirty`.
 
-### Если логов не хватает
+### When the logs are not enough
 
-Добавляй события через `AppLogger` (`src/observability/app-logger.ts`), имя —
-`<область>.<объект>.<действие>`, данные — в `data`, ошибку — отдельным аргументом.
-Внутри операций движка контекст (`opId`, `sessionId`) добавится сам. Новое событие
-допиши в таблицу выше. Не пиши в журнал ключи и полные ответы с балансами без нужды.
+Add events through `AppLogger` (`src/observability/app-logger.ts`), named
+`<area>.<object>.<action>`, with data in `data` and the error as a separate argument. Inside engine
+operations the context (`opId`, `sessionId`) is added automatically. Add every new event to the table
+above. Don't log keys or full balance responses without a reason.
+
+## Hackathon materials
+
+`docs/hackathon/` holds the Solana Hackathon deck (`deck.html` → PDF/PNG), the demo video build
+(`build/`: puppeteer screen recordings, Kokoro voice-over, ffmpeg assembly) and `replay-state.ts`,
+which builds a session state by replaying the real strategy on historical prices for screenshots.
+Screens made from a replay must be labelled as such.

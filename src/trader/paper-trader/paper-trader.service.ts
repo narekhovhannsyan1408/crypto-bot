@@ -541,6 +541,8 @@ export class PaperTraderService {
       };
     }
 
+    price = this.applySlippage(price, side === 'LONG' ? 'buy' : 'sell');
+
     const stopPrice =
       side === 'LONG'
         ? price * (1 - this.config.stopLossPct)
@@ -653,6 +655,11 @@ export class PaperTraderService {
       return null;
     }
 
+    price = this.applySlippage(
+      price,
+      position.side === 'LONG' ? 'sell' : 'buy',
+    );
+
     const exitFee = price * position.quantity * this.config.feePct;
     const grossPnl =
       position.side === 'LONG'
@@ -692,7 +699,7 @@ export class PaperTraderService {
       reason,
     };
 
-    this.portfolio.registerClosedTrade(closedTrade, this.portfolio.balance);
+    this.portfolio.registerClosedTrade(closedTrade, this.portfolio.getEquity());
 
     return {
       status: 'EXECUTED',
@@ -719,4 +726,10 @@ export class PaperTraderService {
     };
   }
 
+  private applySlippage(price: number, orderSide: 'buy' | 'sell') {
+    const slippagePct = Math.max(this.config.slippagePct, 0);
+    return orderSide === 'buy'
+      ? price * (1 + slippagePct)
+      : price * (1 - slippagePct);
+  }
 }

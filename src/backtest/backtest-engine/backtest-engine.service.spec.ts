@@ -41,4 +41,43 @@ describe('BacktestEngineService', () => {
     expect(report.startingBalance).toBe(1000);
     expect(report.equityCurve.length).toBeGreaterThan(0);
   });
+
+  it('uses strategies passed in the input instead of the configured ones', () => {
+    const candles = Array.from({ length: 20 }, (_, index) => ({
+      symbol: 'BTCUSDT',
+      interval: '1m',
+      openTime: index * 60_000,
+      closeTime: index * 60_000 + 59_000,
+      open: 100,
+      high: 100.5,
+      low: 99.5,
+      close: 100,
+      volume: 10,
+      isClosed: true,
+    }));
+    const alwaysLong = {
+      id: 'always_long',
+      name: 'Always Long',
+      getRequiredWarmupCandles: () => 0,
+      getConfirmationPolicy: () => 'none' as const,
+      seedHistory: () => undefined,
+      resetSymbol: () => undefined,
+      registerTradeClosed: () => undefined,
+      onNewCandle: () => ({
+        signal: 'OPEN_LONG' as const,
+        reason: 'test',
+        entryScore: 1,
+      }),
+    };
+
+    const report = service.runBacktest({ candles, strategies: [alwaysLong] });
+    const openedStrategies = new Set(
+      [...report.closedTrades].map((trade) => trade.strategyId),
+    );
+
+    expect(report.endingEquity).toBeLessThan(1000);
+    expect([...openedStrategies].every((id) => id === 'always_long')).toBe(
+      true,
+    );
+  });
 });

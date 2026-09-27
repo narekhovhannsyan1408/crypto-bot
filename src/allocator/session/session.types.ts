@@ -62,6 +62,8 @@ export type AllocatorSession = {
   feesPaid: number;
   // openTime дневной свечи, по которой уже принято решение
   lastRebalanceDay: number | null;
+  // День, решение которого уже записано в Solana (Memo)
+  lastProofDay?: number | null;
   lastSignals: SignalSnapshot[];
   // Цены в момент старта — для сравнения с «просто купить и держать»
   benchmarkStartPrices: Record<string, number> | null;

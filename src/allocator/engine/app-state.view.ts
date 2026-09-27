@@ -3,7 +3,7 @@ import { AllocatorMode, quoteAssetOf, venueOf } from '../allocator-mode';
 import { baseAssetOf } from '../brokers/allocator-broker';
 import { downsampleEquity } from '../session/session-helpers';
 import { AllocatorSession, SessionSummary } from '../session/session.types';
-import { assetName, trendLabel } from './asset-names';
+import { assetName } from './asset-names';
 import { modeLabelMsg } from './narrator';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -122,13 +122,21 @@ export const buildAppState = (ctx: ViewContext) => {
   }
 
   const running = session.status === 'running';
-  const equity = sessionEquity(session, ctx.prices, ctx.assets);
-  const benchmark = benchmarkEquity(session, ctx.prices, ctx.assets);
+  // Пока свежих цен нет (сразу после перезапуска, сбой связи), монеты оцениваются
+  // по последнему дневному закрытию, а не по нулю — иначе страница покажет ложный убыток
+  const prices = {
+    ...Object.fromEntries(
+      session.lastSignals.map((signal) => [signal.symbol, signal.close]),
+    ),
+    ...ctx.prices,
+  };
+  const equity = sessionEquity(session, prices, ctx.assets);
+  const benchmark = benchmarkEquity(session, prices, ctx.assets);
   const smaCount = ctx.smaPeriods.length;
   const assets = ctx.assets.map((symbol) => {
     const signal = session.lastSignals.find((item) => item.symbol === symbol);
     const quantity = session.quantities[symbol] ?? 0;
-    const price = ctx.prices[symbol] ?? signal?.close ?? 0;
+    const price = prices[symbol] ?? 0;
     const value = quantity * price;
     const votes = signal ? Math.round(signal.trendScore * smaCount) : null;
     return {
@@ -144,7 +152,6 @@ export const buildAppState = (ctx: ViewContext) => {
         : null,
       trendVotes: votes,
       trendTotal: smaCount,
-      trendLabel: votes === null ? 'Нет данных' : trendLabel(votes, smaCount),
     };
   });
 

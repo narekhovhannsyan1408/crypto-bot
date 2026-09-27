@@ -211,10 +211,7 @@ describe('AllocatorEngine', () => {
     expect(session.equity).toBeGreaterThan(990);
     expect(session.autoStopEquity).toBe(700);
     expect(session.benchmark?.equity).toBe(1000);
-    expect(session.assets.map((asset) => asset.trendLabel)).toEqual([
-      'Сильный рост',
-      'Сильный рост',
-    ]);
+    expect(session.assets.map((asset) => asset.trendVotes)).toEqual([2, 2]);
     const buys = session.activity.filter((entry) => entry.kind === 'buy');
     expect(buys).toHaveLength(2);
     expect(buys[0].details).toContain('Рынок растёт');
@@ -294,6 +291,11 @@ describe('AllocatorEngine', () => {
     expect(second.journal.events()).toContain(
       'allocator.autostop.skipped_stale_prices',
     );
+    // Страница оценивает монеты по последним известным ценам, а не по нулю
+    const session = sessionOf(state);
+    expect(session.equity).toBeGreaterThan(500);
+    expect(session.assets.every((asset) => asset.price > 0)).toBe(true);
+    expect(session.pricesStale).toBe(true);
   });
 
   it('stays in USDT in a downtrend and says so', async () => {
@@ -504,6 +506,44 @@ describe('AllocatorEngine', () => {
     const proofEntry = session.activity.find((entry) => entry.kind === 'proof');
     expect(kinds.indexOf('proof')).toBeGreaterThan(kinds.lastIndexOf('buy'));
     expect(proofEntry?.chainTx).toEqual({ txId: 'memo-tx', cluster: 'devnet' });
+  });
+
+  it('writes one decision per day to Solana, even after a manual rebalance', async () => {
+    const proof = disabledProof();
+    proof.publish.mockResolvedValue({ txId: 'memo-tx', cluster: 'devnet' });
+    const { engine } = await createEngine(market(), proof);
+    await engine.start({
+      mode: 'paper',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+
+    await engine.rebalanceNow();
+    await engine.rebalanceNow();
+
+    expect(proof.publish).toHaveBeenCalledTimes(1);
+    const proofs = sessionOf(engine.getAppState()).activity.filter(
+      (entry) => entry.kind === 'proof',
+    );
+    expect(proofs).toHaveLength(1);
+  });
+
+  it('retries the Solana record on the next attempt when it failed', async () => {
+    const proof = disabledProof();
+    proof.publish
+      .mockRejectedValueOnce(new Error('devnet недоступен'))
+      .mockResolvedValue({ txId: 'memo-tx', cluster: 'devnet' });
+    const { engine } = await createEngine(market(), proof);
+    await engine.start({
+      mode: 'paper',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+
+    await engine.rebalanceNow();
+    await engine.rebalanceNow();
+
+    expect(proof.publish).toHaveBeenCalledTimes(2);
   });
 
   it('keeps trading when the decision cannot be written to Solana', async () => {

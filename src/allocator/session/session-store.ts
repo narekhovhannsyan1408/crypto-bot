@@ -72,9 +72,16 @@ export class SessionStore {
       return empty;
     }
 
-    const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<
-      StateFile & { version: number }
-    >;
+    let parsed: Partial<StateFile & { version: number }>;
+    try {
+      parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as typeof parsed;
+    } catch (error) {
+      // Молча начать с чистого листа нельзя: в файле может быть сессия с реальными деньгами
+      throw new Error(
+        `Файл состояния бота повреждён: ${this.filePath}. Исправьте его или переименуйте, чтобы начать с чистого состояния (${error instanceof Error ? error.message : String(error)})`,
+        { cause: error },
+      );
+    }
     if (parsed.version !== 2) {
       // Файл старого формата сохраняем рядом и начинаем с чистого состояния
       this.journal.warn(

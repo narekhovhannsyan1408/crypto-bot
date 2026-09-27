@@ -19,6 +19,7 @@ const state = {
   chartKey: null,
   activityLimit: ACTIVITY_PAGE,
   refreshing: false,
+  refreshAgain: false,
   failures: 0,
 };
 
@@ -45,10 +46,14 @@ function drawChart() {
 async function syncChart() {
   const session = state.app?.session;
   if (!session) return;
-  const key = `${session.chartVersion}|${state.range}`;
+  const range = state.range;
+  const key = `${session.chartVersion}|${range}`;
   if (key !== state.chartKey) {
     try {
-      state.chart = await api.chart(state.range);
+      const chart = await api.chart(range);
+      // Пока шёл запрос, могли выбрать другой период: старый ответ не рисуем
+      if (range !== state.range) return;
+      state.chart = chart;
       state.chartKey = key;
     } catch {
       // оставляем прошлый график, следующий опрос попробует снова
@@ -66,7 +71,11 @@ function applyState(app) {
 }
 
 async function refresh() {
-  if (state.refreshing) return;
+  // Запрос уже идёт: повторим сразу после него (например, после «Показать ещё»)
+  if (state.refreshing) {
+    state.refreshAgain = true;
+    return;
+  }
   state.refreshing = true;
   let app;
   try {
@@ -77,6 +86,10 @@ async function refresh() {
     return;
   } finally {
     state.refreshing = false;
+    if (state.refreshAgain) {
+      state.refreshAgain = false;
+      setTimeout(() => void refresh(), 0);
+    }
   }
   // Ошибка отрисовки — это баг страницы, а не потеря связи с ботом
   try {

@@ -132,7 +132,9 @@ export class BinanceMarketService implements OnModuleDestroy {
         const now = Date.now();
 
         return (
-          response.data as Array<[number, string, string, string, string, string, number]>
+          response.data as Array<
+            [number, string, string, string, string, string, number]
+          >
         )
           .map((item) => {
             const closeTime = item[6];
@@ -171,7 +173,11 @@ export class BinanceMarketService implements OnModuleDestroy {
     throw lastError;
   }
 
-  connectSymbols(symbols: string[], interval = '1m', onCandle: (candle: Candle) => void) {
+  connectSymbols(
+    symbols: string[],
+    interval = '1m',
+    onCandle: (candle: Candle) => void,
+  ) {
     const streams = this.buildKlineStreams(symbols, [interval]);
     this.connect(streams, onCandle);
   }
@@ -213,7 +219,10 @@ export class BinanceMarketService implements OnModuleDestroy {
       clearTimeout(this.reconnectTimeout);
     }
 
-    const backoffMs = Math.min(3000 * 2 ** (this.reconnectAttempts - 1), 30_000);
+    const backoffMs = Math.min(
+      3000 * 2 ** (this.reconnectAttempts - 1),
+      30_000,
+    );
     console.log(`[РЫНОК] Переподключение через ${backoffMs} мс...`);
 
     this.reconnectTimeout = setTimeout(() => {
@@ -245,7 +254,9 @@ export class BinanceMarketService implements OnModuleDestroy {
   }
 
   private buildKlineStreams(symbols: string[], intervals: string[]) {
-    const normalizedSymbols = [...new Set(symbols.map((symbol) => symbol.trim()).filter(Boolean))];
+    const normalizedSymbols = [
+      ...new Set(symbols.map((symbol) => symbol.trim()).filter(Boolean)),
+    ];
     const normalizedIntervals = [
       ...new Set(intervals.map((interval) => interval.trim()).filter(Boolean)),
     ];

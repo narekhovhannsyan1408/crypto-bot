@@ -121,12 +121,12 @@ All settings are environment variables, read from `.env` in the project root (or
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `BOT_DASHBOARD_HOST` / `BOT_DASHBOARD_PORT` | Web interface address | `127.0.0.1` / `3200` |
-| `BOT_ALLOCATOR_ASSETS` | Traded assets | `BTCUSDT,ETHUSDT` |
+| `BOT_ALLOCATOR_ASSETS` | Traded assets (`BTC` and `BTCUSDT` both work) | `BTCUSDT,ETHUSDT` |
 | `BOT_ALLOCATOR_SMA_PERIODS` | Moving-average periods | `20,50,100,200` |
 | `BOT_ALLOCATOR_REBALANCE_THRESHOLD_PCT` | Minimum drift (share of an asset's slice) to trade | `0.1` |
 | `BOT_ALLOCATOR_MIN_ORDER_USDT` | Minimum order size | `10` |
 | `BOT_ALLOCATOR_VOL_TARGET` | Target yearly volatility, `0` = off | `0` |
-| `BOT_ALLOCATOR_CHECK_INTERVAL_MS` | Price / auto-protection check interval | `300000` |
+| `BOT_ALLOCATOR_CHECK_INTERVAL_MS` | Price / auto-protection check interval (at least `10000`) | `300000` |
 | `BOT_ALLOCATOR_STATE_FILE` | Session state file | `./.allocator-state.json` |
 | `BOT_FEE_PCT` / `BOT_SLIPPAGE_PCT` | Costs modelled in test mode | `0.001` / `0.0005` |
 | `BINANCE_API_KEY` / `BINANCE_API_SECRET` | Real Binance account (spot only) | — |

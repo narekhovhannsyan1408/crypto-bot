@@ -57,48 +57,56 @@ describe('BotRunnerService', () => {
     }),
   };
   const strategyArbitrationMock = {
-    rankCandidates: jest.fn().mockImplementation((candidates: any[], executionStatus: any) => {
-      return candidates
-        .map((candidate: any) => ({
-          ...candidate,
-          entryScore: candidate.result?.entryScore ?? 0,
-          arbitrationScore: candidate.result?.entryScore ?? 0,
-          isAllowed: candidate.side === 'LONG' || executionStatus.canTradeShort,
-        }))
-        .sort((left: any, right: any) => right.arbitrationScore - left.arbitrationScore);
-    }),
-    selectCandidate: jest.fn().mockImplementation((_: unknown, candidates: any[]) => {
-      if (candidates.length === 0) {
+    rankCandidates: jest
+      .fn()
+      .mockImplementation((candidates: any[], executionStatus: any) => {
+        return candidates
+          .map((candidate: any) => ({
+            ...candidate,
+            entryScore: candidate.result?.entryScore ?? 0,
+            arbitrationScore: candidate.result?.entryScore ?? 0,
+            isAllowed:
+              candidate.side === 'LONG' || executionStatus.canTradeShort,
+          }))
+          .sort(
+            (left: any, right: any) =>
+              right.arbitrationScore - left.arbitrationScore,
+          );
+      }),
+    selectCandidate: jest
+      .fn()
+      .mockImplementation((_: unknown, candidates: any[]) => {
+        if (candidates.length === 0) {
+          return {
+            symbol: 'BTCUSDT',
+            selectedStrategyId: null,
+            selectedStrategyName: null,
+            selectedSide: null,
+            selectedScore: null,
+            reason: 'no candidates',
+            candidates: [],
+          };
+        }
+
         return {
           symbol: 'BTCUSDT',
-          selectedStrategyId: null,
-          selectedStrategyName: null,
-          selectedSide: null,
-          selectedScore: null,
-          reason: 'no candidates',
-          candidates: [],
+          selectedStrategyId: candidates[0].strategy.id,
+          selectedStrategyName: candidates[0].strategy.name,
+          selectedSide: candidates[0].side,
+          selectedScore: candidates[0].result?.entryScore ?? 0,
+          reason: 'test selection',
+          candidates: candidates.map((candidate: any, index: number) => ({
+            strategyId: candidate.strategy.id,
+            strategyName: candidate.strategy.name,
+            side: candidate.side,
+            entryScore: candidate.result?.entryScore ?? 0,
+            arbitrationScore: candidate.result?.entryScore ?? 0,
+            marketRegime: candidate.result?.marketRegime ?? null,
+            status: index === 0 ? 'selected' : 'rejected',
+            reason: index === 0 ? 'winner' : 'loser',
+          })),
         };
-      }
-
-      return {
-        symbol: 'BTCUSDT',
-        selectedStrategyId: candidates[0].strategy.id,
-        selectedStrategyName: candidates[0].strategy.name,
-        selectedSide: candidates[0].side,
-        selectedScore: candidates[0].result?.entryScore ?? 0,
-        reason: 'test selection',
-        candidates: candidates.map((candidate: any, index: number) => ({
-          strategyId: candidate.strategy.id,
-          strategyName: candidate.strategy.name,
-          side: candidate.side,
-          entryScore: candidate.result?.entryScore ?? 0,
-          arbitrationScore: candidate.result?.entryScore ?? 0,
-          marketRegime: candidate.result?.marketRegime ?? null,
-          status: index === 0 ? 'selected' : 'rejected',
-          reason: index === 0 ? 'winner' : 'loser',
-        })),
-      };
-    }),
+      }),
   };
   const traderMock = {
     checkStops: jest.fn().mockReturnValue([]),
@@ -194,7 +202,8 @@ describe('BotRunnerService', () => {
     delete process.env.BOT_CONFIRMATION_MODE;
     resetBotConfigCache();
     marketMock.loadHistoricalCandles.mockImplementation(
-      async (_symbol: string, interval: string, limit = 200) => buildCandles(limit, interval),
+      async (_symbol: string, interval: string, limit = 200) =>
+        buildCandles(limit, interval),
     );
 
     const module: TestingModule = await Test.createTestingModule({
@@ -202,7 +211,10 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
-        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: StrategyArbitrationService,
+          useValue: strategyArbitrationMock,
+        },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -226,7 +238,11 @@ describe('BotRunnerService', () => {
   it('preloads history and connects market stream on start', async () => {
     await service.start();
 
-    expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith('BTCUSDT', '1m', 60);
+    expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith(
+      'BTCUSDT',
+      '1m',
+      60,
+    );
     expect(strategyMock.seedHistory).toHaveBeenCalled();
     expect(marketMock.connectSymbols).toHaveBeenCalledWith(
       ['BTCUSDT'],
@@ -244,7 +260,10 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
-        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: StrategyArbitrationService,
+          useValue: strategyArbitrationMock,
+        },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -257,11 +276,20 @@ describe('BotRunnerService', () => {
       ],
     }).compile();
 
-    const serviceWithConfirmation = module.get<BotRunnerService>(BotRunnerService);
+    const serviceWithConfirmation =
+      module.get<BotRunnerService>(BotRunnerService);
     await serviceWithConfirmation.start();
 
-    expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith('BTCUSDT', '1m', 60);
-    expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith('BTCUSDT', '5m', 40);
+    expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith(
+      'BTCUSDT',
+      '1m',
+      60,
+    );
+    expect(marketMock.loadHistoricalCandles).toHaveBeenCalledWith(
+      'BTCUSDT',
+      '5m',
+      40,
+    );
     expect(marketMock.connectSymbolIntervals).toHaveBeenCalledWith(
       ['BTCUSDT'],
       ['1m', '5m'],
@@ -295,7 +323,9 @@ describe('BotRunnerService', () => {
     resetBotConfigCache();
     marketMock.loadHistoricalCandles.mockImplementation(
       async (_symbol: string, interval: string, limit = 200) =>
-        interval === '5m' ? buildCandles(5, interval) : buildCandles(limit, interval),
+        interval === '5m'
+          ? buildCandles(5, interval)
+          : buildCandles(limit, interval),
     );
 
     const module: TestingModule = await Test.createTestingModule({
@@ -303,7 +333,10 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
-        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: StrategyArbitrationService,
+          useValue: strategyArbitrationMock,
+        },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -316,7 +349,8 @@ describe('BotRunnerService', () => {
       ],
     }).compile();
 
-    const serviceWithConfirmation = module.get<BotRunnerService>(BotRunnerService);
+    const serviceWithConfirmation =
+      module.get<BotRunnerService>(BotRunnerService);
     await serviceWithConfirmation.start();
 
     expect(confirmationMock.seedHistory).not.toHaveBeenCalled();
@@ -366,9 +400,9 @@ describe('BotRunnerService', () => {
           return buildCandles(
             stretchSeries(
               [
-                100, 101, 99.5, 101.5, 99.8, 101.8, 100.2, 102, 100.5, 102.2, 100.6, 102.1,
-                100.7, 102.3, 100.8, 102.4, 101, 102.5, 101.1, 102.7, 101.2, 102.6, 101.3,
-                102.8,
+                100, 101, 99.5, 101.5, 99.8, 101.8, 100.2, 102, 100.5, 102.2,
+                100.6, 102.1, 100.7, 102.3, 100.8, 102.4, 101, 102.5, 101.1,
+                102.7, 101.2, 102.6, 101.3, 102.8,
               ],
               limit,
             ),
@@ -380,8 +414,9 @@ describe('BotRunnerService', () => {
           return buildCandles(
             stretchSeries(
               [
-                100, 100.4, 100.8, 101.2, 101.6, 102, 102.5, 103, 103.6, 104.1, 104.7, 105.2,
-                105.8, 106.4, 107, 107.6, 108.3, 109, 109.8, 110.5, 111.2, 112, 112.7, 113.5,
+                100, 100.4, 100.8, 101.2, 101.6, 102, 102.5, 103, 103.6, 104.1,
+                104.7, 105.2, 105.8, 106.4, 107, 107.6, 108.3, 109, 109.8,
+                110.5, 111.2, 112, 112.7, 113.5,
               ],
               limit,
             ),
@@ -392,8 +427,9 @@ describe('BotRunnerService', () => {
         return buildCandles(
           stretchSeries(
             [
-              100, 100.6, 101.2, 101.9, 102.5, 103.2, 103.9, 104.7, 105.4, 106.2, 107, 107.8,
-              108.7, 109.5, 110.4, 111.3, 112.2, 113.1, 114, 115, 116, 117, 118, 119,
+              100, 100.6, 101.2, 101.9, 102.5, 103.2, 103.9, 104.7, 105.4,
+              106.2, 107, 107.8, 108.7, 109.5, 110.4, 111.3, 112.2, 113.1, 114,
+              115, 116, 117, 118, 119,
             ],
             limit,
           ),
@@ -407,7 +443,10 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
-        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: StrategyArbitrationService,
+          useValue: strategyArbitrationMock,
+        },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -453,7 +492,10 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
-        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: StrategyArbitrationService,
+          useValue: strategyArbitrationMock,
+        },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -466,7 +508,8 @@ describe('BotRunnerService', () => {
       ],
     }).compile();
 
-    const serviceWithLenientMode = module.get<BotRunnerService>(BotRunnerService);
+    const serviceWithLenientMode =
+      module.get<BotRunnerService>(BotRunnerService);
     const filtered = (serviceWithLenientMode as any).applyConfirmationFilter(
       'BTCUSDT',
       strategyMock,
@@ -524,7 +567,9 @@ describe('BotRunnerService', () => {
     );
 
     expect(filtered.signal).toBe('HOLD');
-    expect(filtered.reason).toContain('против сильного bullish higher timeframe');
+    expect(filtered.reason).toContain(
+      'против сильного bullish higher timeframe',
+    );
 
     delete process.env.BOT_CONFIRMATION_INTERVAL;
     delete process.env.BOT_CONFIRMATION_MODE;
@@ -573,7 +618,9 @@ describe('BotRunnerService', () => {
 
     expect(filtered.signal).toBe('CLOSE_SHORT');
     expect(filtered.forceClose).toBe(true);
-    expect(filtered.reason).toContain('против сильного bearish higher timeframe');
+    expect(filtered.reason).toContain(
+      'против сильного bearish higher timeframe',
+    );
 
     delete process.env.BOT_CONFIRMATION_INTERVAL;
     delete process.env.BOT_CONFIRMATION_MODE;
@@ -704,7 +751,10 @@ describe('BotRunnerService', () => {
         BotRunnerService,
         { provide: BinanceMarketService, useValue: marketMock },
         { provide: StrategyRegistryService, useValue: strategyRegistryMock },
-        { provide: StrategyArbitrationService, useValue: strategyArbitrationMock },
+        {
+          provide: StrategyArbitrationService,
+          useValue: strategyArbitrationMock,
+        },
         {
           provide: HigherTimeframeConfirmationService,
           useValue: confirmationMock,
@@ -716,7 +766,8 @@ describe('BotRunnerService', () => {
         { provide: SymbolScannerService, useValue: scannerMock },
       ],
     }).compile();
-    const serviceWithConfirmation = module.get<BotRunnerService>(BotRunnerService);
+    const serviceWithConfirmation =
+      module.get<BotRunnerService>(BotRunnerService);
     (serviceWithConfirmation as any).watchedSymbols.add('BTCUSDT');
 
     await (serviceWithConfirmation as any).handleCandle({

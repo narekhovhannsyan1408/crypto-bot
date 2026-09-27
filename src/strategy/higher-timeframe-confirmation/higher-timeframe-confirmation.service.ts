@@ -33,7 +33,9 @@ export class HigherTimeframeConfirmationService {
   }
 
   seedHistory(symbol: string, interval: string, candles: Candle[]) {
-    const closedCandles = candles.filter((candle) => candle.isClosed).slice(-500);
+    const closedCandles = candles
+      .filter((candle) => candle.isClosed)
+      .slice(-500);
     const state: ConfirmationState = {
       candles: closedCandles,
       trend: 'NEUTRAL',
@@ -121,7 +123,8 @@ export class HigherTimeframeConfirmationService {
     }
 
     const lastClose = closes.at(-1) ?? 0;
-    const trendStrengthPct = lastClose > 0 ? Math.abs(emaFast - emaSlow) / lastClose : 0;
+    const trendStrengthPct =
+      lastClose > 0 ? Math.abs(emaFast - emaSlow) / lastClose : 0;
 
     state.emaFast = emaFast;
     state.emaSlow = emaSlow;

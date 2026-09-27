@@ -59,27 +59,34 @@ export class StrategyArbitrationService {
   ): StrategySelectionDecision {
     const rankedCandidates = this.rankCandidates(candidates, executionStatus);
 
-    const winner = rankedCandidates.find((candidate) => candidate.isAllowed) ?? null;
+    const winner =
+      rankedCandidates.find((candidate) => candidate.isAllowed) ?? null;
 
-    const decisions: StrategyCandidateDecision[] = rankedCandidates.map((candidate) => {
-      const blockedByExecution = !candidate.isAllowed;
-      const losesByScore = !!winner && candidate.strategy.id !== winner.strategy.id;
+    const decisions: StrategyCandidateDecision[] = rankedCandidates.map(
+      (candidate) => {
+        const blockedByExecution = !candidate.isAllowed;
+        const losesByScore =
+          !!winner && candidate.strategy.id !== winner.strategy.id;
 
-      return {
-        strategyId: candidate.strategy.id,
-        strategyName: candidate.strategy.name,
-        side: candidate.side,
-        entryScore: candidate.entryScore,
-        arbitrationScore: candidate.arbitrationScore,
-        marketRegime: candidate.result.marketRegime ?? null,
-        status: winner && candidate.strategy.id === winner.strategy.id ? 'selected' : 'rejected',
-        reason: blockedByExecution
-          ? this.getExecutionRejectReason(candidate.side, executionStatus)
-          : losesByScore
-            ? `Проиграла по совокупному arbitration score лидеру ${winner.strategy.name}`
-            : 'Лучшая допустимая стратегия для текущей сделки',
-      };
-    });
+        return {
+          strategyId: candidate.strategy.id,
+          strategyName: candidate.strategy.name,
+          side: candidate.side,
+          entryScore: candidate.entryScore,
+          arbitrationScore: candidate.arbitrationScore,
+          marketRegime: candidate.result.marketRegime ?? null,
+          status:
+            winner && candidate.strategy.id === winner.strategy.id
+              ? 'selected'
+              : 'rejected',
+          reason: blockedByExecution
+            ? this.getExecutionRejectReason(candidate.side, executionStatus)
+            : losesByScore
+              ? `Проиграла по совокупному arbitration score лидеру ${winner.strategy.name}`
+              : 'Лучшая допустимая стратегия для текущей сделки',
+        };
+      },
+    );
 
     if (!winner) {
       return {
@@ -110,7 +117,10 @@ export class StrategyArbitrationService {
   private getArbitrationScore(candidate: StrategyOpenCandidate) {
     const baseScore = candidate.result.entryScore ?? 0;
     const regimeBonus = this.getRegimeBonus(candidate.result.marketRegime);
-    const strategyBonus = this.getStrategyBonus(candidate.strategy.id, candidate.side);
+    const strategyBonus = this.getStrategyBonus(
+      candidate.strategy.id,
+      candidate.side,
+    );
 
     return baseScore + regimeBonus + strategyBonus;
   }
@@ -159,7 +169,10 @@ export class StrategyArbitrationService {
     return 0;
   }
 
-  private isSideAllowed(side: 'LONG' | 'SHORT', executionStatus: ExecutionStatus) {
+  private isSideAllowed(
+    side: 'LONG' | 'SHORT',
+    executionStatus: ExecutionStatus,
+  ) {
     if (side === 'LONG') {
       return true;
     }

@@ -69,7 +69,7 @@ export class AllocatorController {
   }
 
   private assertRunning() {
-    if (this.engine.getAppState().status !== 'running') {
+    if (!this.engine.isRunning()) {
       throw localizedHttpError(HttpStatus.CONFLICT, msg('action.notRunning'));
     }
   }

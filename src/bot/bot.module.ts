@@ -7,7 +7,13 @@ import { LoggerModule } from '../logger/logger.module';
 import { ScannerModule } from '../scanner/scanner.module';
 
 @Module({
-  imports: [MarketModule, StrategyModule, TraderModule, LoggerModule, ScannerModule],
+  imports: [
+    MarketModule,
+    StrategyModule,
+    TraderModule,
+    LoggerModule,
+    ScannerModule,
+  ],
   providers: [BotRunnerService],
   exports: [BotRunnerService],
 })

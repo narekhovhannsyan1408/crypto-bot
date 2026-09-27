@@ -22,7 +22,11 @@ export class RangeScalpingStrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 6, this.config.rsiPeriod + 6, 28);
+    return Math.max(
+      this.config.emaSlowPeriod + 6,
+      this.config.rsiPeriod + 6,
+      28,
+    );
   }
 
   getConfirmationPolicy() {
@@ -47,7 +51,10 @@ export class RangeScalpingStrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -71,7 +78,10 @@ export class RangeScalpingStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы range scalping ещё не готовы' };
+      return {
+        signal: 'HOLD',
+        reason: 'Индикаторы range scalping ещё не готовы',
+      };
     }
 
     const priorCandles = state.candles.slice(0, -1);
@@ -80,8 +90,10 @@ export class RangeScalpingStrategyService implements TradingStrategy {
     const rangeLow = lowestLow(priorCandles, rangeLookback);
     const rangeMid = (rangeHigh + rangeLow) / 2;
     const rangeWidthPct = rangeMid > 0 ? (rangeHigh - rangeLow) / rangeMid : 0;
-    const distanceToLowPct = rangeLow > 0 ? (candle.close - rangeLow) / rangeLow : 0;
-    const distanceToHighPct = rangeHigh > 0 ? (rangeHigh - candle.close) / rangeHigh : 0;
+    const distanceToLowPct =
+      rangeLow > 0 ? (candle.close - rangeLow) / rangeLow : 0;
+    const distanceToHighPct =
+      rangeHigh > 0 ? (rangeHigh - candle.close) / rangeHigh : 0;
     const recentVolumes = priorCandles.slice(-10).map((item) => item.volume);
     const averageRecentVolume = average(recentVolumes);
     const volumeCompression =
@@ -106,7 +118,8 @@ export class RangeScalpingStrategyService implements TradingStrategy {
     }
 
     const lowTrend = core.trendStrengthPct < 0.0014;
-    const stableVolatility = core.atrPct >= this.config.minAtrPct * 0.7 && core.atrPct <= 0.007;
+    const stableVolatility =
+      core.atrPct >= this.config.minAtrPct * 0.7 && core.atrPct <= 0.007;
     const insideRange = rangeWidthPct > 0.002 && rangeWidthPct < 0.02;
     const quietEnough = volumeCompression < 1.35;
     const longBounceCandidate =
@@ -128,7 +141,8 @@ export class RangeScalpingStrategyService implements TradingStrategy {
       if (longBounceCandidate) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Range scalping long: цена у нижней границы диапазона и рынок без выраженного тренда',
+          reason:
+            'Range scalping long: цена у нижней границы диапазона и рынок без выраженного тренда',
           indicators,
           entryScore:
             Math.max(0, 0.0025 - distanceToLowPct) * 15000 +
@@ -141,7 +155,8 @@ export class RangeScalpingStrategyService implements TradingStrategy {
       if (shortBounceCandidate) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Range scalping short: цена у верхней границы диапазона и рынок без выраженного тренда',
+          reason:
+            'Range scalping short: цена у верхней границы диапазона и рынок без выраженного тренда',
           indicators,
           entryScore:
             Math.max(0, 0.0025 - distanceToHighPct) * 15000 +
@@ -153,7 +168,8 @@ export class RangeScalpingStrategyService implements TradingStrategy {
 
       return {
         signal: 'HOLD',
-        reason: 'Range scalping не видит качественную работу от границы диапазона',
+        reason:
+          'Range scalping не видит качественную работу от границы диапазона',
         indicators,
       };
     }
@@ -162,7 +178,8 @@ export class RangeScalpingStrategyService implements TradingStrategy {
       if (shortBounceCandidate && candle.close > rangeMid) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Range scalping: нижняя граница отработала и цена дошла до противоположной зоны',
+          reason:
+            'Range scalping: нижняя граница отработала и цена дошла до противоположной зоны',
           indicators,
         };
       }
@@ -170,18 +187,24 @@ export class RangeScalpingStrategyService implements TradingStrategy {
       if (candle.close >= rangeMid || core.rsi > 52 || !insideRange) {
         return {
           signal: 'CLOSE_LONG',
-          reason: 'Range scalping фиксирует long у середины диапазона или при сломе флэта',
+          reason:
+            'Range scalping фиксирует long у середины диапазона или при сломе флэта',
           indicators,
         };
       }
 
-      return { signal: 'HOLD', reason: 'Range scalping удерживает long', indicators };
+      return {
+        signal: 'HOLD',
+        reason: 'Range scalping удерживает long',
+        indicators,
+      };
     }
 
     if (longBounceCandidate && candle.close < rangeMid) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Range scalping: верхняя граница отработала и цена дошла до противоположной зоны',
+        reason:
+          'Range scalping: верхняя граница отработала и цена дошла до противоположной зоны',
         indicators,
       };
     }
@@ -189,12 +212,17 @@ export class RangeScalpingStrategyService implements TradingStrategy {
     if (candle.close <= rangeMid || core.rsi < 48 || !insideRange) {
       return {
         signal: 'CLOSE_SHORT',
-        reason: 'Range scalping фиксирует short у середины диапазона или при сломе флэта',
+        reason:
+          'Range scalping фиксирует short у середины диапазона или при сломе флэта',
         indicators,
       };
     }
 
-    return { signal: 'HOLD', reason: 'Range scalping удерживает short', indicators };
+    return {
+      signal: 'HOLD',
+      reason: 'Range scalping удерживает short',
+      indicators,
+    };
   }
 
   private getOrCreateState(symbol: string, interval: string) {
@@ -218,7 +246,9 @@ export class RangeScalpingStrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

@@ -383,7 +383,24 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
     let rpcFailures = 0;
     for (;;) {
       try {
-        const status = (await connection.getSignatureStatuses([txId])).value[0];
+        let status = (await connection.getSignatureStatuses([txId])).value[0];
+        if (
+          !status &&
+          (await connection.getBlockHeight('confirmed')) > lastValidBlockHeight
+        ) {
+          // Блокхэш истёк: недавний кэш статусов уже мог забыть транзакцию,
+          // окончательный ответ даёт только поиск по истории
+          status = (
+            await connection.getSignatureStatuses([txId], {
+              searchTransactionHistory: true,
+            })
+          ).value[0];
+          if (!status) {
+            throw new SwapNotExecutedError(
+              msg('err.solana.expired', { tx: txId }),
+            );
+          }
+        }
         if (status?.err) {
           throw new SwapNotExecutedError(
             msg('err.solana.rejected', {
@@ -397,21 +414,6 @@ export class SolanaJupiterAllocatorBroker implements AllocatorBroker {
           status?.confirmationStatus === 'finalized'
         ) {
           return;
-        }
-        if (
-          !status &&
-          (await connection.getBlockHeight('confirmed')) > lastValidBlockHeight
-        ) {
-          const final = (
-            await connection.getSignatureStatuses([txId], {
-              searchTransactionHistory: true,
-            })
-          ).value[0];
-          if (!final) {
-            throw new SwapNotExecutedError(
-              msg('err.solana.expired', { tx: txId }),
-            );
-          }
         }
         rpcFailures = 0;
       } catch (error) {

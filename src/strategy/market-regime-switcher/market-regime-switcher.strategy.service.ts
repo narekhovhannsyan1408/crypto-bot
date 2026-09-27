@@ -22,7 +22,11 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 10, this.config.rsiPeriod + 10, 35);
+    return Math.max(
+      this.config.emaSlowPeriod + 10,
+      this.config.rsiPeriod + 10,
+      35,
+    );
   }
 
   getConfirmationPolicy() {
@@ -47,7 +51,10 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -71,7 +78,10 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы market regime switcher ещё не готовы' };
+      return {
+        signal: 'HOLD',
+        reason: 'Индикаторы market regime switcher ещё не готовы',
+      };
     }
 
     const lookback = 18;
@@ -79,11 +89,16 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
     const regimeHigh = highestHigh(priorCandles, lookback);
     const regimeLow = lowestLow(priorCandles, lookback);
     const rangeMid = (regimeHigh + regimeLow) / 2;
-    const rangeWidthPct = rangeMid > 0 ? (regimeHigh - regimeLow) / rangeMid : 0;
-    const avgVolume = average(state.candles.slice(-18).map((item) => item.volume));
+    const rangeWidthPct =
+      rangeMid > 0 ? (regimeHigh - regimeLow) / rangeMid : 0;
+    const avgVolume = average(
+      state.candles.slice(-18).map((item) => item.volume),
+    );
     const volumeRatio = avgVolume > 0 ? candle.volume / avgVolume : 1;
-    const deviationPct = rangeMid > 0 ? (candle.close - rangeMid) / rangeMid : 0;
-    const trendRegime = core.trendStrengthPct > 0.0018 && core.atrPct > this.config.minAtrPct;
+    const deviationPct =
+      rangeMid > 0 ? (candle.close - rangeMid) / rangeMid : 0;
+    const trendRegime =
+      core.trendStrengthPct > 0.0018 && core.atrPct > this.config.minAtrPct;
     const rangeRegime = core.trendStrengthPct < 0.0012 && rangeWidthPct < 0.018;
     const regimeName = trendRegime ? 'trend' : rangeRegime ? 'range' : 'mixed';
     const indicators = {
@@ -133,7 +148,9 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
           entryScore: trendLong
             ? core.trendStrengthPct * 12000 + volumeRatio * 10 + (core.rsi - 56)
             : Math.abs(deviationPct) * 12000 + Math.max(0, 40 - core.rsi) + 20,
-          marketRegime: trendLong ? 'adaptive_trend_bullish' : 'adaptive_range_bullish',
+          marketRegime: trendLong
+            ? 'adaptive_trend_bullish'
+            : 'adaptive_range_bullish',
         };
       }
 
@@ -147,7 +164,9 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
           entryScore: trendShort
             ? core.trendStrengthPct * 12000 + volumeRatio * 10 + (44 - core.rsi)
             : Math.abs(deviationPct) * 12000 + Math.max(0, core.rsi - 60) + 20,
-          marketRegime: trendShort ? 'adaptive_trend_bearish' : 'adaptive_range_bearish',
+          marketRegime: trendShort
+            ? 'adaptive_trend_bearish'
+            : 'adaptive_range_bearish',
         };
       }
 
@@ -169,10 +188,14 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
         };
       }
 
-      if ((trendRegime && core.rsi < 49) || (rangeRegime && candle.close >= rangeMid)) {
+      if (
+        (trendRegime && core.rsi < 49) ||
+        (rangeRegime && candle.close >= rangeMid)
+      ) {
         return {
           signal: 'CLOSE_LONG',
-          reason: 'Market regime switcher закрывает long по завершению сценария',
+          reason:
+            'Market regime switcher закрывает long по завершению сценария',
           indicators,
           marketRegime: regimeName,
         };
@@ -195,7 +218,10 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
       };
     }
 
-    if ((trendRegime && core.rsi > 51) || (rangeRegime && candle.close <= rangeMid)) {
+    if (
+      (trendRegime && core.rsi > 51) ||
+      (rangeRegime && candle.close <= rangeMid)
+    ) {
       return {
         signal: 'CLOSE_SHORT',
         reason: 'Market regime switcher закрывает short по завершению сценария',
@@ -233,7 +259,9 @@ export class MarketRegimeSwitcherStrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

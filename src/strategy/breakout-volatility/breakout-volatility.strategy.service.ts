@@ -22,7 +22,11 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 8, this.config.rsiPeriod + 8, 30);
+    return Math.max(
+      this.config.emaSlowPeriod + 8,
+      this.config.rsiPeriod + 8,
+      30,
+    );
   }
 
   getConfirmationPolicy() {
@@ -47,7 +51,10 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -71,7 +78,10 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы breakout volatility ещё не готовы' };
+      return {
+        signal: 'HOLD',
+        reason: 'Индикаторы breakout volatility ещё не готовы',
+      };
     }
 
     const lookback = 20;
@@ -79,22 +89,22 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
     const breakoutHigh = highestHigh(previousCandles, lookback);
     const breakoutLow = lowestLow(previousCandles, lookback);
     const recentAtrPct = average(
-      state.candles
-        .slice(-6, -1)
-        .map((item, index, list) => {
-          if (index === 0) {
-            return Math.abs(item.high - item.low) / Math.max(item.close, 1);
-          }
-          const prevClose = list[index - 1]?.close ?? item.close;
-          const tr = Math.max(
-            item.high - item.low,
-            Math.abs(item.high - prevClose),
-            Math.abs(item.low - prevClose),
-          );
-          return tr / Math.max(item.close, 1);
-        }),
+      state.candles.slice(-6, -1).map((item, index, list) => {
+        if (index === 0) {
+          return Math.abs(item.high - item.low) / Math.max(item.close, 1);
+        }
+        const prevClose = list[index - 1]?.close ?? item.close;
+        const tr = Math.max(
+          item.high - item.low,
+          Math.abs(item.high - prevClose),
+          Math.abs(item.low - prevClose),
+        );
+        return tr / Math.max(item.close, 1);
+      }),
     );
-    const averageVolume = average(state.candles.slice(-21, -1).map((item) => item.volume));
+    const averageVolume = average(
+      state.candles.slice(-21, -1).map((item) => item.volume),
+    );
     const volumeRatio = averageVolume > 0 ? candle.volume / averageVolume : 1;
     const breakoutDistancePct =
       candle.close > breakoutHigh
@@ -136,7 +146,8 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
       if (bullishBreakout) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Breakout volatility long: цена пробила диапазон вверх на усилении объёма',
+          reason:
+            'Breakout volatility long: цена пробила диапазон вверх на усилении объёма',
           indicators,
           entryScore:
             breakoutDistancePct * 12000 +
@@ -150,7 +161,8 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
       if (bearishBreakout) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Breakout volatility short: цена пробила диапазон вниз на усилении объёма',
+          reason:
+            'Breakout volatility short: цена пробила диапазон вниз на усилении объёма',
           indicators,
           entryScore:
             breakoutDistancePct * 12000 +
@@ -172,7 +184,8 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
       if (bearishBreakout) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Breakout volatility: bullish breakout сломан и рынок пробил вниз',
+          reason:
+            'Breakout volatility: bullish breakout сломан и рынок пробил вниз',
           indicators,
         };
       }
@@ -185,13 +198,18 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
         };
       }
 
-      return { signal: 'HOLD', reason: 'Breakout volatility удерживает long', indicators };
+      return {
+        signal: 'HOLD',
+        reason: 'Breakout volatility удерживает long',
+        indicators,
+      };
     }
 
     if (bullishBreakout) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Breakout volatility: bearish breakout сломан и рынок пробил вверх',
+        reason:
+          'Breakout volatility: bearish breakout сломан и рынок пробил вверх',
         indicators,
       };
     }
@@ -204,7 +222,11 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
       };
     }
 
-    return { signal: 'HOLD', reason: 'Breakout volatility удерживает short', indicators };
+    return {
+      signal: 'HOLD',
+      reason: 'Breakout volatility удерживает short',
+      indicators,
+    };
   }
 
   private getOrCreateState(symbol: string, interval: string) {
@@ -228,7 +250,9 @@ export class BreakoutVolatilityStrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

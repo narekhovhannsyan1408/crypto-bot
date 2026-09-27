@@ -290,6 +290,8 @@ function renderNow(session, running, solana) {
 
   const rows = session.assets.map((asset) => {
     const hasSignal = asset.targetWeightPct !== null;
+    // У остановленного бота цели нет: всё продано, показываем только последний тренд
+    const showTarget = hasSignal && running;
     const badge = hasSignal
       ? `<span class="trend-badge ${trendClass(asset.trendVotes, asset.trendTotal)}" title="${escapeHtml(t('trend.tooltip', { votes: asset.trendVotes, total: asset.trendTotal }))}">${escapeHtml(t(trendKey(asset.trendVotes, asset.trendTotal)))} · ${asset.trendVotes}/${asset.trendTotal}</span>`
       : `<span class="trend-badge none">${escapeHtml(t('asset.waiting'))}</span>`;
@@ -306,7 +308,7 @@ function renderNow(session, running, solana) {
         <div class="asset-name">${escapeHtml(asset.name)}${badge}</div>
         <div class="asset-value">${fmtMoney(asset.value)}</div>
         <div class="asset-sub">${escapeHtml(holding)}</div>
-        <div class="asset-sub asset-target">${hasSignal ? escapeHtml(t('asset.target', { pct: Math.round(asset.targetWeightPct) })) : ''}</div>
+        <div class="asset-sub asset-target">${showTarget ? escapeHtml(t('asset.target', { pct: Math.round(asset.targetWeightPct) })) : ''}</div>
       </div>`;
   });
   rows.push(`

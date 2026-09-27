@@ -20,7 +20,11 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 6, this.config.rsiPeriod + 8, 26);
+    return Math.max(
+      this.config.emaSlowPeriod + 6,
+      this.config.rsiPeriod + 8,
+      26,
+    );
   }
 
   getConfirmationPolicy() {
@@ -45,7 +49,10 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -69,14 +76,21 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы volume spike reversal ещё не готовы' };
+      return {
+        signal: 'HOLD',
+        reason: 'Индикаторы volume spike reversal ещё не готовы',
+      };
     }
 
-    const averageVolume = average(state.candles.slice(-21, -1).map((item) => item.volume));
+    const averageVolume = average(
+      state.candles.slice(-21, -1).map((item) => item.volume),
+    );
     const volumeRatio = averageVolume > 0 ? candle.volume / averageVolume : 1;
     const candleRange = Math.max(candle.high - candle.low, 1e-9);
-    const upperWickPct = (candle.high - Math.max(candle.open, candle.close)) / candleRange;
-    const lowerWickPct = (Math.min(candle.open, candle.close) - candle.low) / candleRange;
+    const upperWickPct =
+      (candle.high - Math.max(candle.open, candle.close)) / candleRange;
+    const lowerWickPct =
+      (Math.min(candle.open, candle.close) - candle.low) / candleRange;
     const bodyPct = Math.abs(candle.close - candle.open) / candleRange;
     const indicators = {
       ...core,
@@ -109,7 +123,8 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
       if (bullishReversal) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Volume spike reversal long: всплеск объёма и выкуп нижней тени',
+          reason:
+            'Volume spike reversal long: всплеск объёма и выкуп нижней тени',
           indicators,
           entryScore:
             volumeRatio * 15 +
@@ -123,7 +138,8 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
       if (bearishReversal) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Volume spike reversal short: всплеск объёма и продажа от верхней тени',
+          reason:
+            'Volume spike reversal short: всплеск объёма и продажа от верхней тени',
           indicators,
           entryScore:
             volumeRatio * 15 +
@@ -145,7 +161,8 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
       if (bearishReversal && core.rsi > 56) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Volume spike reversal: рынок показал сильный bearish rejection',
+          reason:
+            'Volume spike reversal: рынок показал сильный bearish rejection',
           indicators,
         };
       }
@@ -158,13 +175,18 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
         };
       }
 
-      return { signal: 'HOLD', reason: 'Volume spike reversal удерживает long', indicators };
+      return {
+        signal: 'HOLD',
+        reason: 'Volume spike reversal удерживает long',
+        indicators,
+      };
     }
 
     if (bullishReversal && core.rsi < 44) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Volume spike reversal: рынок показал сильный bullish rejection',
+        reason:
+          'Volume spike reversal: рынок показал сильный bullish rejection',
         indicators,
       };
     }
@@ -177,7 +199,11 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
       };
     }
 
-    return { signal: 'HOLD', reason: 'Volume spike reversal удерживает short', indicators };
+    return {
+      signal: 'HOLD',
+      reason: 'Volume spike reversal удерживает short',
+      indicators,
+    };
   }
 
   private getOrCreateState(symbol: string, interval: string) {
@@ -201,7 +227,9 @@ export class VolumeSpikeReversalStrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

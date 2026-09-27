@@ -1,10 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-type LiveEventType =
-  | 'log'
-  | 'trade'
-  | 'portfolio'
-  | 'system';
+type LiveEventType = 'log' | 'trade' | 'portfolio' | 'system';
 
 export type LiveEvent = {
   id: string;
@@ -26,7 +22,8 @@ export type LiveSnapshot = {
 export class LiveStreamService {
   private readonly recentEvents: LiveEvent[] = [];
   private readonly recentTrades: LiveEvent[] = [];
-  private readonly equityHistory: Array<{ timestamp: number; equity: number }> = [];
+  private readonly equityHistory: Array<{ timestamp: number; equity: number }> =
+    [];
   private latestPortfolio: LiveEvent | null = null;
   private readonly subscribers = new Set<(event: LiveEvent) => void>();
 

@@ -24,7 +24,9 @@ export class RiskManagerService {
     this.syncTradingDay(request.timestamp);
 
     if (this.portfolio.hasOpenPosition(request.symbol)) {
-      const positionsOnSymbol = this.portfolio.getPositionsForSymbol(request.symbol);
+      const positionsOnSymbol = this.portfolio.getPositionsForSymbol(
+        request.symbol,
+      );
 
       if (positionsOnSymbol.length >= this.config.maxPositionsPerSymbol) {
         return {
@@ -36,7 +38,8 @@ export class RiskManagerService {
       if (
         positionsOnSymbol.some(
           (position) =>
-            position.strategyId === request.strategyId && position.side === request.side,
+            position.strategyId === request.strategyId &&
+            position.side === request.side,
         )
       ) {
         return {
@@ -57,7 +60,9 @@ export class RiskManagerService {
     }
 
     if (this.portfolio.hasOpenPositionForStrategy(request.strategyId)) {
-      const strategyPositions = this.portfolio.getPositionsForStrategy(request.strategyId);
+      const strategyPositions = this.portfolio.getPositionsForStrategy(
+        request.strategyId,
+      );
       if (strategyPositions.length >= this.config.maxPositionsPerStrategy) {
         return {
           status: 'DENIED',
@@ -74,7 +79,8 @@ export class RiskManagerService {
     }
 
     if (
-      this.portfolio.getOpenPositionsCount() >= this.config.maxConcurrentPositions
+      this.portfolio.getOpenPositionsCount() >=
+      this.config.maxConcurrentPositions
     ) {
       return {
         status: 'DENIED',
@@ -107,8 +113,11 @@ export class RiskManagerService {
       }
     }
 
-    const dailyRealizedPnl = this.portfolio.getDailyRealizedPnl(request.timestamp);
-    const maxDailyLossAbs = this.dailyBaselineEquity * this.config.maxDailyLossPct;
+    const dailyRealizedPnl = this.portfolio.getDailyRealizedPnl(
+      request.timestamp,
+    );
+    const maxDailyLossAbs =
+      this.dailyBaselineEquity * this.config.maxDailyLossPct;
 
     if (dailyRealizedPnl <= -maxDailyLossAbs) {
       return {
@@ -183,7 +192,8 @@ export class RiskManagerService {
     const exposurePct =
       currentEquity > 0 ? (currentExposure / currentEquity) * 100 : 0;
     const riskBudget = currentEquity * this.config.riskPerTradePct;
-    const positionCapByEquity = currentEquity * this.config.maxPositionSizePctOfEquity;
+    const positionCapByEquity =
+      currentEquity * this.config.maxPositionSizePctOfEquity;
     const positionsByStrategy = this.portfolio
       .getOpenPositions()
       .reduce<Record<string, number>>((acc, position) => {
@@ -198,7 +208,9 @@ export class RiskManagerService {
       использованныйКапитал: Number(currentExposure.toFixed(6)),
       использованиеКапиталаВПроцентах: Number(exposurePct.toFixed(2)),
       рискБюджетНаСделку: Number(riskBudget.toFixed(6)),
-      минимальныйРазмерПозиции: Number(this.config.minPositionSizeUsdt.toFixed(6)),
+      минимальныйРазмерПозиции: Number(
+        this.config.minPositionSizeUsdt.toFixed(6),
+      ),
       лимитПозицииКакПроцентОтКапитала: Number(
         (this.config.maxPositionSizePctOfEquity * 100).toFixed(2),
       ),

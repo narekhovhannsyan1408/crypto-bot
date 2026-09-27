@@ -14,6 +14,7 @@ import { newId, runWithLogContext } from '../../observability/log-context';
 import { SolanaProofService } from '../../solana/solana-proof.service';
 import {
   buildTokenRegistry,
+  SolanaToken,
   unsupportedAssets,
 } from '../../solana/solana-tokens';
 import {
@@ -116,6 +117,10 @@ export class AllocatorEngine implements OnModuleDestroy {
   private lastError: Msg | null = null;
   private retry = { day: 0, failures: 0, nextAttemptAt: 0 };
   private staleAutoStopReported = false;
+  private tokens?: {
+    registry: Record<string, SolanaToken> | null;
+    problem: Msg | null;
+  };
 
   constructor(
     private readonly logger: BotLoggerService,
@@ -274,6 +279,10 @@ export class AllocatorEngine implements OnModuleDestroy {
     );
   }
 
+  isRunning() {
+    return this.session?.status === 'running';
+  }
+
   async refreshPricesIfStale(maxAgeMs = 30_000) {
     if (
       this.session?.status !== 'running' ||
@@ -407,7 +416,7 @@ export class AllocatorEngine implements OnModuleDestroy {
   }
 
   getSolanaInfo(): SolanaInfo {
-    const registry = this.tokenRegistry();
+    const { registry } = this.tokenRegistry();
     return {
       walletAddress: this.brokers.solanaWallet().address,
       quoteAsset: quoteAssetOf('solana_sim'),
@@ -1169,6 +1178,8 @@ export class AllocatorEngine implements OnModuleDestroy {
   /**
    * Публикует решение в Solana до исполнения ордеров. Ошибка публикации не
    * мешает торговле: решение всё равно исполняется, сбой пишется в журнал.
+   * Одна запись на день: повторы после сбоя ордеров и ручная ребалансировка
+   * не тратят комиссию сети на дубликаты.
    */
   private async publishDecision(
     session: AllocatorSession,
@@ -1177,6 +1188,9 @@ export class AllocatorEngine implements OnModuleDestroy {
     targetWeights: Record<string, number>,
     plan: RebalancePlan,
   ) {
+    if (session.lastProofDay === day) {
+      return;
+    }
     const smaCount = this.settings.smaPeriods.length;
     try {
       const chainTx = await this.proof.publish({
@@ -1199,6 +1213,7 @@ export class AllocatorEngine implements OnModuleDestroy {
         })),
       });
       if (chainTx) {
+        session.lastProofDay = day;
         appendActivity(session, {
           kind: 'proof',
           ...describeProof(day, chainTx.cluster),
@@ -1216,27 +1231,33 @@ export class AllocatorEngine implements OnModuleDestroy {
     }
   }
 
+  // Настройки не меняются во время работы: реестр токенов строим один раз
   private tokenRegistry() {
-    try {
-      return buildTokenRegistry(this.config.solana.tokenMints);
-    } catch {
-      return null;
+    if (this.tokens === undefined) {
+      try {
+        this.tokens = {
+          registry: buildTokenRegistry(this.config.solana.tokenMints),
+          problem: null,
+        };
+      } catch (error) {
+        this.tokens = { registry: null, problem: errorMsg(error) };
+      }
     }
+    return this.tokens;
   }
 
   private solanaTokenProblems() {
-    try {
-      const registry = buildTokenRegistry(this.config.solana.tokenMints);
-      const missing = unsupportedAssets(
-        registry,
-        this.settings.assets.map(baseAssetOf),
-      );
-      return missing.length
-        ? [msg('ready.solanaTokens', { assets: missing })]
-        : [];
-    } catch (error) {
-      return [errorMsg(error)];
+    const { registry, problem } = this.tokenRegistry();
+    if (!registry) {
+      return problem ? [problem] : [];
     }
+    const missing = unsupportedAssets(
+      registry,
+      this.settings.assets.map(baseAssetOf),
+    );
+    return missing.length
+      ? [msg('ready.solanaTokens', { assets: missing })]
+      : [];
   }
 
   private async refreshPrices() {

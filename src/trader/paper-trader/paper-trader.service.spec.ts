@@ -169,7 +169,9 @@ describe('PaperTraderService', () => {
       isClosed: true,
     });
 
-    expect(portfolio.getPosition('BTCUSDT', 'momentum_trend')?.stopPrice).toBeGreaterThan(100);
+    expect(
+      portfolio.getPosition('BTCUSDT', 'momentum_trend')?.stopPrice,
+    ).toBeGreaterThan(100);
   });
 
   it('arms breakeven after a sufficiently favorable close', async () => {
@@ -269,10 +271,9 @@ describe('PaperTraderService', () => {
       marketType: 'spot',
     });
     expect(open.status).toBe('EXECUTED');
-    expect(portfolio.getPosition('BTCUSDT', 'momentum_trend')?.quantity).toBeCloseTo(
-      0.987,
-      8,
-    );
+    expect(
+      portfolio.getPosition('BTCUSDT', 'momentum_trend')?.quantity,
+    ).toBeCloseTo(0.987, 8);
 
     const partialClose = service.recordExternalClosePosition({
       expectedSide: 'LONG',
@@ -287,7 +288,10 @@ describe('PaperTraderService', () => {
     });
     expect(partialClose?.status).toBe('EXECUTED');
 
-    const remainingPosition = portfolio.getPosition('BTCUSDT', 'momentum_trend');
+    const remainingPosition = portfolio.getPosition(
+      'BTCUSDT',
+      'momentum_trend',
+    );
     expect(remainingPosition).not.toBeNull();
     expect(remainingPosition?.quantity).toBeCloseTo(0.487, 8);
     expect(portfolio.closedTrades.at(-1)?.quantity).toBeCloseTo(0.5, 8);

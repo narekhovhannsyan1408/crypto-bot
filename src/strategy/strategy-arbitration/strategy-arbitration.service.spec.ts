@@ -25,7 +25,12 @@ describe('StrategyArbitrationService', () => {
         {
           strategy: momentum,
           side: 'LONG',
-          result: { signal: 'OPEN_LONG', reason: 'a', entryScore: 20, marketRegime: 'trend_bullish' },
+          result: {
+            signal: 'OPEN_LONG',
+            reason: 'a',
+            entryScore: 20,
+            marketRegime: 'trend_bullish',
+          },
         },
         {
           strategy: breakout,
@@ -101,8 +106,9 @@ describe('StrategyArbitrationService', () => {
     expect(selected.selectedStrategyId).toBe('momentum_trend');
     expect(selected.selectedSide).toBe('LONG');
     expect(
-      selected.candidates.find((candidate) => candidate.strategyId === 'breakout_volatility')
-        ?.reason,
+      selected.candidates.find(
+        (candidate) => candidate.strategyId === 'breakout_volatility',
+      )?.reason,
     ).toContain('Short недоступен');
   });
 });

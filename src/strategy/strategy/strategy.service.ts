@@ -18,7 +18,11 @@ export class StrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 1, this.config.rsiPeriod + 1, 15);
+    return Math.max(
+      this.config.emaSlowPeriod + 1,
+      this.config.rsiPeriod + 1,
+      15,
+    );
   }
 
   getConfirmationPolicy() {
@@ -120,8 +124,10 @@ export class StrategyService implements TradingStrategy {
       };
     }
 
-    const bullishEntry = emaFast > emaSlow && rsi > this.config.rsiLongThreshold;
-    const bearishEntry = emaFast < emaSlow && rsi < this.config.rsiShortThreshold;
+    const bullishEntry =
+      emaFast > emaSlow && rsi > this.config.rsiLongThreshold;
+    const bearishEntry =
+      emaFast < emaSlow && rsi < this.config.rsiShortThreshold;
     const longEntryTooExtended =
       rsi > this.config.rsiLongMaxEntry ||
       distanceFromFastEmaPct > this.config.momentumMaxEmaStretchPct;
@@ -134,7 +140,8 @@ export class StrategyService implements TradingStrategy {
         if (longEntryTooExtended) {
           return {
             signal: 'HOLD',
-            reason: 'Momentum Trend пропускает long: импульс уже перегрет и слишком далеко ушёл от EMA',
+            reason:
+              'Momentum Trend пропускает long: импульс уже перегрет и слишком далеко ушёл от EMA',
             indicators,
           };
         }
@@ -144,7 +151,8 @@ export class StrategyService implements TradingStrategy {
           reason: 'Long: fast EMA выше slow EMA, RSI подтверждает импульс',
           indicators,
           entryScore:
-            (rsi - this.config.rsiLongThreshold) +
+            rsi -
+            this.config.rsiLongThreshold +
             trendStrengthPct * 12000 +
             atrPct * 5000,
           marketRegime: 'trend_bullish',
@@ -155,7 +163,8 @@ export class StrategyService implements TradingStrategy {
         if (shortEntryTooExtended) {
           return {
             signal: 'HOLD',
-            reason: 'Momentum Trend пропускает short: импульс уже перегрет и слишком далеко ушёл от EMA',
+            reason:
+              'Momentum Trend пропускает short: импульс уже перегрет и слишком далеко ушёл от EMA',
             indicators,
           };
         }
@@ -165,7 +174,8 @@ export class StrategyService implements TradingStrategy {
           reason: 'Short: fast EMA ниже slow EMA, RSI подтверждает импульс',
           indicators,
           entryScore:
-            (this.config.rsiShortThreshold - rsi) +
+            this.config.rsiShortThreshold -
+            rsi +
             trendStrengthPct * 12000 +
             atrPct * 5000,
           marketRegime: 'trend_bearish',
@@ -183,7 +193,8 @@ export class StrategyService implements TradingStrategy {
       if (bearishEntry) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Переворот: bullish regime сломан и сформирован bearish impulse',
+          reason:
+            'Переворот: bullish regime сломан и сформирован bearish impulse',
           indicators,
         };
       }
@@ -206,7 +217,8 @@ export class StrategyService implements TradingStrategy {
     if (bullishEntry) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Переворот: bearish regime сломан и сформирован bullish impulse',
+        reason:
+          'Переворот: bearish regime сломан и сформирован bullish impulse',
         indicators,
       };
     }
@@ -249,7 +261,9 @@ export class StrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

@@ -20,7 +20,11 @@ export class TrendPullbackStrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 10, this.config.rsiPeriod + 8, 35);
+    return Math.max(
+      this.config.emaSlowPeriod + 10,
+      this.config.rsiPeriod + 8,
+      35,
+    );
   }
 
   getConfirmationPolicy() {
@@ -45,7 +49,10 @@ export class TrendPullbackStrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -69,14 +76,18 @@ export class TrendPullbackStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы trend pullback ещё не готовы' };
+      return {
+        signal: 'HOLD',
+        reason: 'Индикаторы trend pullback ещё не готовы',
+      };
     }
 
     const recentCloses = state.candles.slice(-6).map((item) => item.close);
     const recentMean = average(recentCloses);
     const pullbackPctToFast = (candle.close - core.emaFast) / core.emaFast;
     const pullbackPctToSlow = (candle.close - core.emaSlow) / core.emaSlow;
-    const driftFromRecentMean = (candle.close - recentMean) / Math.max(recentMean, 1);
+    const driftFromRecentMean =
+      (candle.close - recentMean) / Math.max(recentMean, 1);
     const indicators = {
       ...core,
       pullbackPctToFast,
@@ -92,8 +103,10 @@ export class TrendPullbackStrategyService implements TradingStrategy {
       };
     }
 
-    const bullishTrend = core.emaFast > core.emaSlow && core.trendStrengthPct > 0.0012;
-    const bearishTrend = core.emaFast < core.emaSlow && core.trendStrengthPct > 0.0012;
+    const bullishTrend =
+      core.emaFast > core.emaSlow && core.trendStrengthPct > 0.0012;
+    const bearishTrend =
+      core.emaFast < core.emaSlow && core.trendStrengthPct > 0.0012;
     const longPullback =
       bullishTrend &&
       pullbackPctToFast < -0.0006 &&
@@ -111,7 +124,8 @@ export class TrendPullbackStrategyService implements TradingStrategy {
       if (longPullback) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Trend pullback long: откат в восходящем тренде к быстрой EMA',
+          reason:
+            'Trend pullback long: откат в восходящем тренде к быстрой EMA',
           indicators,
           entryScore:
             Math.abs(pullbackPctToFast) * 12000 +
@@ -124,7 +138,8 @@ export class TrendPullbackStrategyService implements TradingStrategy {
       if (shortPullback) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Trend pullback short: откат в нисходящем тренде к быстрой EMA',
+          reason:
+            'Trend pullback short: откат в нисходящем тренде к быстрой EMA',
           indicators,
           entryScore:
             Math.abs(pullbackPctToFast) * 12000 +
@@ -145,39 +160,59 @@ export class TrendPullbackStrategyService implements TradingStrategy {
       if (shortPullback && core.emaFast < core.emaSlow) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Trend pullback: восходящий тренд сломан и сформирован bearish pullback',
+          reason:
+            'Trend pullback: восходящий тренд сломан и сформирован bearish pullback',
           indicators,
         };
       }
 
-      if (core.rsi > 64 || driftFromRecentMean > 0.0035 || core.emaFast < core.emaSlow) {
+      if (
+        core.rsi > 64 ||
+        driftFromRecentMean > 0.0035 ||
+        core.emaFast < core.emaSlow
+      ) {
         return {
           signal: 'CLOSE_LONG',
-          reason: 'Trend pullback закрывает long: импульс реализован или тренд ослаб',
+          reason:
+            'Trend pullback закрывает long: импульс реализован или тренд ослаб',
           indicators,
         };
       }
 
-      return { signal: 'HOLD', reason: 'Trend pullback удерживает long', indicators };
+      return {
+        signal: 'HOLD',
+        reason: 'Trend pullback удерживает long',
+        indicators,
+      };
     }
 
     if (longPullback && core.emaFast > core.emaSlow) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Trend pullback: нисходящий тренд сломан и сформирован bullish pullback',
+        reason:
+          'Trend pullback: нисходящий тренд сломан и сформирован bullish pullback',
         indicators,
       };
     }
 
-    if (core.rsi < 36 || driftFromRecentMean < -0.0035 || core.emaFast > core.emaSlow) {
+    if (
+      core.rsi < 36 ||
+      driftFromRecentMean < -0.0035 ||
+      core.emaFast > core.emaSlow
+    ) {
       return {
         signal: 'CLOSE_SHORT',
-        reason: 'Trend pullback закрывает short: импульс реализован или тренд ослаб',
+        reason:
+          'Trend pullback закрывает short: импульс реализован или тренд ослаб',
         indicators,
       };
     }
 
-    return { signal: 'HOLD', reason: 'Trend pullback удерживает short', indicators };
+    return {
+      signal: 'HOLD',
+      reason: 'Trend pullback удерживает short',
+      indicators,
+    };
   }
 
   private getOrCreateState(symbol: string, interval: string) {
@@ -201,7 +236,9 @@ export class TrendPullbackStrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

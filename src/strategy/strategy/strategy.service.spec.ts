@@ -82,7 +82,11 @@ describe('StrategyService', () => {
       providers: [StrategyService],
     }).compile();
     const stretchedService = module.get<StrategyService>(StrategyService);
-    stretchedService.seedHistory('BTCUSDT', '1m', buildTrendCandles('BTCUSDT', 100, 1));
+    stretchedService.seedHistory(
+      'BTCUSDT',
+      '1m',
+      buildTrendCandles('BTCUSDT', 100, 1),
+    );
 
     const result = stretchedService.onNewCandle(
       buildSingleCandle('BTCUSDT', 10_000, 130, 138, 129, 137),

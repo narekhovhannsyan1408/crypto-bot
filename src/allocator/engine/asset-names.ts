@@ -1,4 +1,3 @@
-import { ru } from '../../i18n/messages';
 import { baseAssetOf } from '../brokers/allocator-broker';
 
 // Названия монет — имена собственные, на всех языках одинаковые
@@ -28,6 +27,3 @@ export const trendKey = (votes: number, total: number) => {
   if (share > 0) return 'trend.weak';
   return 'trend.down';
 };
-
-export const trendLabel = (votes: number, total: number) =>
-  ru({ key: trendKey(votes, total) });

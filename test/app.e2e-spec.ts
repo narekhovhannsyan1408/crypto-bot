@@ -11,6 +11,8 @@ import { LegacyRuntimeService } from '../src/web/legacy-dashboard/legacy-runtime
 import { setupHttpApp } from '../src/app.setup';
 import { resetBotConfigCache } from '../src/config/bot-config';
 import { BotLoggerService } from '../src/logger/bot-logger/bot-logger.service';
+import { AppLogger } from '../src/observability/app-logger';
+import { MemorySink } from '../src/observability/rotating-file-sink';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOST = '127.0.0.1:3200';
@@ -48,6 +50,8 @@ const silentLogger = {
 describe('Web API (e2e)', () => {
   let app: NestExpressApplication;
   let dir: string;
+  const journal = new MemorySink();
+  const appLogger = new AppLogger(journal, 'trace');
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'crypto-bot-e2e-'));
@@ -64,10 +68,13 @@ describe('Web API (e2e)', () => {
       .useValue(fakeMarketData)
       .overrideProvider(BotLoggerService)
       .useValue(silentLogger)
+      .overrideProvider(AppLogger)
+      .useValue(appLogger)
       .compile();
 
     app = setupHttpApp(
       moduleRef.createNestApplication<NestExpressApplication>(),
+      appLogger,
     );
     await app.init();
   });
@@ -110,6 +117,15 @@ describe('Web API (e2e)', () => {
     const startedState = (started.body as ActionBody).state;
     expect(startedState.status).toBe('running');
     expect(startedState.session?.assets[0].quantity).toBeGreaterThan(0);
+
+    // HTTP-запрос и все решения бота внутри него связаны одним requestId
+    const requestId: unknown = started.headers['x-request-id'];
+    const related = journal.records.filter(
+      (record) => record.requestId === requestId,
+    );
+    expect(related.map((record) => record.event)).toEqual(
+      expect.arrayContaining(['allocator.order.filled', 'http.request']),
+    );
 
     await api()
       .post('/api/app/start')
@@ -171,6 +187,15 @@ describe('Web API (e2e)', () => {
       .get('/api/app/state')
       .set('Host', 'evil.example:3200')
       .expect(403);
+
+    const rejected = journal.records.filter(
+      (record) => record.event === 'http.request' && record.level === 'warn',
+    );
+    expect(
+      rejected.some((record) =>
+        JSON.stringify(record.data).includes('evil.example'),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -178,7 +203,10 @@ describe('Intraday mode (e2e)', () => {
   it('still wires the legacy intraday runner into the dashboard', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot('intraday')],
-    }).compile();
+    })
+      .overrideProvider(AppLogger)
+      .useValue(new AppLogger(new MemorySink()))
+      .compile();
 
     expect(moduleRef.get(BotRunnerService)).toBeDefined();
     expect(moduleRef.get(LegacyRuntimeService).intradayRunner).not.toBeNull();

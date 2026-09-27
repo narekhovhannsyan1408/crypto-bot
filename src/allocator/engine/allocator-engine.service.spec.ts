@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resetBotConfigCache } from '../../config/bot-config';
 import { BotLoggerService } from '../../logger/bot-logger/bot-logger.service';
+import { AppLogger } from '../../observability/app-logger';
+import { MemorySink } from '../../observability/rotating-file-sink';
 import { BrokerFactory } from '../brokers/broker.factory';
 import { AllocatorMarketDataService } from '../market-data/allocator-market-data.service';
 import { SessionStore } from '../session/session-store';
@@ -76,12 +78,14 @@ describe('AllocatorEngine', () => {
       logTrade: jest.fn(),
       logPortfolio: jest.fn(),
     };
+    const journal = new MemorySink();
     const moduleRef = await Test.createTestingModule({
       providers: [
         AllocatorEngine,
         SessionStore,
         BrokerFactory,
         SignalService,
+        { provide: AppLogger, useValue: new AppLogger(journal, 'trace') },
         {
           provide: AllocatorMarketDataService,
           useValue: createFakeMarketData(market),
@@ -91,7 +95,7 @@ describe('AllocatorEngine', () => {
     }).compile();
     const engine = moduleRef.get(AllocatorEngine);
     engines.push(engine);
-    return { engine, logger };
+    return { engine, logger, journal };
   };
 
   const market = (overrides: Partial<FakeMarket> = {}): FakeMarket => ({
@@ -150,6 +154,39 @@ describe('AllocatorEngine', () => {
     expect(buys[0].details).toContain('Рынок растёт');
   });
 
+  it('writes a traceable journal for every decision and order', async () => {
+    const { engine, journal } = await createEngine(market());
+
+    await engine.start({
+      mode: 'paper',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+    const sessionId = sessionOf(engine.getAppState()).id;
+    const fills = journal.records.filter(
+      (record) => record.event === 'allocator.order.filled',
+    );
+
+    expect(journal.events()).toEqual(
+      expect.arrayContaining([
+        'session.store.loaded',
+        'allocator.session.start_requested',
+        'allocator.rebalance.signals',
+        'allocator.rebalance.plan',
+        'allocator.rebalance.completed',
+        'allocator.cycle.completed',
+      ]),
+    );
+    expect(fills).toHaveLength(2);
+    // Все события операции связаны одним opId и сессией
+    expect(new Set(fills.map((record) => record.opId)).size).toBe(1);
+    expect(
+      fills.every(
+        (record) => record.sessionId === sessionId && record.op === 'start',
+      ),
+    ).toBe(true);
+  });
+
   it('does not trade twice for the same day and resumes after a restart', async () => {
     const first = await createEngine(market());
     await first.engine.start({
@@ -185,6 +222,9 @@ describe('AllocatorEngine', () => {
     expect(state.status).toBe('running');
     expect(second.logger.logTrade).not.toHaveBeenCalled();
     expect(state.lastError).toBe('нет связи');
+    expect(second.journal.events()).toContain(
+      'allocator.autostop.skipped_stale_prices',
+    );
   });
 
   it('stays in USDT in a downtrend and says so', async () => {
@@ -201,7 +241,7 @@ describe('AllocatorEngine', () => {
 
   it('retries the daily decision with a growing pause when Binance is unavailable', async () => {
     const fake = market({ failKlines: 1 });
-    const { engine, logger } = await createEngine(fake);
+    const { engine, logger, journal } = await createEngine(fake);
     const now = Date.now();
 
     await engine.start({
@@ -215,8 +255,16 @@ describe('AllocatorEngine', () => {
     );
     expect(errors).toHaveLength(1);
 
+    const failure = journal.records.find(
+      (record) => record.event === 'allocator.rebalance.failed',
+    );
+    expect(failure?.level).toBe('warn');
+    expect(failure?.err?.message).toBe('Binance недоступен');
+    expect(failure?.data).toMatchObject({ failures: 1 });
+
     await engine.tick(now + MINUTE);
     expect(logger.logTrade).not.toHaveBeenCalled();
+    expect(journal.events()).toContain('allocator.rebalance.deferred');
 
     await engine.tick(now + 6 * MINUTE);
     expect(logger.logTrade).toHaveBeenCalledTimes(2);

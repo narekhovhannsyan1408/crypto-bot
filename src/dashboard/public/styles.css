@@ -688,3 +688,13 @@ th {
     flex-direction: column;
   }
 }
+
+body.allocator-mode .intraday-only {
+  display: none;
+}
+
+a.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

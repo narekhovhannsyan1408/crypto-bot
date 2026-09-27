@@ -49,6 +49,9 @@ lerna-debug.log*
 # Backtest history cache
 /.backtest-cache
 
+# Allocator paper state
+/.allocator-state.json
+
 # Runtime data
 pids
 *.pid

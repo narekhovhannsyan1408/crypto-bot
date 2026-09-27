@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { AllocatorRunnerService } from './allocator/allocator-runner.service';
+import { getBotConfig } from './config/bot-config';
 import { BotRunnerService } from './bot/bot-runner/bot-runner.service';
 import { DashboardServerService } from './dashboard/dashboard-server/dashboard-server.service';
 
@@ -20,6 +22,13 @@ async function bootstrap() {
   app.get(DashboardServerService);
 
   console.log('[СИСТЕМА] Контекст NestJS успешно создан');
+
+  if (getBotConfig().strategyMode === 'trend_allocator') {
+    console.log('[СИСТЕМА] Режим стратегии: trend_allocator');
+    await app.get(AllocatorRunnerService).resumeIfRunning();
+    return;
+  }
+
   await runner.start();
 }
 

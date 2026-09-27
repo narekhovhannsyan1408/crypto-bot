@@ -1,5 +1,6 @@
 import * as ccxt from 'ccxt';
 import { BotConfig } from '../../config/bot-config';
+import { LocalizedError, msg } from '../../i18n/messages';
 import { AppLogger } from '../../observability/app-logger';
 import {
   AllocatorBroker,
@@ -12,6 +13,7 @@ import {
  * Только рыночные ордера на споте: без плеча, без шортов.
  */
 export class BinanceSpotAllocatorBroker implements AllocatorBroker {
+  readonly quoteAsset = 'USDT';
   private clientPromise: Promise<ccxt.binance> | null = null;
 
   constructor(
@@ -25,7 +27,9 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     const ticker = await client.fetchTicker(this.toMarket(symbol));
     const price = Number(ticker.last ?? ticker.close);
     if (!Number.isFinite(price) || price <= 0) {
-      throw new Error(`Binance не вернул цену для ${symbol}`);
+      throw new LocalizedError(
+        msg('err.priceMissing', { source: 'Binance', symbol }),
+      );
     }
     return price;
   }
@@ -40,7 +44,9 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
       const ticker = tickers[this.toMarket(symbol)];
       const price = Number(ticker?.last ?? ticker?.close);
       if (!Number.isFinite(price) || price <= 0) {
-        throw new Error(`Binance не вернул цену для ${symbol}`);
+        throw new LocalizedError(
+          msg('err.priceMissing', { source: 'Binance', symbol }),
+        );
       }
       prices[symbol] = price;
     }
@@ -94,9 +100,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     const market = this.toMarket(symbol);
     const amount = Number(client.amountToPrecision(market, quantity));
     if (!(amount > 0)) {
-      throw new Error(
-        `Количество ${quantity} ${symbol} меньше шага лота Binance`,
-      );
+      throw new LocalizedError(msg('err.lotStep', { qty: quantity, symbol }));
     }
     const order = await this.tracedOrder(
       'SELL',
@@ -184,8 +188,12 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     }
 
     if (!(filled > 0) || !(cost > 0)) {
-      throw new Error(
-        `Ордер ${side} ${symbol} не исполнен (status=${order.status})`,
+      throw new LocalizedError(
+        msg('err.orderNotFilled', {
+          side,
+          symbol,
+          status: order.status ?? null,
+        }),
       );
     }
 
@@ -244,10 +252,12 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
           };
 
     if (!credentials.apiKey || !credentials.secret) {
-      throw new Error(
-        this.mode === 'live_testnet'
-          ? 'Для Binance Demo нужны BINANCE_TESTNET_API_KEY/SECRET'
-          : 'Для реальной торговли нужны BINANCE_API_KEY/SECRET',
+      throw new LocalizedError(
+        msg(
+          this.mode === 'live_testnet'
+            ? 'err.binanceDemoKeys'
+            : 'err.binanceRealKeys',
+        ),
       );
     }
 

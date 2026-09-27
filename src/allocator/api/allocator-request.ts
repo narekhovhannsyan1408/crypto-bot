@@ -1,17 +1,21 @@
-import { BadRequestException } from '@nestjs/common';
-import { ExecutionMode } from '../../trader/execution.types';
+import { HttpStatus } from '@nestjs/common';
+import { localizedHttpError } from '../../i18n/http-errors';
+import { msg } from '../../i18n/messages';
+import { ALLOCATOR_MODES, AllocatorMode } from '../allocator-mode';
 import { ChartRange } from '../engine/app-state.view';
 import { StartOptions } from '../engine/allocator-engine.service';
 
-const MODES: ExecutionMode[] = ['paper', 'live_testnet', 'live_real'];
 const RANGES: ChartRange[] = ['day', 'week', 'month', 'all'];
 const MAX_ACTIVITY_LIMIT = 500;
 
-export const parseMode = (value: unknown): ExecutionMode => {
-  if (MODES.includes(value as ExecutionMode)) {
-    return value as ExecutionMode;
+const badRequest = (key: string) =>
+  localizedHttpError(HttpStatus.BAD_REQUEST, msg(key));
+
+export const parseMode = (value: unknown): AllocatorMode => {
+  if (ALLOCATOR_MODES.includes(value as AllocatorMode)) {
+    return value as AllocatorMode;
   }
-  throw new BadRequestException('Неизвестный режим');
+  throw badRequest('req.unknownMode');
 };
 
 export const parseRange = (value: unknown): ChartRange =>
@@ -26,7 +30,7 @@ export const parseActivityLimit = (value: unknown) => {
 
 export const parseStartRequest = (body: unknown): StartOptions => {
   if (!body || typeof body !== 'object') {
-    throw new BadRequestException('Пустой запрос');
+    throw badRequest('req.empty');
   }
   const { mode, capitalUsdt, autoStopLossPct } = body as Record<
     string,
@@ -35,10 +39,10 @@ export const parseStartRequest = (body: unknown): StartOptions => {
   const capital = Number(capitalUsdt);
   const autoStop = Number(autoStopLossPct ?? 0);
   if (!Number.isFinite(capital)) {
-    throw new BadRequestException('Укажите сумму');
+    throw badRequest('req.amount');
   }
   if (!Number.isFinite(autoStop)) {
-    throw new BadRequestException('Некорректный уровень автозащиты');
+    throw badRequest('action.badAutostop');
   }
   return {
     mode: parseMode(mode),

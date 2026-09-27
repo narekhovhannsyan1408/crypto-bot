@@ -1,13 +1,14 @@
 import {
-  BadRequestException,
   Body,
-  ConflictException,
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Post,
   Query,
 } from '@nestjs/common';
+import { localizedHttpError } from '../../i18n/http-errors';
+import { msg } from '../../i18n/messages';
 import { AllocatorEngine } from '../engine/allocator-engine.service';
 import {
   parseActivityLimit,
@@ -16,7 +17,7 @@ import {
   parseStartRequest,
 } from './allocator-request';
 
-/** API простого веб-интерфейса. */
+/** API веб-интерфейса. Сообщения — ключи словаря (поле i18n), см. src/i18n. */
 @Controller('api/app')
 export class AllocatorController {
   constructor(private readonly engine: AllocatorEngine) {}
@@ -42,7 +43,7 @@ export class AllocatorController {
   async start(@Body() body: unknown) {
     const result = await this.engine.start(parseStartRequest(body));
     if (!result.success) {
-      throw new BadRequestException(result.message);
+      throw localizedHttpError(HttpStatus.BAD_REQUEST, result.message);
     }
     return { ...result, state: this.engine.getAppState() };
   }
@@ -50,10 +51,26 @@ export class AllocatorController {
   @Post('stop')
   @HttpCode(200)
   async stop() {
-    if (this.engine.getAppState().status !== 'running') {
-      throw new ConflictException('Бот сейчас не работает');
-    }
+    this.assertRunning();
     const result = await this.engine.stop();
     return { ...result, state: this.engine.getAppState() };
+  }
+
+  /** Решение по сигналам прямо сейчас (расширенный режим). Повтор в тот же день идемпотентен. */
+  @Post('rebalance')
+  @HttpCode(200)
+  async rebalance() {
+    this.assertRunning();
+    const result = await this.engine.rebalanceNow();
+    if (!result.success) {
+      throw localizedHttpError(HttpStatus.CONFLICT, result.message);
+    }
+    return { ...result, state: this.engine.getAppState() };
+  }
+
+  private assertRunning() {
+    if (this.engine.getAppState().status !== 'running') {
+      throw localizedHttpError(HttpStatus.CONFLICT, msg('action.notRunning'));
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { HttpException } from '@nestjs/common';
 import {
   parseActivityLimit,
   parseRange,
@@ -19,11 +19,9 @@ describe('allocator request parsing', () => {
   it('rejects unknown modes and missing amounts', () => {
     expect(() =>
       parseStartRequest({ mode: 'margin', capitalUsdt: 1000 }),
-    ).toThrow(BadRequestException);
-    expect(() => parseStartRequest({ mode: 'paper' })).toThrow(
-      BadRequestException,
-    );
-    expect(() => parseStartRequest(null)).toThrow(BadRequestException);
+    ).toThrow(HttpException);
+    expect(() => parseStartRequest({ mode: 'paper' })).toThrow(HttpException);
+    expect(() => parseStartRequest(null)).toThrow(HttpException);
   });
 
   it('falls back to safe defaults for query parameters', () => {

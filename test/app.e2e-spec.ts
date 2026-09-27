@@ -57,6 +57,8 @@ describe('Web API (e2e)', () => {
     dir = mkdtempSync(join(tmpdir(), 'crypto-bot-e2e-'));
     process.env.BOT_ALLOCATOR_STATE_FILE = join(dir, 'state.json');
     process.env.BOT_ALLOCATOR_SMA_PERIODS = '5,10';
+    // Список активов из .env разработчика не должен влиять на тест
+    process.env.BOT_ALLOCATOR_ASSETS = 'BTCUSDT,ETHUSDT';
     process.env.BOT_DASHBOARD_HOST = '127.0.0.1';
     process.env.BOT_DASHBOARD_PORT = '3200';
     resetBotConfigCache();
@@ -89,10 +91,10 @@ describe('Web API (e2e)', () => {
 
   it('serves the simple and advanced pages', async () => {
     const home = await api().get('/').set('Host', HOST).expect(200);
-    expect(home.text).toContain('Крипто-бот');
+    expect(home.text).toContain('Crypto Bot');
 
     const advanced = await api().get('/advanced').set('Host', HOST).expect(200);
-    expect(advanced.text).toContain('расширенный режим');
+    expect(advanced.text).toContain('advanced mode');
   });
 
   it('never serves files outside the public folder', async () => {

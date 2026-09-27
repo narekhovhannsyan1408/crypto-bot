@@ -52,6 +52,9 @@ lerna-debug.log*
 # Allocator paper state
 /.allocator-state.json
 
+# Solana keypairs (proof wallet and trading wallet files)
+/.solana
+
 # Runtime data
 pids
 *.pid
@@ -60,3 +63,8 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Hackathon build tooling and heavy outputs (regenerate with docs/hackathon/build)
+/docs/hackathon/build/node_modules
+/docs/hackathon/build/work
+/docs/hackathon/video/*.mp4

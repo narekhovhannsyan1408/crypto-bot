@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { LoggerModule } from '../logger/logger.module';
+import { JupiterClient } from '../solana/jupiter-client';
+import { SolanaProofService } from '../solana/solana-proof.service';
 import { AllocatorController } from './api/allocator.controller';
 import { BrokerFactory } from './brokers/broker.factory';
 import { AllocatorEngine } from './engine/allocator-engine.service';
@@ -12,6 +14,8 @@ import { SessionStore } from './session/session-store';
   controllers: [AllocatorController],
   providers: [
     AllocatorMarketDataService,
+    JupiterClient,
+    SolanaProofService,
     BrokerFactory,
     SessionStore,
     SignalService,

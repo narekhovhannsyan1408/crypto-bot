@@ -5,7 +5,11 @@ import { join } from 'node:path';
 import { resetBotConfigCache } from '../../config/bot-config';
 import { BotLoggerService } from '../../logger/bot-logger/bot-logger.service';
 import { AppLogger } from '../../observability/app-logger';
+import { ru } from '../../i18n/messages';
 import { MemorySink } from '../../observability/rotating-file-sink';
+import { JupiterClient } from '../../solana/jupiter-client';
+import { SolanaProofService } from '../../solana/solana-proof.service';
+import { USDC } from '../../solana/solana-tokens';
 import { BrokerFactory } from '../brokers/broker.factory';
 import { AllocatorMarketDataService } from '../market-data/allocator-market-data.service';
 import { SessionStore } from '../session/session-store';
@@ -53,6 +57,53 @@ const createFakeMarketData = (market: FakeMarket) => ({
   ),
 });
 
+// Jupiter с той же ценой, что и рынок; маршрут берёт 0.1% (комиссия пулов)
+const createFakeJupiter = (market: FakeMarket) => ({
+  getUsdPrices: jest.fn((mints: string[]) =>
+    market.failPrices
+      ? Promise.reject(new Error('нет связи'))
+      : Promise.resolve(
+          Object.fromEntries(mints.map((mint) => [mint, market.price])),
+        ),
+  ),
+  getQuote: jest.fn(
+    (params: { inputMint: string; outputMint: string; amount: bigint }) => {
+      const buying = params.inputMint === USDC.mint;
+      const units = buying
+        ? (Number(params.amount) / 1e6 / market.price) * 1e8
+        : (Number(params.amount) / 1e8) * market.price * 1e6;
+      return Promise.resolve({
+        inputMint: params.inputMint,
+        outputMint: params.outputMint,
+        inAmount: params.amount.toString(),
+        outAmount: String(Math.floor(units * 0.999)),
+        otherAmountThreshold: '0',
+        slippageBps: 50,
+        priceImpactPct: '0.0001',
+        routePlan: [
+          { percent: 100, swapInfo: { label: 'Orca', ammKey: 'pool' } },
+        ],
+      });
+    },
+  ),
+  buildSwapTransaction: jest.fn(),
+});
+
+type FakeProof = {
+  status: () => ReturnType<SolanaProofService['status']>;
+  publish: jest.Mock;
+};
+
+const disabledProof = (): FakeProof => ({
+  status: () => ({
+    enabled: false,
+    cluster: 'devnet',
+    address: null,
+    problem: null,
+  }),
+  publish: jest.fn(() => Promise.resolve(null)),
+});
+
 const sessionOf = (state: AppState) => {
   if (!state.session) throw new Error('Нет сессии');
   return state.session;
@@ -68,9 +119,16 @@ describe('AllocatorEngine', () => {
     'BOT_ALLOCATOR_SMA_PERIODS',
     'BOT_ALLOCATOR_CHECK_INTERVAL_MS',
     'BOT_ALLOW_LIVE_REAL',
+    'BOT_ALLOW_SOLANA_REAL',
+    'SOLANA_PRIVATE_KEY',
+    'SOLANA_KEYPAIR_PATH',
+    'SOLANA_TOKEN_MINTS',
   ];
 
-  const createEngine = async (market: FakeMarket) => {
+  const createEngine = async (
+    market: FakeMarket,
+    proof: FakeProof = disabledProof(),
+  ) => {
     resetBotConfigCache();
     const logger = {
       logInfo: jest.fn(),
@@ -79,6 +137,7 @@ describe('AllocatorEngine', () => {
       logPortfolio: jest.fn(),
     };
     const journal = new MemorySink();
+    const jupiter = createFakeJupiter(market);
     const moduleRef = await Test.createTestingModule({
       providers: [
         AllocatorEngine,
@@ -91,11 +150,13 @@ describe('AllocatorEngine', () => {
           useValue: createFakeMarketData(market),
         },
         { provide: BotLoggerService, useValue: logger },
+        { provide: JupiterClient, useValue: jupiter },
+        { provide: SolanaProofService, useValue: proof },
       ],
     }).compile();
     const engine = moduleRef.get(AllocatorEngine);
     engines.push(engine);
-    return { engine, logger, journal };
+    return { engine, logger, journal, jupiter };
   };
 
   const market = (overrides: Partial<FakeMarket> = {}): FakeMarket => ({
@@ -114,6 +175,11 @@ describe('AllocatorEngine', () => {
     process.env.BOT_ALLOCATOR_SMA_PERIODS = '5,10';
     process.env.BOT_ALLOCATOR_CHECK_INTERVAL_MS = '3600000';
     process.env.BOT_ALLOW_LIVE_REAL = 'false';
+    // Пустые значения не дают .env разработчика повлиять на тесты
+    process.env.BOT_ALLOW_SOLANA_REAL = 'false';
+    process.env.SOLANA_PRIVATE_KEY = '';
+    process.env.SOLANA_KEYPAIR_PATH = '';
+    process.env.SOLANA_TOKEN_MINTS = '';
   });
 
   afterEach(() => {
@@ -221,7 +287,10 @@ describe('AllocatorEngine', () => {
 
     expect(state.status).toBe('running');
     expect(second.logger.logTrade).not.toHaveBeenCalled();
-    expect(state.lastError).toBe('нет связи');
+    expect(state.lastError).toEqual({
+      key: 'error.raw',
+      params: { text: 'нет связи' },
+    });
     expect(second.journal.events()).toContain(
       'allocator.autostop.skipped_stale_prices',
     );
@@ -331,7 +400,7 @@ describe('AllocatorEngine', () => {
       autoStopLossPct: 0,
     });
     expect(real.success).toBe(false);
-    expect(real.message).toContain('BOT_ALLOW_LIVE_REAL');
+    expect(ru(real.message)).toContain('BOT_ALLOW_LIVE_REAL');
 
     await engine.start({
       mode: 'paper',
@@ -360,5 +429,130 @@ describe('AllocatorEngine', () => {
     expect(chart.points.length).toBeGreaterThanOrEqual(3);
     expect(chart.trades.map((trade) => trade.kind)).toEqual(['buy', 'buy']);
     expect(chart.version).toBe(sessionOf(engine.getAppState()).chartVersion);
+  });
+
+  it('trades on Solana through Jupiter quotes without sending transactions', async () => {
+    const { engine, logger, jupiter } = await createEngine(market());
+
+    const result = await engine.start({
+      mode: 'solana_sim',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+    const session = sessionOf(engine.getAppState());
+
+    expect(result.success).toBe(true);
+    expect(session.modeLabel).toBe('Solana · симуляция');
+    expect(session.quoteAsset).toBe('USDC');
+    expect(logger.logTrade).toHaveBeenCalledTimes(2);
+    expect(jupiter.getQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ inputMint: USDC.mint, slippageBps: 50 }),
+    );
+    expect(jupiter.buildSwapTransaction).not.toHaveBeenCalled();
+    // Котировка уже включает комиссию маршрута: капитал чуть меньше стартового
+    expect(session.equity).toBeLessThan(1000);
+    expect(session.equity).toBeGreaterThan(995);
+
+    const stopped = await engine.stop();
+    expect(ru(stopped.message)).toBe('Бот остановлен, всё продано в USDC');
+  });
+
+  it('says USDC instead of USDT when waiting out a downtrend on Solana', async () => {
+    const { engine } = await createEngine(market({ trend: 'down' }));
+
+    await engine.start({
+      mode: 'solana_sim',
+      capitalUsdt: 500,
+      autoStopLossPct: 0,
+    });
+    const session = sessionOf(engine.getAppState());
+
+    expect(session.cash).toBe(500);
+    expect(session.activity[0].details).toContain('Всё в USDC');
+  });
+
+  it('publishes each daily decision to Solana before trading', async () => {
+    const proof = disabledProof();
+    proof.publish.mockResolvedValue({ txId: 'memo-tx', cluster: 'devnet' });
+    const { engine } = await createEngine(market(), proof);
+
+    await engine.start({
+      mode: 'paper',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+    const session = sessionOf(engine.getAppState());
+
+    expect(proof.publish).toHaveBeenCalledTimes(1);
+    const [published] = proof.publish.mock.calls[0] as [
+      {
+        mode: string;
+        quote: string;
+        signals: Array<{ asset: string; votes: number; targetWeight: number }>;
+        orders: Array<{ side: string; asset: string }>;
+      },
+    ];
+    expect(published).toMatchObject({ mode: 'paper', quote: 'USDT' });
+    expect(published.signals).toEqual([
+      expect.objectContaining({ asset: 'BTC', votes: 2, targetWeight: 0.5 }),
+      expect.objectContaining({ asset: 'ETH', votes: 2, targetWeight: 0.5 }),
+    ]);
+    expect(published.orders.map((order) => order.side)).toEqual(['BUY', 'BUY']);
+
+    // Лента идёт от новых к старым: запись решения раньше покупок
+    const kinds = session.activity.map((entry) => entry.kind);
+    const proofEntry = session.activity.find((entry) => entry.kind === 'proof');
+    expect(kinds.indexOf('proof')).toBeGreaterThan(kinds.lastIndexOf('buy'));
+    expect(proofEntry?.chainTx).toEqual({ txId: 'memo-tx', cluster: 'devnet' });
+  });
+
+  it('keeps trading when the decision cannot be written to Solana', async () => {
+    const proof = disabledProof();
+    proof.publish.mockRejectedValue(new Error('devnet недоступен'));
+    const { engine, logger, journal } = await createEngine(market(), proof);
+
+    await engine.start({
+      mode: 'paper',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+
+    expect(logger.logTrade).toHaveBeenCalledTimes(2);
+    expect(engine.getAppState().lastError).toBeNull();
+    const failure = journal.records.find(
+      (record) => record.event === 'solana.proof.failed',
+    );
+    expect(failure?.err?.message).toBe('devnet недоступен');
+  });
+
+  it('needs a wallet and an explicit flag for real Solana trading', async () => {
+    const { engine } = await createEngine(market());
+
+    const readiness = engine.getAppState().readiness;
+    expect(readiness.solana_sim.available).toBe(true);
+    expect(readiness.solana_real.available).toBe(false);
+    const missing = readiness.solana_real.missing.map(ru).join(' ');
+    expect(missing).toContain('SOLANA_PRIVATE_KEY');
+    expect(missing).toContain('BOT_ALLOW_SOLANA_REAL');
+
+    const result = await engine.start({
+      mode: 'solana_real',
+      capitalUsdt: 1000,
+      autoStopLossPct: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('explains which assets have no token on Solana', async () => {
+    process.env.BOT_ALLOCATOR_ASSETS = 'BTCUSDT,DOGEUSDT';
+    const { engine } = await createEngine(market());
+
+    const state = engine.getAppState();
+
+    expect(state.readiness.solana_sim.available).toBe(false);
+    expect(ru(state.readiness.solana_sim.missing[0])).toContain('DOGE');
+    expect(state.solana.tokens).toEqual([
+      expect.objectContaining({ base: 'BTC', symbol: 'cbBTC' }),
+    ]);
   });
 });

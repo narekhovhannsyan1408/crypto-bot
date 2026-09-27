@@ -21,14 +21,17 @@
     "backtest": "ts-node --transpile-only src/backtest/backtest-cli.ts",
     "allocator:backtest": "ts-node --transpile-only src/allocator/cli/allocator-backtest-cli.ts",
     "logs": "ts-node --transpile-only src/diagnostics/logs-cli.ts",
-    "diagnose": "ts-node --transpile-only src/diagnostics/diagnose-cli.ts"
+    "diagnose": "ts-node --transpile-only src/diagnostics/diagnose-cli.ts",
+    "solana:proof-wallet": "ts-node --transpile-only src/solana/cli/solana-proof-wallet-cli.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@solana/web3.js": "^1.99.0",
     "axios": "^1.13.6",
     "binance": "^3.4.4",
+    "bs58": "^6.0.0",
     "ccxt": "^4.5.42",
     "decimal.js": "^10.6.0",
     "dotenv": "^17.3.1",
@@ -78,6 +81,9 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^uuid$": "<rootDir>/../test/shims/uuid.js"
+    }
   }
 }

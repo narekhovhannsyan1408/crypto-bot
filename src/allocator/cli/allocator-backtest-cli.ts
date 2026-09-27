@@ -8,8 +8,8 @@
  * со случайным таймингом входа/выхода.
  */
 import { join } from 'node:path';
-import { getBotConfig } from '../config/bot-config';
-import { loadHistoricalCandles } from '../backtest/history-loader';
+import { getBotConfig } from '../../config/bot-config';
+import { loadHistoricalCandles } from '../../backtest/history-loader';
 import {
   computePerformance,
   createRandomTimingExposure,
@@ -17,8 +17,8 @@ import {
   PerformanceStats,
   simulateAllocator,
   SimulationParams,
-} from './allocator-simulator';
-import { getRequiredHistoryDays } from './trend-signal';
+} from '../domain/allocator-simulator';
+import { getRequiredHistoryDays } from '../domain/trend-signal';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

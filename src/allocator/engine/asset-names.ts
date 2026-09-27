@@ -1,4 +1,4 @@
-import { baseAssetOf } from './allocator-broker';
+import { baseAssetOf } from '../brokers/allocator-broker';
 
 const NAMES: Record<string, string> = {
   BTC: 'Bitcoin',

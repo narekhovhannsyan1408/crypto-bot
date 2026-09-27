@@ -1,9 +1,10 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { AllocatorEngine } from './allocator/engine/allocator-engine.service';
 import { AppModule } from './app.module';
-import { AllocatorRunnerService } from './allocator/allocator-runner.service';
-import { getBotConfig } from './config/bot-config';
+import { setupHttpApp } from './app.setup';
 import { BotRunnerService } from './bot/bot-runner/bot-runner.service';
-import { DashboardServerService } from './dashboard/dashboard-server/dashboard-server.service';
+import { getBotConfig } from './config/bot-config';
 
 process.on('uncaughtException', (error) => {
   console.error('[КРИТИЧЕСКАЯ_ОШИБКА][uncaughtException]', error);
@@ -14,24 +15,35 @@ process.on('unhandledRejection', (reason) => {
 });
 
 async function bootstrap() {
-  console.log('[СИСТЕМА] Запуск приложения...');
+  const config = getBotConfig();
+  const appModule = AppModule.forRoot(config.strategyMode);
+  console.log(`[СИСТЕМА] Запуск, режим стратегии: ${config.strategyMode}`);
 
-  const app = await NestFactory.createApplicationContext(AppModule);
-  app.enableShutdownHooks();
-  const runner = app.get(BotRunnerService);
-  app.get(DashboardServerService);
-
-  console.log('[СИСТЕМА] Контекст NestJS успешно создан');
-
-  if (getBotConfig().strategyMode === 'trend_allocator') {
-    console.log('[СИСТЕМА] Режим стратегии: trend_allocator');
-    await app.get(AllocatorRunnerService).resumeIfRunning();
-    return;
+  let app:
+    | NestExpressApplication
+    | Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
+  if (config.dashboardEnabled) {
+    const httpApp = setupHttpApp(
+      await NestFactory.create<NestExpressApplication>(appModule),
+    );
+    await httpApp.listen(config.dashboardPort, config.dashboardHost);
+    console.log(
+      `[DASHBOARD] Откройте http://${config.dashboardHost}:${config.dashboardPort}`,
+    );
+    app = httpApp;
+  } else {
+    app = await NestFactory.createApplicationContext(appModule);
+    app.enableShutdownHooks();
   }
 
-  await runner.start();
+  if (config.strategyMode === 'trend_allocator') {
+    await app.get(AllocatorEngine).resumeIfRunning();
+  } else {
+    await app.get(BotRunnerService).start();
+  }
 }
 
 bootstrap().catch((error) => {
   console.error('[КРИТИЧЕСКАЯ_ОШИБКА][bootstrap]', error);
+  process.exit(1);
 });

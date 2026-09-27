@@ -36,6 +36,12 @@ export const isTrustedRequest = (
   }
 };
 
+export const createTrustChecker = (dashboardHost: string, port: number) => {
+  const allowedHosts = buildAllowedHosts(dashboardHost, port);
+  return (headers: { host?: string; origin?: string }) =>
+    isTrustedRequest(headers, dashboardHost, allowedHosts);
+};
+
 /** Путь к статическому файлу строго внутри root, иначе null (защита от ../). */
 export const resolveStaticPath = (root: string, requestPath: string) => {
   let decoded: string;

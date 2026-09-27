@@ -273,6 +273,52 @@ describe('SolanaJupiterAllocatorBroker', () => {
     expect(connection.getTransaction).not.toHaveBeenCalled();
   });
 
+  it('books a swap found only in the history after the blockhash expired', async () => {
+    const { broker, connection } = setup();
+    // Недавний кэш статусов транзакцию уже не помнит, а история — помнит
+    connection.getSignatureStatuses.mockReset();
+    connection.getSignatureStatuses.mockImplementation(
+      (_ids: string[], config?: { searchTransactionHistory?: boolean }) =>
+        Promise.resolve({
+          value: [
+            config?.searchTransactionHistory
+              ? { confirmationStatus: 'finalized', err: null }
+              : null,
+          ],
+        }),
+    );
+    connection.getBlockHeight.mockResolvedValue(1_001);
+
+    const fill = await broker.buy('BTCUSDT', 500);
+
+    expect(fill.quantity).toBe(0.00587);
+    expect(connection.getSignatureStatuses).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a failed swap found in the history as not executed', async () => {
+    const { broker, connection } = setup();
+    connection.getSignatureStatuses.mockReset();
+    connection.getSignatureStatuses.mockImplementation(
+      (_ids: string[], config?: { searchTransactionHistory?: boolean }) =>
+        Promise.resolve({
+          value: [
+            config?.searchTransactionHistory
+              ? {
+                  confirmationStatus: 'finalized',
+                  err: { InstructionError: [2, 'Custom'] },
+                }
+              : null,
+          ],
+        }),
+    );
+    connection.getBlockHeight.mockResolvedValue(1_001);
+
+    await expect(broker.buy('BTCUSDT', 500)).rejects.toThrow(
+      'InstructionError',
+    );
+    expect(connection.getTransaction).not.toHaveBeenCalled();
+  });
+
   it('reads wallet balances and keeps SOL for network fees', async () => {
     const { broker } = setup();
 

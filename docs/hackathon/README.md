@@ -12,7 +12,9 @@ Everything for the submission, in English.
 | `video/captions.srt` | Captions to upload next to the clean video (YouTube, Loom…) |
 | `video/voiceover.md` | Voice-over script with timings — read it to record your own voice |
 | `video/script.json` | Source of the narration (segments, text, which slide or clip, voice) |
-| `video/crypto-bot-x-teaser.mp4` | 30-second teaser with captions for X (not in git) |
+| `video/crypto-bot-x-teaser.mp4` | ~30-second teaser with captions for X: intro → live demo → end card (not in git) |
+| `video/crypto-bot-story-9x16.mp4` | 11-second vertical story (1080×1920) for Instagram and Telegram Stories (not in git) |
+| `stories/story.html` | Layers of the vertical story: frame, captions, end card |
 | `x/` | X (Twitter) launch kit: avatar, header, profile texts, pinned thread and posting plan — see [`x/README.md`](x/README.md) |
 
 The videos are ~35 MB each and are kept out of git; rebuild them with the steps below.
@@ -58,7 +60,7 @@ BASE_URL=http://127.0.0.1:3210 node capture-screens.mjs
 # 4. Video
 node make-video.mjs
 
-# 5. Social: 30-second X teaser, X avatar and header
+# 5. Social: X teaser, 9:16 story, X avatar and header
 node make-social-cuts.mjs
 node render-x-assets.mjs
 ```

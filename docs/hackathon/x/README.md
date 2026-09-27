@@ -10,7 +10,8 @@ Everything needed for the project's X page: profile images, profile texts, a pin
 | --- | --- |
 | [`avatar.png`](avatar.png) | Profile photo, 400×400 (also works as the product logo in the Colosseum form) |
 | [`header.png`](header.png) | Header, 1500×500 |
-| `../video/crypto-bot-x-teaser.mp4` | 30-second teaser with captions for the pinned post (git-ignored; build with `node make-social-cuts.mjs` in `../build`) |
+| `../video/crypto-bot-x-teaser.mp4` | ~30-second teaser with captions for the pinned post (git-ignored; build with `node make-social-cuts.mjs` in `../build`) |
+| `../video/crypto-bot-story-9x16.mp4` | 11-second vertical version for Instagram and Telegram Stories (same build step) |
 | [`../slides/`](../slides) | Images for the posts (16:9) |
 | [`brand.html`](brand.html) | Source of the avatar and header; rebuild with `node render-x-assets.mjs` in `../build` |
 

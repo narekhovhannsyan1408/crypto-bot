@@ -114,6 +114,7 @@ const state = {
   journalFilter: 'all',
   journalLimit: JOURNAL_PAGE,
   refreshing: false,
+  refreshAgain: false,
   failures: 0,
   busy: false,
   runtime: null,
@@ -383,10 +384,13 @@ async function syncCharts() {
       state.fullChartKey = `${version}|all`;
       renderKpis(state.app);
     }
-    const key = `${version}|${state.range}`;
+    const range = state.range;
+    const key = `${version}|${range}`;
     if (key !== state.chartKey) {
-      state.chart =
-        state.range === 'all' ? state.fullChart : await api.chart(state.range);
+      const chart = range === 'all' ? state.fullChart : await api.chart(range);
+      // Пока шёл запрос, могли выбрать другой период: старый ответ не рисуем
+      if (range !== state.range) return;
+      state.chart = chart;
       state.chartKey = key;
     }
   } catch {
@@ -967,7 +971,11 @@ function applyState(app) {
 }
 
 async function refresh() {
-  if (state.refreshing) return;
+  // Запрос уже идёт: повторим сразу после него (например, после «Показать ещё»)
+  if (state.refreshing) {
+    state.refreshAgain = true;
+    return;
+  }
   state.refreshing = true;
   let app;
   try {
@@ -978,6 +986,10 @@ async function refresh() {
     return;
   } finally {
     state.refreshing = false;
+    if (state.refreshAgain) {
+      state.refreshAgain = false;
+      setTimeout(() => void refresh(), 0);
+    }
   }
   try {
     applyState(app);

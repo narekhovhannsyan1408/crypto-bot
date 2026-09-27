@@ -115,36 +115,133 @@ Signals are always computed from Binance daily candles; the mode only decides wh
 ## Configuration
 
 All settings are environment variables, read from `.env` in the project root (or the file in
-`BOT_ENV_FILE`). Values already set in the environment win over the file. See
-[`.env.example`](.env.example) for a commented template.
+`BOT_ENV_FILE`). Values already set in the environment win over the file; if a name appears twice in
+`.env`, the last line wins. Names the code does not read are ignored. See
+[`.env.example`](.env.example) for a commented template. Restart the bot after changing `.env`.
 
-| Variable | Purpose | Default |
+Fractions are written as decimals: `0.1` means 10%.
+
+### General
+
+| Variable | Values | Default | Notes |
+| --- | --- | --- | --- |
+| `BOT_STRATEGY_MODE` | `trend_allocator`, `intraday` | `trend_allocator` | `intraday` runs the legacy strategies (see below) instead of the allocator |
+| `BOT_ENV_FILE` | path | `./.env` | Use another settings file; the bot refuses to start if it does not exist |
+| `BOT_DASHBOARD_ENABLED` | `true`, `false` | `true` | `false` runs without the web interface |
+| `BOT_DASHBOARD_HOST` / `BOT_DASHBOARD_PORT` | address / port | `127.0.0.1` / `3200` | Keep `127.0.0.1` unless you know why you need another address |
+
+### Trend allocator
+
+| Variable | Values | Default | Notes |
+| --- | --- | --- | --- |
+| `BOT_ALLOCATOR_ASSETS` | comma list: `BTC` or `BTCUSDT` | `BTCUSDT,ETHUSDT` | Add `SOL` to trade Solana; any Binance `…USDT` pair works for signals |
+| `BOT_ALLOCATOR_SMA_PERIODS` | comma list of days > 1 | `20,50,100,200` | Moving averages that vote on the trend |
+| `BOT_ALLOCATOR_REBALANCE_THRESHOLD_PCT` | `0`–`1` | `0.1` | Minimum drift from the target (share of an asset's slice) before trading |
+| `BOT_ALLOCATOR_MIN_ORDER_USDT` | USDT | `10` | Smaller orders are skipped; Binance's own minimum also applies |
+| `BOT_ALLOCATOR_VOL_TARGET` | yearly volatility, `0` = off | `0` | E.g. `0.6` scales positions down when an asset is wilder than 60% a year |
+| `BOT_ALLOCATOR_VOL_LOOKBACK_DAYS` | days | `30` | Window for the volatility estimate |
+| `BOT_ALLOCATOR_CHECK_INTERVAL_MS` | ms, at least `10000` | `300000` | How often prices and auto-protection are checked (the decision itself is daily) |
+| `BOT_ALLOCATOR_STATE_FILE` | path | `./.allocator-state.json` | Session state; do not delete it while a session is running |
+| `BOT_ALLOCATOR_DATA_URL` | URL | `https://api.binance.com` | Public Binance market data used for the signals in every mode |
+| `BOT_ALLOCATOR_PAPER_BALANCE` | USDT | `BOT_INITIAL_BALANCE` or `1000` | Starting capital of `npm run allocator:backtest` (the interface asks for the amount itself) |
+| `BOT_FEE_PCT` / `BOT_SLIPPAGE_PCT` | fraction per side | `0.001` / `0.0005` | Costs modelled in test mode and backtests; real modes pay the actual costs |
+
+The trading mode of the allocator (test, Binance Demo, real, Solana) is chosen in the web interface,
+not in `.env`: `BOT_EXECUTION_MODE` and `BOT_EXECUTION_MARKET_TYPE` only affect the intraday mode.
+
+### Keys and accounts
+
+Test mode and the Solana simulation need no keys. Keys are only read from `.env`; never commit it.
+
+| Variable | Needed for | Where to get it |
 | --- | --- | --- |
-| `BOT_DASHBOARD_HOST` / `BOT_DASHBOARD_PORT` | Web interface address | `127.0.0.1` / `3200` |
-| `BOT_ALLOCATOR_ASSETS` | Traded assets (`BTC` and `BTCUSDT` both work) | `BTCUSDT,ETHUSDT` |
-| `BOT_ALLOCATOR_SMA_PERIODS` | Moving-average periods | `20,50,100,200` |
-| `BOT_ALLOCATOR_REBALANCE_THRESHOLD_PCT` | Minimum drift (share of an asset's slice) to trade | `0.1` |
-| `BOT_ALLOCATOR_MIN_ORDER_USDT` | Minimum order size | `10` |
-| `BOT_ALLOCATOR_VOL_TARGET` | Target yearly volatility, `0` = off | `0` |
-| `BOT_ALLOCATOR_CHECK_INTERVAL_MS` | Price / auto-protection check interval (at least `10000`) | `300000` |
-| `BOT_ALLOCATOR_STATE_FILE` | Session state file | `./.allocator-state.json` |
-| `BOT_FEE_PCT` / `BOT_SLIPPAGE_PCT` | Costs modelled in test mode | `0.001` / `0.0005` |
-| `BINANCE_API_KEY` / `BINANCE_API_SECRET` | Real Binance account (spot only) | — |
-| `BOT_ALLOW_LIVE_REAL` | Allow real money on Binance | `false` |
-| `BINANCE_TESTNET_API_KEY` / `BINANCE_TESTNET_API_SECRET` | Binance Demo account | — |
-| `SOLANA_PRIVATE_KEY` or `SOLANA_KEYPAIR_PATH` | Wallet for real Solana swaps (base58 or JSON keypair) | — |
-| `BOT_ALLOW_SOLANA_REAL` | Allow real swaps on Solana | `false` |
-| `SOLANA_RPC_URL` | Mainnet RPC (a private one is recommended) | `https://api.mainnet-beta.solana.com` |
-| `SOLANA_JUPITER_API_URL` / `JUPITER_API_KEY` | Jupiter API | `https://lite-api.jup.ag` / — |
-| `SOLANA_SLIPPAGE_BPS` | Max slippage per swap | `50` (0.5%) |
-| `SOLANA_MAX_PRIORITY_FEE_LAMPORTS` | Priority fee cap | `500000` |
-| `SOLANA_MIN_SOL_FOR_FEES` | SOL kept aside for network fees | `0.02` |
-| `SOLANA_TOKEN_MINTS` | Custom tokens, `BTC:<mint>:<decimals>,…` | cbBTC, WETH, SOL |
-| `SOLANA_PROOF_ENABLED` | Publish decisions to Solana (Memo) | `false` |
-| `SOLANA_PROOF_CLUSTER` / `SOLANA_PROOF_RPC_URL` | Network of the decision journal | `devnet` |
-| `SOLANA_PROOF_KEYPAIR_PATH` | Journal wallet | `./.solana/proof-keypair.json` |
-| `BOT_LOG_DIR` / `BOT_LOG_LEVEL` | Diagnostic journal | `./logs` / `debug` |
-| `BOT_LOG_RETENTION_DAYS` / `BOT_LOG_MAX_FILE_MB` | Journal rotation | `14` / `10` |
+| `BINANCE_TESTNET_API_KEY` / `BINANCE_TESTNET_API_SECRET` | Binance Demo (`live_testnet`) | Sign in at <https://demo.binance.com> with your Binance account → **API Management** → create a key. Demo keys only work with demo money |
+| `BINANCE_API_KEY` / `BINANCE_API_SECRET` | Real money on Binance (`live_real`) | binance.com → profile → **API Management** → **Create API** → *System generated*. Enable **Reading** and **Spot & Margin Trading** only, never withdrawals; restricting the key to your IP is recommended |
+| `BOT_ALLOW_LIVE_REAL` | Real money on Binance | Set to `true` yourself as an explicit second switch (default `false`) |
+| `SOLANA_PRIVATE_KEY` | Real Solana swaps (`solana_real`) | Base58 secret key of a **separate** wallet. Phantom: Settings → Manage Accounts → the account → **Show Private Key**; Solflare: account menu → **Export Private Key** |
+| `SOLANA_KEYPAIR_PATH` | Alternative to `SOLANA_PRIVATE_KEY` | Path to a JSON keypair file, e.g. created with `solana-keygen new -o wallet.json` |
+| `BOT_ALLOW_SOLANA_REAL` | Real Solana swaps | Set to `true` yourself as an explicit second switch (default `false`) |
+| `SOLANA_RPC_URL` | Solana modes | Optional. The public `https://api.mainnet-beta.solana.com` is rate-limited; a free endpoint from Helius, QuickNode or Triton is more reliable |
+| `JUPITER_API_KEY` | Solana modes | Optional, only for the paid `https://api.jup.ag` (key from <https://portal.jup.ag>); the default `lite-api.jup.ag` needs none |
+| `SOLANA_PROOF_KEYPAIR_PATH` | On-chain decision journal | Created by `npm run solana:proof-wallet` |
+
+### Solana
+
+| Variable | Values | Default | Notes |
+| --- | --- | --- | --- |
+| `SOLANA_JUPITER_API_URL` | URL | `https://lite-api.jup.ag` | Jupiter prices, quotes and swap transactions |
+| `SOLANA_SLIPPAGE_BPS` | basis points | `50` (0.5%) | Maximum slippage per swap |
+| `SOLANA_MAX_PRIORITY_FEE_LAMPORTS` | lamports | `500000` | Cap on the priority fee per swap (0.0005 SOL) |
+| `SOLANA_MIN_SOL_FOR_FEES` | SOL | `0.02` | SOL the bot never trades so it can always pay network fees |
+| `SOLANA_TOKEN_MINTS` | `ASSET:mint:decimals,…` | cbBTC, WETH, SOL | Trade other tokens, e.g. `BTC:<WBTC mint>:8` |
+| `SOLANA_PROOF_ENABLED` | `true`, `false` | `false` | Publish every daily decision with the Memo program |
+| `SOLANA_PROOF_CLUSTER` | `devnet`, `testnet`, `mainnet-beta` | `devnet` | Network of the decision journal |
+| `SOLANA_PROOF_RPC_URL` | URL | public RPC of the cluster | RPC for the decision journal |
+
+### Diagnostic journal
+
+| Variable | Values | Default | Notes |
+| --- | --- | --- | --- |
+| `BOT_LOG_DIR` | path | `./logs` | Where the JSON Lines journal is written |
+| `BOT_LOG_LEVEL` | `trace`, `debug`, `info`, `warn`, `error` | `debug` | `trace` also records page polls and successful Binance requests |
+| `BOT_LOG_RETENTION_DAYS` / `BOT_LOG_MAX_FILE_MB` | days / MB | `14` / `10` | Journal rotation |
+| `BOT_LOG_HEARTBEAT_MS` | ms | `300000` | Heartbeat interval; gaps in heartbeats show when the process was not running |
+
+### Intraday mode (legacy)
+
+These variables are read only with `BOT_STRATEGY_MODE=intraday`. The intraday strategies lose money on
+historical data and are kept for reference; the trend allocator ignores all of them.
+
+<details>
+<summary>Intraday variables</summary>
+
+| Variable | Values | Default | Notes |
+| --- | --- | --- | --- |
+| `BOT_EXECUTION_MODE` | `paper`, `live_testnet`, `live_real` | `paper` | Where intraday orders go (`live_testnet` = Binance Demo) |
+| `BOT_EXECUTION_MARKET_TYPE` | `spot`, `futures`, `hybrid` | `spot` | `hybrid`: longs on spot, shorts on futures |
+| `BINANCE_FUTURES_DEMO_API_KEY` / `BINANCE_FUTURES_DEMO_API_SECRET` | keys | — | Futures leg on Binance Demo; created on <https://demo.binance.com> like the spot demo key |
+| `BINANCE_REST_BASE_URL` / `BINANCE_WS_BASE_URL` | URL | chosen by `BOT_EXECUTION_MODE` | Market data endpoints; demo endpoints for `live_testnet`, main ones otherwise |
+| `BOT_INITIAL_BALANCE` | USDT | `1000` | Starting balance of the intraday paper portfolio and backtest |
+| `BOT_SYMBOL` | Binance pair | `BTCUSDT` | Traded pair when the scanner is off |
+| `BOT_INTERVAL` | `1m`, `5m`, `15m`, … | `1m` | Candle interval of the strategies |
+| `BOT_CONFIRMATION_INTERVAL` | interval or empty | — | Higher timeframe that must confirm an entry |
+| `BOT_CONFIRMATION_MODE` | `strict`, `lenient`, `off` | `strict` | How strictly the higher timeframe is required |
+| `BOT_MIN_TREND_STRENGTH_PCT` | fraction | `0.0015` | Minimum EMA spread for the higher timeframe to count as a trend |
+| `BOT_DYNAMIC_TIMEFRAME_ENABLED` | `true`, `false` | `false` | Pick the fastest interval with good enough signals |
+| `BOT_DYNAMIC_TIMEFRAME_CANDIDATES` | comma list | `5m,15m,30m` | Intervals to choose from |
+| `BOT_USE_SCANNER` | `true`, `false` | `false` | Choose pairs automatically by movement and liquidity |
+| `BOT_SCAN_INTERVAL_MS` | ms | `60000` | How often the scanner re-ranks pairs |
+| `BOT_MIN_QUOTE_VOLUME` | USDT | `1000000` | Minimum 24h volume for a pair to be considered |
+| `BOT_ALLOWED_SYMBOLS` | comma list | all | Whitelist of pairs for the scanner and universe |
+| `BOT_UNIVERSE_SIZE` | number | `5` | How many pairs are watched at once |
+| `BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH` | candles | `8` | Replace a watched pair after this many candles without a trade |
+| `BOT_ENABLED_STRATEGIES` | comma list | all seven | `momentum_trend`, `mean_reversion`, `breakout_volatility`, `trend_pullback`, `range_scalping`, `volume_spike_reversal`, `market_regime_switcher` |
+| `BOT_RSI_LONG_MAX_ENTRY` / `BOT_RSI_SHORT_MIN_ENTRY` | RSI | `68` / `32` | No new long above / short below this RSI |
+| `BOT_MOMENTUM_MAX_EMA_STRETCH_PCT` | fraction | `0.0022` | Skip momentum entries this far from the fast EMA |
+| `BOT_MEAN_REVERSION_MAX_HIGHER_TREND_PCT` | fraction | `0.0025` | Skip mean-reversion entries against a stronger higher-timeframe trend |
+| `BOT_RISK_PER_TRADE_PCT` | fraction of equity | `0.005` | Risk per trade; the position size follows from the stop distance |
+| `BOT_POSITION_SIZE_USDT` | USDT, `0` = no cap | `0` | Hard cap on one position |
+| `BOT_MAX_POSITION_SIZE_PCT_OF_EQUITY` | fraction | `0.1` | Cap on one position as a share of equity |
+| `BOT_MIN_POSITION_SIZE_USDT` | USDT | `25` | Smaller positions are not opened |
+| `BOT_STOP_LOSS_PCT` / `BOT_TAKE_PROFIT_PCT` | fraction | `0.012` / `0.02` | Stop loss and take profit from the entry price |
+| `BOT_TRAILING_STOP_PCT` | fraction | `0.008` | Trailing stop distance |
+| `BOT_BREAKEVEN_TRIGGER_PCT` / `BOT_BREAKEVEN_OFFSET_PCT` | fraction, `0` = off | `0` / `0` | Move the stop to breakeven (plus offset) after this gain |
+| `BOT_MAX_POSITION_HOLD_MINUTES` | minutes, `0` = no limit | `0` | Close positions held longer than this |
+| `BOT_EXIT_ON_STRATEGY_SIGNAL` | `true`, `false` | `false` | Also close on strategy exit signals, not only on stops |
+| `BOT_MAX_CONCURRENT_POSITIONS` | number | `3` | Open positions at once |
+| `BOT_MAX_POSITIONS_PER_SYMBOL` / `BOT_MAX_POSITIONS_PER_STRATEGY` | number | `2` / `3` | Limits per pair and per strategy |
+| `BOT_MAX_PORTFOLIO_EXPOSURE_PCT` | fraction | `0.8` | Share of equity that may be in positions |
+| `BOT_MAX_DRAWDOWN_STOP_PCT` / `BOT_MAX_DAILY_LOSS_PCT` | fraction | `0.15` / `0.04` | Stop trading after this drawdown / daily loss |
+| `BOT_MAX_CONSECUTIVE_LOSSES` | number | `4` | Block new entries after this many losses in a row |
+| `BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES` | minutes | `30` | Lift that block after this long without trades |
+
+Fine-tuning of the indicators (`BOT_EMA_FAST_PERIOD`, `BOT_EMA_SLOW_PERIOD`, `BOT_RSI_PERIOD`,
+`BOT_RSI_LONG_THRESHOLD`, `BOT_RSI_SHORT_THRESHOLD`, `BOT_MIN_ATR_PCT`, `BOT_MAX_ATR_PCT`,
+`BOT_COOLDOWN_CANDLES`, `BOT_SCANNER_SHORTLIST_SIZE`, `BOT_SCANNER_KLINE_LOOKBACK`,
+`BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL`) is documented by its defaults in
+[`src/config/bot-config.ts`](src/config/bot-config.ts).
+
+</details>
 
 ## Real money on Binance
 

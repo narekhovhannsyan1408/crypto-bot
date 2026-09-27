@@ -13,8 +13,8 @@ Everything for the submission, in English.
 | `video/voiceover.md` | Voice-over script with timings — read it to record your own voice |
 | `video/script.json` | Source of the narration (segments, text, which slide or clip, voice) |
 | `video/crypto-bot-x-teaser.mp4` | ~30-second teaser with captions for X: intro → live demo → end card (not in git) |
-| `video/crypto-bot-story-9x16.mp4` | 11-second vertical story (1080×1920) for Instagram and Telegram Stories (not in git) |
-| `stories/story.html` | Layers of the vertical story: frame, captions, end card |
+| `video/crypto-bot-story-9x16.mp4` | 11-second vertical story (1080×1920) for Instagram and Telegram Stories: the product live, the Colosseum hackathon, the X page (not in git) |
+| `stories/story.html` | Scenes of the vertical story; the voice-over lines are in `build/make-social-cuts.mjs` |
 | `x/` | X (Twitter) launch kit: avatar, header, profile texts, pinned thread and posting plan — see [`x/README.md`](x/README.md) |
 
 The videos are ~35 MB each and are kept out of git; rebuild them with the steps below.

@@ -125,20 +125,43 @@ const cut = (ids, name) => {
 cut(['01-intro', '05-demo-start', '13-outro'], 'crypto-bot-x-teaser.mp4');
 
 // ---------- История 9:16 для Instagram и Telegram (11 с) ----------
-// Картинка — живое демо из того же ролика без вшитых субтитров, голос — вступление
-// тизера; в конце карточка «Trend-following you can verify» с финальной фразой.
+// Три сцены: продукт (живое демо в окне) → участие в хакатоне Colosseum →
+// страница проекта в X. Озвучка — тот же локальный голос Kokoro, что и в демо.
 const CLEAN = join(VIDEO, 'crypto-bot-demo.mp4');
 const STORY_LAYERS = join(WORK, 'story');
+const STORY_VOICE = join(WORK, 'story-voice');
 const CHROME =
   process.env.CHROME_PATH ??
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 // Контент страницы в кадре 1920×1080 занимает x 416–1503: вырезаем его с полями
 const CROP = { x: 396, width: 1128 };
-const PANEL = { x: 40, y: 430, width: 1000, height: 958 };
-const CAPTION_Y = 1420;
-const INTRO = 7.4; // «Meet Crypto Bot … proves every decision on-chain.»
-const END = 4.0; // карточка с фразой «Crypto Bot. Trend-following you can verify.»
-const STORY_FADE = 0.4;
+const PANEL = { x: 40, y: 470, width: 1000, height: 958 };
+const STORY_FADE = 0.3;
+// Длительность сцен с учётом переходов: 4.65 + 3.55 + 3.4 − 2 × 0.3 = 11 с.
+// speechAt — когда звучит начало фразы: паузы между фразами ~0.35 с,
+// смена сцены приходится на паузу
+const SCENES = [
+  {
+    id: 'product',
+    length: 4.65,
+    speechAt: 0.2,
+    voice: 'Crypto Bot: trend-following on Solana, with every decision proven on-chain.',
+  },
+  {
+    id: 'colosseum',
+    length: 3.55,
+    speechAt: 4.66,
+    voice: "We're competing in the Colosseum hackathon, Crypto World's Fair.",
+  },
+  {
+    id: 'follow',
+    length: 3.4,
+    speechAt: 7.95,
+    // Ник читается словами: «cryptobot1414» синтезатор произносит неразборчиво
+    voice: 'Follow the build on X: crypto bot fourteen fourteen.',
+  },
+];
+const VOICE = { voice: 'af_heart', speed: 1.2 };
 
 const renderStoryLayers = async () => {
   const { mkdirSync } = await import('node:fs');
@@ -156,8 +179,9 @@ const renderStoryLayers = async () => {
       waitUntil: 'networkidle0',
     });
     await page.evaluate(() => document.fonts.ready);
-    for (const id of ['frame', 'cap1', 'cap2', 'end']) {
+    for (const { id } of SCENES) {
       const element = await page.$(`#${id}`);
+      // У сцены продукта прозрачное окно, под ним будет видео
       await element.screenshot({
         path: join(STORY_LAYERS, `${id}.png`),
         omitBackground: true,
@@ -168,46 +192,66 @@ const renderStoryLayers = async () => {
   }
 };
 
+const renderStoryVoice = async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { speak } = await import('./tts-kokoro.mjs');
+  mkdirSync(STORY_VOICE, { recursive: true });
+  for (const scene of SCENES) {
+    // Озвучка пересобирается, только если поменялся текст или голос
+    const key = JSON.stringify({ text: scene.voice, ...VOICE });
+    const keyFile = join(STORY_VOICE, `${scene.id}.json`);
+    const wav = join(STORY_VOICE, `${scene.id}.wav`);
+    if (existsSync(wav) && existsSync(keyFile) && readFileSync(keyFile, 'utf8') === key) {
+      continue;
+    }
+    await speak(scene.voice, wav, VOICE);
+    writeFileSync(keyFile, key);
+  }
+};
+
 const story = async (name) => {
   if (!existsSync(CLEAN)) throw new Error(`Нет ${CLEAN}`);
   await renderStoryLayers();
-  const intro = piece('01-intro');
-  // Коротко диалог «Start on Solana», затем первые покупки
-  const demoFrom = cue("Let's see it live").from + 5.6;
-  // Финальная фраза целиком, но без «Thank you», которое идёт следом
-  const tagline = cue('Crypto Bot. Trend-following');
-  const taglineFrom = tagline.from - SPEECH_PAD;
-  const taglineLength = tagline.to + 0.03 - taglineFrom;
-  // Пауза после вступления: голос финала звучит, когда карточка уже видна
-  const taglineAt = INTRO + 0.2;
-  const total = INTRO + END - STORY_FADE;
-  const layer = (file) => [
-    '-loop', '1', '-framerate', '30', '-t', total.toFixed(2), '-i', join(STORY_LAYERS, file),
+  await renderStoryVoice();
+  // Демо: только что запущенный бот покупает монеты и объясняет сделки
+  const demoFrom = cue("Let's see it live").from + 8.0;
+  const starts = [];
+  let at = 0;
+  for (const scene of SCENES) {
+    starts.push(at);
+    at += scene.length - STORY_FADE;
+  }
+  const total = at + STORY_FADE;
+  const [product, colosseum, follow] = SCENES;
+  const still = (scene) => [
+    '-loop', '1', '-framerate', '30', '-t', scene.length.toFixed(2),
+    '-i', join(STORY_LAYERS, `${scene.id}.png`),
   ];
   const out = join(VIDEO, name);
+  const filters = [
+    // Сцена 1: демо в окне под рамкой
+    `[0:v]crop=${CROP.width}:1080:${CROP.x}:0,scale=${PANEL.width}:${PANEL.height},setsar=1,fps=30[demo]`,
+    `color=c=0x0b1020:s=1080x1920:r=30:d=${product.length}[base]`,
+    `[base][demo]overlay=${PANEL.x}:${PANEL.y}[p1]`,
+    `[p1][1:v]overlay=0:0,trim=duration=${product.length},setpts=PTS-STARTPTS,fps=30,format=yuv420p[s0]`,
+    `[2:v]trim=duration=${colosseum.length},setpts=PTS-STARTPTS,fps=30,format=yuv420p[s1]`,
+    `[3:v]trim=duration=${follow.length},setpts=PTS-STARTPTS,fps=30,format=yuv420p[s2]`,
+    `[s0][s1]xfade=transition=smoothup:duration=${STORY_FADE}:offset=${(starts[1]).toFixed(2)}[x1]`,
+    `[x1][s2]xfade=transition=smoothup:duration=${STORY_FADE}:offset=${(starts[2]).toFixed(2)},fade=t=in:st=0:d=0.25[v]`,
+    // Тишина в начале файла озвучки убирается, фраза ставится точно на speechAt
+    ...SCENES.map((scene, index) => {
+      const delay = Math.round(scene.speechAt * 1000);
+      return `[${4 + index}:a]aresample=48000,silenceremove=start_periods=1:start_threshold=-45dB,adelay=${delay}|${delay},apad=whole_dur=${total}[voice${index}]`;
+    }),
+    `[voice0][voice1][voice2]amix=inputs=3:normalize=0,atrim=0:${total},loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=out:st=${(total - 0.4).toFixed(2)}:d=0.4[aout]`,
+  ];
   run([
-    '-ss', demoFrom.toFixed(3), '-t', INTRO.toFixed(2), '-i', CLEAN,
-    '-ss', intro.from.toFixed(3), '-t', INTRO.toFixed(2), '-i', CLEAN,
-    '-ss', taglineFrom.toFixed(3), '-t', taglineLength.toFixed(3), '-i', CLEAN,
-    ...layer('frame.png'),
-    ...layer('cap1.png'),
-    ...layer('cap2.png'),
-    ...layer('end.png'),
-    '-filter_complex',
-    [
-      `[0:v]crop=${CROP.width}:1080:${CROP.x}:0,scale=${PANEL.width}:${PANEL.height},setsar=1,fps=30[demo]`,
-      `color=c=0x0b1020:s=1080x1920:r=30:d=${INTRO}[base]`,
-      `[base][demo]overlay=${PANEL.x}:${PANEL.y}[s1]`,
-      '[s1][3:v]overlay=0:0:shortest=1[s2]',
-      `[s2][4:v]overlay=0:${CAPTION_Y}:enable='between(t,0.25,3.7)'[s3]`,
-      `[s3][5:v]overlay=0:${CAPTION_Y}:enable='gte(t,3.7)',trim=duration=${INTRO},setpts=PTS-STARTPTS,fps=30[a]`,
-      `[6:v]format=rgba,trim=duration=${END},setpts=PTS-STARTPTS,fps=30[b]`,
-      `[a]format=yuv420p[a2];[b]format=yuv420p[b2]`,
-      `[a2][b2]xfade=transition=fade:duration=${STORY_FADE}:offset=${(INTRO - STORY_FADE).toFixed(2)},fade=t=in:st=0:d=0.25[v]`,
-      `[1:a]atrim=0:${INTRO - 0.1},apad=whole_dur=${total}[voice1]`,
-      `[2:a]adelay=${Math.round((taglineAt - SPEECH_PAD) * 1000)}|${Math.round((taglineAt - SPEECH_PAD) * 1000)},apad=whole_dur=${total}[voice2]`,
-      `[voice1][voice2]amix=inputs=2:normalize=0,atrim=0:${total},afade=t=out:st=${(total - 0.5).toFixed(2)}:d=0.5[aout]`,
-    ].join(';'),
+    '-ss', demoFrom.toFixed(3), '-t', product.length.toFixed(2), '-i', CLEAN,
+    ...still(product),
+    ...still(colosseum),
+    ...still(follow),
+    ...SCENES.flatMap((scene) => ['-i', join(STORY_VOICE, `${scene.id}.wav`)]),
+    '-filter_complex', filters.join(';'),
     '-map', '[v]', '-map', '[aout]',
     '-t', total.toFixed(2),
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '19', '-pix_fmt', 'yuv420p',

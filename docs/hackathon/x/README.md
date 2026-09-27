@@ -2,8 +2,6 @@
 
 Everything needed for the project's X page: profile images, profile texts, a pinned launch thread and a posting plan until the Crypto World's Fair deadline (Colosseum, Oct 12, 2026). Character counts follow X's rules (a link counts as 23, an emoji as 2); every post fits the 280 limit of a free account.
 
-> Before posting: the GitHub repository is private, so links to it open a 404 for others. Make it public (GitHub → Settings → General → Danger Zone → Change visibility) or remove the links. Colosseum accepts private repositories, but X readers can't see them.
-
 ## Files
 
 | File | Use |
@@ -11,7 +9,7 @@ Everything needed for the project's X page: profile images, profile texts, a pin
 | [`avatar.png`](avatar.png) | Profile photo, 400×400 (also works as the product logo in the Colosseum form) |
 | [`header.png`](header.png) | Header, 1500×500 |
 | `../video/crypto-bot-x-teaser.mp4` | ~30-second teaser with captions for the pinned post (git-ignored; build with `node make-social-cuts.mjs` in `../build`) |
-| `../video/crypto-bot-story-9x16.mp4` | 11-second vertical version for Instagram and Telegram Stories (same build step) |
+| `../video/crypto-bot-story-9x16.mp4` | 11-second vertical story for Instagram and Telegram: the product, the Colosseum hackathon and @cryptobot1414 (same build step) |
 | [`../slides/`](../slides) | Images for the posts (16:9) |
 | [`brand.html`](brand.html) | Source of the avatar and header; rebuild with `node render-x-assets.mjs` in `../build` |
 
@@ -20,10 +18,10 @@ Everything needed for the project's X page: profile images, profile texts, a pin
 | Field | Value |
 | --- | --- |
 | Name | `Crypto Bot · Proof-of-Trend` |
-| Handle (first one that is free) | `@ProofOfTrend`, `@CryptoBotSol`, `@TrendProofBot` |
+| Handle | [`@cryptobot1414`](https://x.com/cryptobot1414) |
 | Bio (157/160) | Trend-following autopilot for BTC, ETH & SOL on @solana. One decision a day, swaps via @JupiterExchange from your own wallet, every decision proven on-chain. |
 | Location | `On-chain · Solana` |
-| Website | `https://github.com/narekhovhannsyan1408/crypto-bot` (once the repository is public) |
+| Website | `https://github.com/narekhovhannsyan1408/crypto-bot` |
 
 ## Pinned launch thread
 
@@ -209,7 +207,7 @@ Thanks to everyone who followed along!
 
 ## In the Colosseum submission
 
-- **Project X / Twitter:** `https://x.com/<your handle>`
+- **Project X / Twitter:** `https://x.com/cryptobot1414`
 - **Logo:** `avatar.png`
 - Add the link to the pinned thread in the description, so judges see the demo and the progress posts.
 

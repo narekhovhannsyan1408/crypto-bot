@@ -22,7 +22,7 @@ export class BacktestEngineService {
 
   runBacktest(input: BacktestInput): BacktestReport {
     const portfolio = new PortfolioService();
-    const strategies = this.buildStrategies();
+    const strategies = input.strategies ?? this.buildStrategies();
     const arbitration = new StrategyArbitrationService();
     const riskManager = new RiskManagerService(portfolio);
     const trader = new PaperTraderService(portfolio);
@@ -263,7 +263,7 @@ export class BacktestEngineService {
     };
   }
 
-  private buildStrategies(): TradingStrategy[] {
+  buildStrategies(): TradingStrategy[] {
     const strategies: TradingStrategy[] = [
       new StrategyService(),
       new MeanReversionStrategyService(),

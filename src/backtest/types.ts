@@ -1,8 +1,11 @@
 import { Candle } from '../market/types';
+import { TradingStrategy } from '../strategy/types';
 import { ClosedTrade } from '../trader/types';
 
 export type BacktestInput = {
   candles: Candle[];
+  // Если не задано, используются стратегии из BOT_ENABLED_STRATEGIES
+  strategies?: TradingStrategy[];
 };
 
 export type BacktestEquityPoint = {

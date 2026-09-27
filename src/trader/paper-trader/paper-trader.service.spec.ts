@@ -57,6 +57,73 @@ describe('PaperTraderService', () => {
     expect(portfolio.realizedPnl).toBeCloseTo(-0.1999, 6);
   });
 
+  it('does not count capital locked in other open positions as drawdown on close', () => {
+    for (const symbol of ['ETHUSDT', 'SOLUSDT', 'BNBUSDT']) {
+      service.tryOpenLong(
+        symbol,
+        '1m',
+        'momentum_trend',
+        'Momentum Trend',
+        100,
+        1,
+        'hold',
+        100,
+      );
+    }
+    service.tryOpenLong(
+      'BTCUSDT',
+      '1m',
+      'mean_reversion',
+      'Mean Reversion',
+      100,
+      1,
+      'test',
+      100,
+    );
+
+    service.tryCloseLong('BTCUSDT', 'mean_reversion', 100, 2, 'flat close');
+
+    // Реальные потери — только комиссии (~0.8 USDT), а не 300 USDT в других позициях
+    expect(portfolio.maxDrawdownPct).toBeLessThan(0.1);
+  });
+
+  it('applies adverse slippage to entry and exit prices when configured', () => {
+    process.env.BOT_SLIPPAGE_PCT = '0.001';
+    resetBotConfigCache();
+    const slippagePortfolio = new PortfolioService();
+    const slippageTrader = new PaperTraderService(slippagePortfolio);
+    delete process.env.BOT_SLIPPAGE_PCT;
+    resetBotConfigCache();
+
+    const open = slippageTrader.tryOpenLong(
+      'BTCUSDT',
+      '1m',
+      'momentum_trend',
+      'Momentum Trend',
+      100,
+      1,
+      'test',
+      100,
+    );
+    const close = slippageTrader.tryCloseLong(
+      'BTCUSDT',
+      'momentum_trend',
+      100,
+      2,
+      'flat close',
+    );
+
+    expect(open.status === 'EXECUTED' && open.trade.price).toBeCloseTo(
+      100.1,
+      6,
+    );
+    expect(close?.status === 'EXECUTED' && close.trade.exitPrice).toBeCloseTo(
+      99.9,
+      6,
+    );
+    expect(slippagePortfolio.realizedPnl).toBeLessThan(-0.3);
+  });
+
   it('rejects spot-mode short positions in paper trading', () => {
     const open = service.tryOpenShort(
       'BTCUSDT',

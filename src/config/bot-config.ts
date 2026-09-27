@@ -90,6 +90,7 @@ export type BotConfig = {
   maxPositionSizePctOfEquity: number;
   riskPerTradePct: number;
   feePct: number;
+  slippagePct: number;
   stopLossPct: number;
   takeProfitPct: number;
   trailingStopPct: number;
@@ -173,6 +174,7 @@ export const getBotConfig = (): BotConfig => {
     ),
     riskPerTradePct: numberValue(process.env.BOT_RISK_PER_TRADE_PCT, 0.005),
     feePct: numberValue(process.env.BOT_FEE_PCT, 0.001),
+    slippagePct: numberValue(process.env.BOT_SLIPPAGE_PCT, 0),
     stopLossPct: numberValue(process.env.BOT_STOP_LOSS_PCT, 0.012),
     takeProfitPct: numberValue(process.env.BOT_TAKE_PROFIT_PCT, 0.02),
     trailingStopPct: numberValue(process.env.BOT_TRAILING_STOP_PCT, 0.008),

@@ -4,6 +4,7 @@ import { BotModule } from './bot/bot.module';
 import { BotConfig, getBotConfig } from './config/bot-config';
 import { LoggerModule } from './logger/logger.module';
 import { MarketModule } from './market/market.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { ScannerModule } from './scanner/scanner.module';
 import { StrategyModule } from './strategy/strategy.module';
 import { StreamingModule } from './streaming/streaming.module';
@@ -27,6 +28,7 @@ export class AppModule {
     return {
       module: AppModule,
       imports: [
+        ObservabilityModule,
         StreamingModule,
         LoggerModule,
         AllocatorModule,

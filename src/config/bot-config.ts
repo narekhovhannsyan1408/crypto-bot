@@ -96,9 +96,39 @@ export type AllocatorConfig = {
   dataRestBaseUrl: string;
 };
 
+export type LogLevelName =
+  | 'trace'
+  | 'debug'
+  | 'info'
+  | 'warn'
+  | 'error'
+  | 'fatal';
+
+export type LoggingConfig = {
+  dir: string;
+  level: LogLevelName;
+  maxFileMb: number;
+  retentionDays: number;
+  heartbeatMs: number;
+};
+
+const LOG_LEVELS: LogLevelName[] = [
+  'trace',
+  'debug',
+  'info',
+  'warn',
+  'error',
+  'fatal',
+];
+const logLevelValue = (value: string | undefined): LogLevelName => {
+  const normalized = value?.trim().toLowerCase() as LogLevelName | undefined;
+  return normalized && LOG_LEVELS.includes(normalized) ? normalized : 'debug';
+};
+
 export type BotConfig = {
   strategyMode: 'intraday' | 'trend_allocator';
   allocator: AllocatorConfig;
+  logging: LoggingConfig;
   symbol: string;
   interval: string;
   confirmationInterval: string | null;
@@ -176,15 +206,29 @@ export const getBotConfig = (): BotConfig => {
 
   cachedConfig = {
     strategyMode: strategyModeValue(process.env.BOT_STRATEGY_MODE),
+    logging: {
+      dir: stringValue(process.env.BOT_LOG_DIR, resolve(process.cwd(), 'logs')),
+      level: logLevelValue(process.env.BOT_LOG_LEVEL),
+      maxFileMb: numberValue(process.env.BOT_LOG_MAX_FILE_MB, 10),
+      retentionDays: numberValue(process.env.BOT_LOG_RETENTION_DAYS, 14),
+      heartbeatMs: numberValue(process.env.BOT_LOG_HEARTBEAT_MS, 5 * 60_000),
+    },
     allocator: {
-      assets: listValue(process.env.BOT_ALLOCATOR_ASSETS, 'BTCUSDT,ETHUSDT').map(
-        (asset) => asset.toUpperCase(),
-      ),
-      smaPeriods: listValue(process.env.BOT_ALLOCATOR_SMA_PERIODS, '20,50,100,200')
+      assets: listValue(
+        process.env.BOT_ALLOCATOR_ASSETS,
+        'BTCUSDT,ETHUSDT',
+      ).map((asset) => asset.toUpperCase()),
+      smaPeriods: listValue(
+        process.env.BOT_ALLOCATOR_SMA_PERIODS,
+        '20,50,100,200',
+      )
         .map(Number)
         .filter((period) => Number.isInteger(period) && period > 1),
       volTarget: numberValue(process.env.BOT_ALLOCATOR_VOL_TARGET, 0),
-      volLookbackDays: numberValue(process.env.BOT_ALLOCATOR_VOL_LOOKBACK_DAYS, 30),
+      volLookbackDays: numberValue(
+        process.env.BOT_ALLOCATOR_VOL_LOOKBACK_DAYS,
+        30,
+      ),
       rebalanceThresholdPct: numberValue(
         process.env.BOT_ALLOCATOR_REBALANCE_THRESHOLD_PCT,
         0.1,
@@ -198,7 +242,10 @@ export const getBotConfig = (): BotConfig => {
         process.env.BOT_ALLOCATOR_STATE_FILE,
         resolve(process.cwd(), '.allocator-state.json'),
       ),
-      checkIntervalMs: numberValue(process.env.BOT_ALLOCATOR_CHECK_INTERVAL_MS, 5 * 60_000),
+      checkIntervalMs: numberValue(
+        process.env.BOT_ALLOCATOR_CHECK_INTERVAL_MS,
+        5 * 60_000,
+      ),
       dataRestBaseUrl: stringValue(
         process.env.BOT_ALLOCATOR_DATA_URL,
         'https://api.binance.com',
@@ -219,9 +266,15 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_MAX_CANDLES_WITHOUT_POSITION_BEFORE_SWITCH,
       8,
     ),
-    maxScannerCandidates: numberValue(process.env.BOT_SCANNER_SHORTLIST_SIZE, 8),
+    maxScannerCandidates: numberValue(
+      process.env.BOT_SCANNER_SHORTLIST_SIZE,
+      8,
+    ),
     universeSize: numberValue(process.env.BOT_UNIVERSE_SIZE, 5),
-    minPositionSizeUsdt: numberValue(process.env.BOT_MIN_POSITION_SIZE_USDT, 25),
+    minPositionSizeUsdt: numberValue(
+      process.env.BOT_MIN_POSITION_SIZE_USDT,
+      25,
+    ),
     initialBalance: numberValue(process.env.BOT_INITIAL_BALANCE, 1_000),
     maxPositionSizeUsdt: numberValue(process.env.BOT_POSITION_SIZE_USDT, 0),
     maxPositionSizePctOfEquity: numberValue(
@@ -267,14 +320,26 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_MIN_QUOTE_VOLUME,
       1_000_000,
     ),
-    scannerShortlistSize: numberValue(process.env.BOT_SCANNER_SHORTLIST_SIZE, 8),
-    scannerKlineLookback: numberValue(process.env.BOT_SCANNER_KLINE_LOOKBACK, 30),
-    maxConcurrentPositions: numberValue(process.env.BOT_MAX_CONCURRENT_POSITIONS, 3),
+    scannerShortlistSize: numberValue(
+      process.env.BOT_SCANNER_SHORTLIST_SIZE,
+      8,
+    ),
+    scannerKlineLookback: numberValue(
+      process.env.BOT_SCANNER_KLINE_LOOKBACK,
+      30,
+    ),
+    maxConcurrentPositions: numberValue(
+      process.env.BOT_MAX_CONCURRENT_POSITIONS,
+      3,
+    ),
     maxPortfolioExposurePct: numberValue(
       process.env.BOT_MAX_PORTFOLIO_EXPOSURE_PCT,
       0.8,
     ),
-    maxDrawdownStopPct: numberValue(process.env.BOT_MAX_DRAWDOWN_STOP_PCT, 0.15),
+    maxDrawdownStopPct: numberValue(
+      process.env.BOT_MAX_DRAWDOWN_STOP_PCT,
+      0.15,
+    ),
     maxDailyLossPct: numberValue(process.env.BOT_MAX_DAILY_LOSS_PCT, 0.04),
     maxConsecutiveLosses: numberValue(
       process.env.BOT_MAX_CONSECUTIVE_LOSSES,
@@ -284,19 +349,25 @@ export const getBotConfig = (): BotConfig => {
       process.env.BOT_CONSECUTIVE_LOSSES_COOLDOWN_MINUTES,
       30,
     ),
-    maxPositionsPerSymbol: numberValue(process.env.BOT_MAX_POSITIONS_PER_SYMBOL, 2),
+    maxPositionsPerSymbol: numberValue(
+      process.env.BOT_MAX_POSITIONS_PER_SYMBOL,
+      2,
+    ),
     maxPositionsPerStrategy: numberValue(
       process.env.BOT_MAX_POSITIONS_PER_STRATEGY,
       3,
     ),
     allowOppositePositionsSameSymbol:
       process.env.BOT_ALLOW_OPPOSITE_POSITIONS_SAME_SYMBOL === 'true',
-    enabledStrategies: (process.env.BOT_ENABLED_STRATEGIES ||
-      'momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher')
+    enabledStrategies: (
+      process.env.BOT_ENABLED_STRATEGIES ||
+      'momentum_trend,mean_reversion,breakout_volatility,trend_pullback,range_scalping,volume_spike_reversal,market_regime_switcher'
+    )
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),
-    dynamicTimeframeEnabled: process.env.BOT_DYNAMIC_TIMEFRAME_ENABLED === 'true',
+    dynamicTimeframeEnabled:
+      process.env.BOT_DYNAMIC_TIMEFRAME_ENABLED === 'true',
     dynamicTimeframeCandidates: (
       process.env.BOT_DYNAMIC_TIMEFRAME_CANDIDATES || '5m,15m,30m'
     )
@@ -321,7 +392,10 @@ export const getBotConfig = (): BotConfig => {
     binanceApiKey: stringValue(process.env.BINANCE_API_KEY, ''),
     binanceApiSecret: stringValue(process.env.BINANCE_API_SECRET, ''),
     binanceTestnetApiKey: stringValue(process.env.BINANCE_TESTNET_API_KEY, ''),
-    binanceTestnetApiSecret: stringValue(process.env.BINANCE_TESTNET_API_SECRET, ''),
+    binanceTestnetApiSecret: stringValue(
+      process.env.BINANCE_TESTNET_API_SECRET,
+      '',
+    ),
     binanceFuturesDemoApiKey: stringValue(
       process.env.BINANCE_FUTURES_DEMO_API_KEY,
       '',

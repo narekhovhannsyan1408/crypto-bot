@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  InternalAxiosRequestConfig,
+} from 'axios';
+import { AppLogger } from '../../observability/app-logger';
 import { getBotConfig } from '../../config/bot-config';
 
 type RawKline = [number, string, string, string, string, string, number];
@@ -11,6 +16,8 @@ export type DailyClose = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+type TimedConfig = InternalAxiosRequestConfig & { startedAt?: number };
 // Без таймаута зависший запрос навсегда блокирует цикл бота
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -24,6 +31,54 @@ export class AllocatorMarketDataService {
     baseURL: getBotConfig().allocator.dataRestBaseUrl,
     timeout: REQUEST_TIMEOUT_MS,
   });
+
+  constructor(private readonly journal: AppLogger) {
+    // Каждый запрос к Binance: длительность, а при сбое — адрес, код и ответ
+    this.http.interceptors.request.use((config: TimedConfig) => {
+      config.startedAt = performance.now();
+      return config;
+    });
+    this.http.interceptors.response.use(
+      (response) => {
+        const config = response.config as TimedConfig;
+        this.journal.log(
+          'trace',
+          'binance.http',
+          `${config.url} → ${response.status}`,
+          {
+            durationMs:
+              performance.now() - (config.startedAt ?? performance.now()),
+            data: {
+              url: config.url,
+              params: config.params as unknown,
+              status: response.status,
+            },
+          },
+        );
+        return response;
+      },
+      (error: AxiosError) => {
+        const config = (error.config ?? {}) as TimedConfig;
+        this.journal.log(
+          'warn',
+          'binance.http.failed',
+          `Запрос к Binance не удался: ${config.url}`,
+          {
+            durationMs: config.startedAt
+              ? performance.now() - config.startedAt
+              : undefined,
+            data: {
+              url: config.url,
+              params: config.params as unknown,
+              timeoutMs: REQUEST_TIMEOUT_MS,
+            },
+            err: error,
+          },
+        );
+        return Promise.reject(error);
+      },
+    );
+  }
 
   async getClosedDailyCloses(symbol: string, days: number, now = Date.now()) {
     const response = await this.http.get<RawKline[]>('/api/v3/klines', {

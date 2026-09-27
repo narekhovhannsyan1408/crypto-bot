@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
+import { AppLogger } from '../../observability/app-logger';
 import { ExecutionMode } from '../../trader/execution.types';
 import { AllocatorMarketDataService } from '../market-data/allocator-market-data.service';
 import { AllocatorBroker } from './allocator-broker';
@@ -17,7 +18,10 @@ export class BrokerFactory {
   private readonly config = getBotConfig();
   private readonly brokers = new Map<ExecutionMode, AllocatorBroker>();
 
-  constructor(private readonly marketData: AllocatorMarketDataService) {}
+  constructor(
+    private readonly marketData: AllocatorMarketDataService,
+    private readonly journal: AppLogger,
+  ) {}
 
   get(mode: ExecutionMode): AllocatorBroker {
     const existing = this.brokers.get(mode);
@@ -31,8 +35,9 @@ export class BrokerFactory {
             this.marketData,
             this.config.feePct,
             this.config.slippagePct || PAPER_DEFAULT_SLIPPAGE_PCT,
+            this.journal,
           )
-        : new BinanceSpotAllocatorBroker(mode, this.config);
+        : new BinanceSpotAllocatorBroker(mode, this.config, this.journal);
     this.brokers.set(mode, broker);
     return broker;
   }

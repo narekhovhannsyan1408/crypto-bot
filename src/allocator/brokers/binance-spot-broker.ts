@@ -1,5 +1,6 @@
 import * as ccxt from 'ccxt';
 import { BotConfig } from '../../config/bot-config';
+import { AppLogger } from '../../observability/app-logger';
 import {
   AllocatorBroker,
   AllocatorFill,
@@ -16,6 +17,7 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
   constructor(
     readonly mode: 'live_testnet' | 'live_real',
     private readonly config: BotConfig,
+    private readonly journal?: AppLogger,
   ) {}
 
   async getPrice(symbol: string) {
@@ -58,22 +60,33 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
       string,
       number | undefined
     >;
-    return Object.fromEntries(
+    const balances = Object.fromEntries(
       [...assets.map(baseAssetOf), 'USDT'].map((asset) => [
         asset,
         Number(free[asset] ?? 0),
       ]),
     );
+    this.journal?.debug(
+      'broker.binance.balance',
+      'Свободные остатки на Binance',
+      {
+        mode: this.mode,
+        balances,
+      },
+    );
+    return balances;
   }
 
   async buy(symbol: string, quoteAmount: number): Promise<AllocatorFill> {
     const client = await this.getClient();
     const cost = Math.floor(quoteAmount * 100) / 100;
-    const order = await client.createMarketBuyOrderWithCost(
-      this.toMarket(symbol),
-      cost,
+    const order = await this.tracedOrder(
+      'BUY',
+      symbol,
+      { quoteAmount, cost },
+      () => client.createMarketBuyOrderWithCost(this.toMarket(symbol), cost),
     );
-    return this.toFill(symbol, 'BUY', await this.ensureFilled(order, symbol));
+    return this.toFill(symbol, 'BUY', order);
   }
 
   async sell(symbol: string, quantity: number): Promise<AllocatorFill> {
@@ -85,8 +98,62 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
         `Количество ${quantity} ${symbol} меньше шага лота Binance`,
       );
     }
-    const order = await client.createOrder(market, 'market', 'sell', amount);
-    return this.toFill(symbol, 'SELL', await this.ensureFilled(order, symbol));
+    const order = await this.tracedOrder(
+      'SELL',
+      symbol,
+      { quantity, amount },
+      () => client.createOrder(market, 'market', 'sell', amount),
+    );
+    return this.toFill(symbol, 'SELL', order);
+  }
+
+  /** Ордер с записью в журнал: что отправили, что ответила биржа или какая ошибка. */
+  private async tracedOrder(
+    side: 'BUY' | 'SELL',
+    symbol: string,
+    request: Record<string, unknown>,
+    send: () => Promise<ccxt.Order>,
+  ) {
+    const startedAt = performance.now();
+    const context = { mode: this.mode, symbol, side, ...request };
+    this.journal?.info(
+      'broker.binance.order_request',
+      `Отправка ордера ${side} ${symbol}`,
+      context,
+    );
+    try {
+      const order = await this.ensureFilled(await send(), symbol);
+      this.journal?.log(
+        'info',
+        'broker.binance.order_response',
+        `Ответ Binance: ${side} ${symbol}`,
+        {
+          durationMs: performance.now() - startedAt,
+          data: {
+            ...context,
+            id: order.id,
+            status: order.status,
+            filled: order.filled,
+            cost: order.cost,
+            average: order.average,
+            fees: order.fees,
+          },
+        },
+      );
+      return order;
+    } catch (error) {
+      this.journal?.log(
+        'error',
+        'broker.binance.order_failed',
+        `Binance отклонил ордер ${side} ${symbol}`,
+        {
+          durationMs: performance.now() - startedAt,
+          data: context,
+          err: error,
+        },
+      );
+      throw error;
+    }
   }
 
   private async ensureFilled(order: ccxt.Order, symbol: string) {
@@ -151,6 +218,14 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     // Одно подключение на брокера: загрузка рынков дорогая, параллельные вызовы ждут её
     this.clientPromise ??= this.createClient().catch((error: unknown) => {
       this.clientPromise = null;
+      this.journal?.error(
+        'broker.binance.connect_failed',
+        'Не удалось подключиться к Binance',
+        error,
+        {
+          mode: this.mode,
+        },
+      );
       throw error;
     });
     return this.clientPromise;
@@ -186,7 +261,20 @@ export class BinanceSpotAllocatorBroker implements AllocatorBroker {
     if (this.mode === 'live_testnet') {
       client.enableDemoTrading(true);
     }
+    const startedAt = performance.now();
     await client.loadMarkets();
+    this.journal?.log(
+      'info',
+      'broker.binance.connected',
+      'Подключение к Binance установлено',
+      {
+        durationMs: performance.now() - startedAt,
+        data: {
+          mode: this.mode,
+          markets: Object.keys(client.markets ?? {}).length,
+        },
+      },
+    );
     return client;
   }
 }

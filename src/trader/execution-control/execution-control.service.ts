@@ -47,7 +47,9 @@ export class ExecutionControlService {
       marketType: partial.marketType ?? this.marketType,
       label: partial.label ?? this.getModeLabel(this.mode, this.marketType),
       canTradeShort:
-        partial.canTradeShort ?? this.lastStatus.canTradeShort ?? this.marketType !== 'spot',
+        partial.canTradeShort ??
+        this.lastStatus.canTradeShort ??
+        this.marketType !== 'spot',
       longMarketType:
         partial.longMarketType ??
         this.lastStatus.longMarketType ??
@@ -140,7 +142,9 @@ export class ExecutionControlService {
     }
 
     if (marketType === 'hybrid') {
-      nextWarnings.push('Hybrid routing: long открывается на Spot, short открывается на Futures');
+      nextWarnings.push(
+        'Hybrid routing: long открывается на Spot, short открывается на Futures',
+      );
     }
 
     return [...new Set(nextWarnings)];

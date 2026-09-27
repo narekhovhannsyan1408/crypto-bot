@@ -21,5 +21,8 @@ export type TradingStrategy = {
   seedHistory(symbol: string, interval: string, candles: Candle[]): void;
   resetSymbol(symbol: string, interval: string): void;
   registerTradeClosed(symbol: string, interval: string): void;
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult;
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult;
 };

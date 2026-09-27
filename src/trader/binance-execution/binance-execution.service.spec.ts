@@ -61,7 +61,9 @@ describe('BinanceExecutionService', () => {
     expect(status.warnings).toContain(
       'Spot Demo private user-data stream недоступен у Binance. Используем REST fallback для spot account sync.',
     );
-    expect((status.warnings ?? []).join(' | ')).not.toContain('Private user-data stream Binance не подтверждён');
+    expect((status.warnings ?? []).join(' | ')).not.toContain(
+      'Private user-data stream Binance не подтверждён',
+    );
   });
 
   it('falls back to shared spot demo key for futures demo when dedicated futures key is missing', async () => {
@@ -74,7 +76,10 @@ describe('BinanceExecutionService', () => {
       }),
     });
 
-    const status = await service.refreshAccountStatus('live_testnet', 'futures');
+    const status = await service.refreshAccountStatus(
+      'live_testnet',
+      'futures',
+    );
 
     expect(status.accountConnectivity).toBe('ok');
     expect(status.quoteFree).toBe(150);

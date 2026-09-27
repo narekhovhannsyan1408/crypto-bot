@@ -59,7 +59,9 @@ export class PortfolioService {
   }
 
   getPositionsForSymbol(symbol: string) {
-    return this.getOpenPositions().filter((position) => position.symbol === symbol);
+    return this.getOpenPositions().filter(
+      (position) => position.symbol === symbol,
+    );
   }
 
   getPositionsForStrategy(strategyId: string) {
@@ -81,7 +83,10 @@ export class PortfolioService {
     this.positions.delete(makePositionKey(symbol, strategyId));
   }
 
-  syncExternalUsdtWallet(quoteFree?: number | null, quoteTotal?: number | null) {
+  syncExternalUsdtWallet(
+    quoteFree?: number | null,
+    quoteTotal?: number | null,
+  ) {
     const hasOpenPositions = this.getOpenPositionsCount() > 0;
     const nextBalance = hasOpenPositions
       ? typeof quoteFree === 'number'
@@ -131,7 +136,11 @@ export class PortfolioService {
       return positions.reduce((sum, position) => {
         return (
           sum +
-          (this.getPositionLiquidationValue(symbol, position.strategyId, markPrice) -
+          (this.getPositionLiquidationValue(
+            symbol,
+            position.strategyId,
+            markPrice,
+          ) -
             position.investedUsdt)
         );
       }, 0);
@@ -155,7 +164,11 @@ export class PortfolioService {
     }, 0);
   }
 
-  getPositionUnrealizedPnl(symbol: string, strategyId: string, currentPrice?: number) {
+  getPositionUnrealizedPnl(
+    symbol: string,
+    strategyId: string,
+    currentPrice?: number,
+  ) {
     const position = this.getPosition(symbol, strategyId);
     if (!position) {
       return 0;
@@ -300,9 +313,13 @@ export class PortfolioService {
   }
 
   private getExposureByStrategy() {
-    return this.getOpenPositions().reduce<Record<string, number>>((acc, position) => {
-      acc[position.strategyId] = (acc[position.strategyId] ?? 0) + position.investedUsdt;
-      return acc;
-    }, {});
+    return this.getOpenPositions().reduce<Record<string, number>>(
+      (acc, position) => {
+        acc[position.strategyId] =
+          (acc[position.strategyId] ?? 0) + position.investedUsdt;
+        return acc;
+      },
+      {},
+    );
   }
 }

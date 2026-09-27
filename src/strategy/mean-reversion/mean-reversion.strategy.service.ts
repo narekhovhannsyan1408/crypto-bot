@@ -19,7 +19,11 @@ export class MeanReversionStrategyService implements TradingStrategy {
   private readonly states = new Map<string, StrategyState>();
 
   getRequiredWarmupCandles() {
-    return Math.max(this.config.emaSlowPeriod + 5, this.config.rsiPeriod + 5, 25);
+    return Math.max(
+      this.config.emaSlowPeriod + 5,
+      this.config.rsiPeriod + 5,
+      25,
+    );
   }
 
   getConfirmationPolicy() {
@@ -45,7 +49,10 @@ export class MeanReversionStrategyService implements TradingStrategy {
     state.lastExitBarIndex = state.barsSeen;
   }
 
-  onNewCandle(candle: Candle, positionSide: PositionSide | null): StrategyResult {
+  onNewCandle(
+    candle: Candle,
+    positionSide: PositionSide | null,
+  ): StrategyResult {
     if (!candle.isClosed) {
       return { signal: 'HOLD', reason: 'Свеча ещё не закрыта' };
     }
@@ -69,7 +76,10 @@ export class MeanReversionStrategyService implements TradingStrategy {
     );
 
     if (!core) {
-      return { signal: 'HOLD', reason: 'Индикаторы mean reversion ещё не готовы' };
+      return {
+        signal: 'HOLD',
+        reason: 'Индикаторы mean reversion ещё не готовы',
+      };
     }
 
     const { emaSlow, emaFast, rsi, atr, atrPct, trendStrengthPct } = core;
@@ -94,7 +104,8 @@ export class MeanReversionStrategyService implements TradingStrategy {
     if (atrPct < this.config.minAtrPct || atrPct > this.config.maxAtrPct) {
       return {
         signal: 'HOLD',
-        reason: 'Mean reversion пропускает рынок из-за неподходящей волатильности',
+        reason:
+          'Mean reversion пропускает рынок из-за неподходящей волатильности',
         indicators,
       };
     }
@@ -107,7 +118,8 @@ export class MeanReversionStrategyService implements TradingStrategy {
       if (oversoldLong) {
         return {
           signal: 'OPEN_LONG',
-          reason: 'Mean reversion long: цена сильно ниже среднего и RSI перепродан',
+          reason:
+            'Mean reversion long: цена сильно ниже среднего и RSI перепродан',
           indicators,
           entryScore:
             Math.abs(deviationPct) * 10000 +
@@ -120,7 +132,8 @@ export class MeanReversionStrategyService implements TradingStrategy {
       if (overboughtShort) {
         return {
           signal: 'OPEN_SHORT',
-          reason: 'Mean reversion short: цена сильно выше среднего и RSI перекуплен',
+          reason:
+            'Mean reversion short: цена сильно выше среднего и RSI перекуплен',
           indicators,
           entryScore:
             Math.abs(deviationPct) * 10000 +
@@ -141,7 +154,8 @@ export class MeanReversionStrategyService implements TradingStrategy {
       if (overboughtShort) {
         return {
           signal: 'REVERSE_TO_SHORT',
-          reason: 'Mean reversion: long экстремум исчерпан и сформирован short-экстремум',
+          reason:
+            'Mean reversion: long экстремум исчерпан и сформирован short-экстремум',
           indicators,
         };
       }
@@ -164,7 +178,8 @@ export class MeanReversionStrategyService implements TradingStrategy {
     if (oversoldLong) {
       return {
         signal: 'REVERSE_TO_LONG',
-        reason: 'Mean reversion: short экстремум исчерпан и сформирован long-экстремум',
+        reason:
+          'Mean reversion: short экстремум исчерпан и сформирован long-экстремум',
         indicators,
       };
     }
@@ -206,7 +221,9 @@ export class MeanReversionStrategyService implements TradingStrategy {
       return false;
     }
 
-    return state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles;
+    return (
+      state.barsSeen - state.lastExitBarIndex <= this.config.cooldownCandles
+    );
   }
 
   private makeKey(symbol: string, interval: string) {

@@ -25,7 +25,9 @@ export const getBreakevenStopPrice = (
   if (position.side === 'LONG') {
     const denominator = position.quantity * (1 - feePct);
     const rawBreakeven =
-      denominator > 0 ? position.investedUsdt / denominator : position.entryPrice;
+      denominator > 0
+        ? position.investedUsdt / denominator
+        : position.entryPrice;
 
     return rawBreakeven * (1 + Math.max(breakevenOffsetPct, 0));
   }
@@ -45,7 +47,11 @@ export const armBreakeven = (
   feePct: number,
   breakevenOffsetPct: number,
 ) => {
-  const breakevenStop = getBreakevenStopPrice(position, feePct, breakevenOffsetPct);
+  const breakevenStop = getBreakevenStopPrice(
+    position,
+    feePct,
+    breakevenOffsetPct,
+  );
   position.breakevenArmed = true;
 
   if (position.side === 'LONG') {

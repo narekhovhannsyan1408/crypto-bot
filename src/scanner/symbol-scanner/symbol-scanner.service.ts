@@ -27,12 +27,10 @@ export type ScannedSymbol = {
 @Injectable()
 export class SymbolScannerService {
   private readonly config = getBotConfig();
-  private tradableSymbolsCache:
-    | {
-        expiresAt: number;
-        symbols: Set<string>;
-      }
-    | null = null;
+  private tradableSymbolsCache: {
+    expiresAt: number;
+    symbols: Set<string>;
+  } | null = null;
 
   async scanBestSymbol(): Promise<ScannedSymbol | null> {
     const candidates = await this.scanTopSymbols(1);
@@ -61,7 +59,10 @@ export class SymbolScannerService {
   private async loadTradableSymbols() {
     const now = Date.now();
 
-    if (this.tradableSymbolsCache && this.tradableSymbolsCache.expiresAt > now) {
+    if (
+      this.tradableSymbolsCache &&
+      this.tradableSymbolsCache.expiresAt > now
+    ) {
       return this.tradableSymbolsCache.symbols;
     }
 
@@ -124,7 +125,9 @@ export class SymbolScannerService {
     };
   }
 
-  private async enrichCandidate(candidate: ScannedSymbol): Promise<ScannedSymbol> {
+  private async enrichCandidate(
+    candidate: ScannedSymbol,
+  ): Promise<ScannedSymbol> {
     try {
       const klinesRes = await axios.get(
         `${this.config.binanceRestBaseUrl}/api/v3/klines`,
@@ -150,7 +153,8 @@ export class SymbolScannerService {
 
       const firstClose = closes[0];
       const lastClose = closes.at(-1) ?? firstClose;
-      const recentMovePct = firstClose > 0 ? (lastClose - firstClose) / firstClose : 0;
+      const recentMovePct =
+        firstClose > 0 ? (lastClose - firstClose) / firstClose : 0;
 
       const returns = closes.slice(1).map((close, index) => {
         const prev = closes[index];
@@ -158,7 +162,8 @@ export class SymbolScannerService {
       });
 
       const meanReturn =
-        returns.reduce((sum, value) => sum + value, 0) / Math.max(returns.length, 1);
+        returns.reduce((sum, value) => sum + value, 0) /
+        Math.max(returns.length, 1);
       const variance =
         returns.reduce((sum, value) => sum + (value - meanReturn) ** 2, 0) /
         Math.max(returns.length, 1);

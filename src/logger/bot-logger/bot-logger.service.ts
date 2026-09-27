@@ -188,7 +188,7 @@ export class BotLoggerService {
         return [`${indent}(пусто)`];
       }
 
-      return value.flatMap((item, index) => {
+      return value.flatMap((item) => {
         const itemLines = this.formatValue(item, indentLevel + 1);
         if (itemLines.length === 0) {
           return [`${indent}-`];

@@ -34,7 +34,9 @@ export class StrategyRegistryService {
     ];
     const enabled = new Set(this.config.enabledStrategies);
 
-    this.strategies = allStrategies.filter((strategy) => enabled.has(strategy.id));
+    this.strategies = allStrategies.filter((strategy) =>
+      enabled.has(strategy.id),
+    );
   }
 
   getStrategies() {
@@ -42,6 +44,8 @@ export class StrategyRegistryService {
   }
 
   getStrategyById(strategyId: string) {
-    return this.strategies.find((strategy) => strategy.id === strategyId) ?? null;
+    return (
+      this.strategies.find((strategy) => strategy.id === strategyId) ?? null
+    );
   }
 }

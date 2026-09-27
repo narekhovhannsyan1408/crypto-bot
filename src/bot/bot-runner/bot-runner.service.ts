@@ -43,31 +43,27 @@ export class BotRunnerService implements OnModuleDestroy {
       ? this.config.confirmationInterval
       : null;
   private lastScanTop: ScannedSymbol[] = [];
-  private lastStrategySelection:
-    | {
-        timestamp: number;
-        symbol: string;
-        selectedStrategyId: string | null;
-        selectedStrategyName: string | null;
-        selectedSide: 'LONG' | 'SHORT' | null;
-        selectedScore: number | null;
-        reason: string;
-        candidates: StrategyCandidateDecision[];
-      }
-    | null = null;
+  private lastStrategySelection: {
+    timestamp: number;
+    symbol: string;
+    selectedStrategyId: string | null;
+    selectedStrategyName: string | null;
+    selectedSide: 'LONG' | 'SHORT' | null;
+    selectedScore: number | null;
+    reason: string;
+    candidates: StrategyCandidateDecision[];
+  } | null = null;
   private scannerInterval?: NodeJS.Timeout;
   private scannerInProgress = false;
   private marketStarted = false;
-  private lastAdaptiveTimeframeSelection:
-    | {
-        selectedAt: number;
-        executionInterval: string;
-        confirmationInterval: string | null;
-        sampleSymbols: string[];
-        assessments: AdaptiveIntervalAssessment[];
-        reason: string;
-      }
-    | null = null;
+  private lastAdaptiveTimeframeSelection: {
+    selectedAt: number;
+    executionInterval: string;
+    confirmationInterval: string | null;
+    sampleSymbols: string[];
+    assessments: AdaptiveIntervalAssessment[];
+    reason: string;
+  } | null = null;
 
   constructor(
     private readonly market: BinanceMarketService,
@@ -114,7 +110,10 @@ export class BotRunnerService implements OnModuleDestroy {
         return top.map((item) => item.symbol);
       }
     } catch (error) {
-      this.logger.logError('Не удалось выбрать стартовый universe сканером', error);
+      this.logger.logError(
+        'Не удалось выбрать стартовый universe сканером',
+        error,
+      );
     }
 
     return this.getManualUniverse();
@@ -140,14 +139,18 @@ export class BotRunnerService implements OnModuleDestroy {
 
   private async runScannerIteration() {
     if (this.scannerInProgress) {
-      this.logger.logInfo('Пропускаем цикл сканера: предыдущий ещё выполняется');
+      this.logger.logInfo(
+        'Пропускаем цикл сканера: предыдущий ещё выполняется',
+      );
       return;
     }
 
     this.scannerInProgress = true;
 
     try {
-      const top = await this.scanner.scanTopSymbols(this.config.maxScannerCandidates);
+      const top = await this.scanner.scanTopSymbols(
+        this.config.maxScannerCandidates,
+      );
       this.lastScanTop = top;
 
       this.logger.logInfo(
@@ -170,7 +173,10 @@ export class BotRunnerService implements OnModuleDestroy {
       this.portfolio.getOpenPositions().map((position) => position.symbol),
     );
     const desired = new Set<string>(protectedSymbols);
-    const targetSize = Math.max(this.config.universeSize, protectedSymbols.size);
+    const targetSize = Math.max(
+      this.config.universeSize,
+      protectedSymbols.size,
+    );
 
     // Keep non-idle watched symbols for a while to avoid unnecessary churn.
     for (const symbol of this.watchedSymbols) {
@@ -218,7 +224,10 @@ export class BotRunnerService implements OnModuleDestroy {
       return;
     }
 
-    const decision = await this.selectAdaptiveTimeframe(targetUniverse, topCandidates);
+    const decision = await this.selectAdaptiveTimeframe(
+      targetUniverse,
+      topCandidates,
+    );
     if (!decision) {
       return;
     }
@@ -257,7 +266,9 @@ export class BotRunnerService implements OnModuleDestroy {
         efficiency: Number(assessment.efficiency.toFixed(3)),
         trendQuality: Number(assessment.trendQuality.toFixed(3)),
         atrPct: Number((assessment.atrPct * 100).toFixed(3)),
-        volumeAccelerationPct: Number((assessment.volumeAcceleration * 100).toFixed(2)),
+        volumeAccelerationPct: Number(
+          (assessment.volumeAcceleration * 100).toFixed(2),
+        ),
         sampleSize: assessment.sampleSize,
       })),
     });
@@ -317,16 +328,29 @@ export class BotRunnerService implements OnModuleDestroy {
     for (const interval of candidateIntervals) {
       const intervalMetrics = (
         await Promise.all(
-          sampleSymbols.map((symbol) => this.buildAdaptiveIntervalMetrics(symbol, interval)),
+          sampleSymbols.map((symbol) =>
+            this.buildAdaptiveIntervalMetrics(symbol, interval),
+          ),
         )
-      ).filter((value): value is Omit<AdaptiveIntervalAssessment, 'interval' | 'score' | 'sampleSize'> => value !== null);
+      ).filter(
+        (
+          value,
+        ): value is Omit<
+          AdaptiveIntervalAssessment,
+          'interval' | 'score' | 'sampleSize'
+        > => value !== null,
+      );
 
       if (intervalMetrics.length === 0) {
         continue;
       }
 
-      const efficiency = this.median(intervalMetrics.map((item) => item.efficiency));
-      const trendQuality = this.median(intervalMetrics.map((item) => item.trendQuality));
+      const efficiency = this.median(
+        intervalMetrics.map((item) => item.efficiency),
+      );
+      const trendQuality = this.median(
+        intervalMetrics.map((item) => item.trendQuality),
+      );
       const atrPct = this.median(intervalMetrics.map((item) => item.atrPct));
       const volumeAcceleration = this.median(
         intervalMetrics.map((item) => item.volumeAcceleration),
@@ -353,11 +377,14 @@ export class BotRunnerService implements OnModuleDestroy {
     }
 
     const selectedAssessment =
-      assessments.find((assessment, index) =>
-        assessment.score >= this.getAdaptiveThresholdForIndex(index),
+      assessments.find(
+        (assessment, index) =>
+          assessment.score >= this.getAdaptiveThresholdForIndex(index),
       ) ?? assessments.at(-1)!;
 
-    const selectedIndex = candidateIntervals.indexOf(selectedAssessment.interval);
+    const selectedIndex = candidateIntervals.indexOf(
+      selectedAssessment.interval,
+    );
     const confirmationInterval =
       selectedIndex >= 0 && selectedIndex < candidateIntervals.length - 1
         ? candidateIntervals[selectedIndex + 1]
@@ -368,7 +395,9 @@ export class BotRunnerService implements OnModuleDestroy {
     return {
       executionInterval: selectedAssessment.interval,
       confirmationInterval:
-        confirmationInterval === selectedAssessment.interval ? null : confirmationInterval,
+        confirmationInterval === selectedAssessment.interval
+          ? null
+          : confirmationInterval,
       sampleSymbols,
       assessments,
       reason:
@@ -380,7 +409,11 @@ export class BotRunnerService implements OnModuleDestroy {
 
   private async buildAdaptiveIntervalMetrics(symbol: string, interval: string) {
     try {
-      const candles = await this.market.loadHistoricalCandles(symbol, interval, 48);
+      const candles = await this.market.loadHistoricalCandles(
+        symbol,
+        interval,
+        48,
+      );
       if (candles.length < 20) {
         return null;
       }
@@ -389,7 +422,8 @@ export class BotRunnerService implements OnModuleDestroy {
       const volumes = candles.map((candle) => candle.volume);
       const firstClose = closes[0];
       const lastClose = closes.at(-1) ?? firstClose;
-      const netMovePct = firstClose > 0 ? Math.abs(lastClose - firstClose) / firstClose : 0;
+      const netMovePct =
+        firstClose > 0 ? Math.abs(lastClose - firstClose) / firstClose : 0;
       const pathLengthPct = closes.slice(1).reduce((sum, close, index) => {
         const prev = closes[index];
         return sum + (prev > 0 ? Math.abs(close - prev) / prev : 0);
@@ -397,7 +431,11 @@ export class BotRunnerService implements OnModuleDestroy {
       const efficiency =
         pathLengthPct > 0 ? this.clamp(netMovePct / pathLengthPct, 0, 1) : 0;
       const atrPct = this.calculateAtrPct(candles);
-      const trendQuality = this.clamp(netMovePct / Math.max(atrPct * 3, 0.0001), 0, 1);
+      const trendQuality = this.clamp(
+        netMovePct / Math.max(atrPct * 3, 0.0001),
+        0,
+        1,
+      );
       const recentVolume = this.average(volumes.slice(-5));
       const baselineVolume = this.average(volumes.slice(-15, -5));
       const volumeAcceleration =
@@ -417,19 +455,25 @@ export class BotRunnerService implements OnModuleDestroy {
   private async syncUniverse(nextSymbols: string[]) {
     const normalized = [...new Set(nextSymbols)].filter(Boolean);
     const previousSymbols = [...this.watchedSymbols];
-    const addedSymbols = normalized.filter((symbol) => !this.watchedSymbols.has(symbol));
+    const addedSymbols = normalized.filter(
+      (symbol) => !this.watchedSymbols.has(symbol),
+    );
     const removedSymbols = previousSymbols.filter(
-      (symbol) => !normalized.includes(symbol) && !this.portfolio.hasOpenPosition(symbol),
+      (symbol) =>
+        !normalized.includes(symbol) && !this.portfolio.hasOpenPosition(symbol),
     );
 
     for (const symbol of addedSymbols) {
       const preloaded = await this.preloadSymbolHistory(symbol);
       if (!preloaded) {
-        this.logger.logInfo('Символ пропущен: не удалось безопасно прогреть историю', {
-          символ: symbol,
-          executionInterval: this.activeInterval,
-          confirmationInterval: this.confirmationInterval ?? 'нет',
-        });
+        this.logger.logInfo(
+          'Символ пропущен: не удалось безопасно прогреть историю',
+          {
+            символ: symbol,
+            executionInterval: this.activeInterval,
+            confirmationInterval: this.confirmationInterval ?? 'нет',
+          },
+        );
         continue;
       }
       this.candlesWithoutPosition.set(symbol, 0);
@@ -466,7 +510,9 @@ export class BotRunnerService implements OnModuleDestroy {
   private connectMarketStreams() {
     const symbols = [...this.watchedSymbols];
     if (symbols.length === 0) {
-      this.logger.logInfo('Старт отложен: нет символов с готовым warmup для подключения market streams');
+      this.logger.logInfo(
+        'Старт отложен: нет символов с готовым warmup для подключения market streams',
+      );
       return;
     }
 
@@ -505,18 +551,24 @@ export class BotRunnerService implements OnModuleDestroy {
       if (!candle.isClosed) return;
       if (!this.watchedSymbols.has(candle.symbol)) return;
 
-      if (this.confirmationInterval && candle.interval === this.confirmationInterval) {
+      if (
+        this.confirmationInterval &&
+        candle.interval === this.confirmationInterval
+      ) {
         const confirmation = this.confirmation.onNewCandle(candle);
-        this.logger.logInfo('Обновлён тренд подтверждения по старшему таймфрейму', {
-          символ: candle.symbol,
-          интервалПодтверждения: candle.interval,
-          направление: this.translateConfirmationTrend(confirmation.trend),
-          готовность: confirmation.isReady ? 'готов' : 'не готов',
-          силаТрендаВПроцентах:
-            typeof confirmation.trendStrengthPct === 'number'
-              ? Number((confirmation.trendStrengthPct * 100).toFixed(3))
-              : null,
-        });
+        this.logger.logInfo(
+          'Обновлён тренд подтверждения по старшему таймфрейму',
+          {
+            символ: candle.symbol,
+            интервалПодтверждения: candle.interval,
+            направление: this.translateConfirmationTrend(confirmation.trend),
+            готовность: confirmation.isReady ? 'готов' : 'не готов',
+            силаТрендаВПроцентах:
+              typeof confirmation.trendStrengthPct === 'number'
+                ? Number((confirmation.trendStrengthPct * 100).toFixed(3))
+                : null,
+          },
+        );
         return;
       }
 
@@ -539,7 +591,9 @@ export class BotRunnerService implements OnModuleDestroy {
 
       const strategies = this.strategyRegistry.getStrategies();
       let tradeHappened = false;
-      const positionsOnSymbol = this.portfolio.getPositionsForSymbol(candle.symbol);
+      const positionsOnSymbol = this.portfolio.getPositionsForSymbol(
+        candle.symbol,
+      );
       const openCandidates: StrategyOpenCandidate[] = [];
 
       if (positionsOnSymbol.length === 0) {
@@ -552,7 +606,10 @@ export class BotRunnerService implements OnModuleDestroy {
 
       for (const strategy of strategies) {
         const position = this.portfolio.getPosition(candle.symbol, strategy.id);
-        const strategyResult = strategy.onNewCandle(candle, position?.side ?? null);
+        const strategyResult = strategy.onNewCandle(
+          candle,
+          position?.side ?? null,
+        );
         const result = this.applyConfirmationFilter(
           candle.symbol,
           strategy,
@@ -692,11 +749,12 @@ export class BotRunnerService implements OnModuleDestroy {
         const selectedCandidate =
           selectionDecision.selectedStrategyId === null
             ? null
-            : openCandidates.find(
+            : (openCandidates.find(
                 (candidate) =>
-                  candidate.strategy.id === selectionDecision.selectedStrategyId &&
+                  candidate.strategy.id ===
+                    selectionDecision.selectedStrategyId &&
                   candidate.side === selectionDecision.selectedSide,
-              ) ?? null;
+              ) ?? null);
 
         this.lastStrategySelection = {
           timestamp: candle.closeTime,
@@ -716,7 +774,9 @@ export class BotRunnerService implements OnModuleDestroy {
             strategyId: selectedCandidate.strategy.id,
             сторона: selectedCandidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
             режимРынка: selectedCandidate.result.marketRegime ?? 'не определён',
-            оценкаВхода: Number((selectionDecision.selectedScore ?? 0).toFixed(2)),
+            оценкаВхода: Number(
+              (selectionDecision.selectedScore ?? 0).toFixed(2),
+            ),
             причина: selectionDecision.reason,
             кандидаты: selectionDecision.candidates.map((candidate) => ({
               стратегия: candidate.strategyName,
@@ -744,18 +804,25 @@ export class BotRunnerService implements OnModuleDestroy {
                 selectedStrategyId: openedCandidate.strategy.id,
                 selectedStrategyName: openedCandidate.strategy.name,
                 selectedSide: openedCandidate.side,
-                selectedScore: Number(openedCandidate.arbitrationScore.toFixed(2)),
+                selectedScore: Number(
+                  openedCandidate.arbitrationScore.toFixed(2),
+                ),
                 reason:
                   'Первый кандидат не прошёл проверку риска/исполнения, поэтому открыт следующий допустимый кандидат по приоритету',
                 candidates: selectionDecision.candidates,
               };
-              this.logger.logInfo('Использован запасной кандидат после отклонения лидера', {
-                символ: candle.symbol,
-                стратегия: openedCandidate.strategy.name,
-                strategyId: openedCandidate.strategy.id,
-                сторона: openedCandidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
-                arbitrationScore: Number(openedCandidate.arbitrationScore.toFixed(2)),
-              });
+              this.logger.logInfo(
+                'Использован запасной кандидат после отклонения лидера',
+                {
+                  символ: candle.symbol,
+                  стратегия: openedCandidate.strategy.name,
+                  strategyId: openedCandidate.strategy.id,
+                  сторона: openedCandidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+                  arbitrationScore: Number(
+                    openedCandidate.arbitrationScore.toFixed(2),
+                  ),
+                },
+              );
             }
 
             tradeHappened = true;
@@ -867,7 +934,8 @@ export class BotRunnerService implements OnModuleDestroy {
       this.logger.logInfo('Сделка отклонена', {
         действие: this.translateAction(execution.action),
         символ: execution.symbol ?? 'НЕИЗВЕСТНО',
-        стратегия: execution.strategyName ?? execution.strategyId ?? 'НЕИЗВЕСТНО',
+        стратегия:
+          execution.strategyName ?? execution.strategyId ?? 'НЕИЗВЕСТНО',
         причина: execution.reason,
       });
       return false;
@@ -909,11 +977,15 @@ export class BotRunnerService implements OnModuleDestroy {
         символ: symbol,
         свечей: candles.length,
         минимальноНужноСвечей: requiredWarmupCandles,
-        запасСвечейДляСтарта: Math.max(candles.length - requiredWarmupCandles, 0),
+        запасСвечейДляСтарта: Math.max(
+          candles.length - requiredWarmupCandles,
+          0,
+        ),
       });
 
       if (this.confirmationInterval) {
-        const confirmationWarmupCandles = this.confirmation.getRequiredWarmupCandles();
+        const confirmationWarmupCandles =
+          this.confirmation.getRequiredWarmupCandles();
         const confirmationPreloadCandles = Math.max(
           confirmationWarmupCandles + 20,
           40,
@@ -964,7 +1036,9 @@ export class BotRunnerService implements OnModuleDestroy {
       return 0;
     }
 
-    return Math.max(...strategies.map((strategy) => strategy.getRequiredWarmupCandles()));
+    return Math.max(
+      ...strategies.map((strategy) => strategy.getRequiredWarmupCandles()),
+    );
   }
 
   private getAdaptiveTimeframeCandidates() {
@@ -1000,8 +1074,7 @@ export class BotRunnerService implements OnModuleDestroy {
 
     const recent = candles.slice(-14);
     const ranges = recent.map((candle, index) => {
-      const prevClose =
-        index === 0 ? recent[0].close : recent[index - 1].close;
+      const prevClose = index === 0 ? recent[0].close : recent[index - 1].close;
       const tr = Math.max(
         candle.high - candle.low,
         Math.abs(candle.high - prevClose),
@@ -1084,10 +1157,9 @@ export class BotRunnerService implements OnModuleDestroy {
       подрядУбыточныхСделок: snapshot.consecutiveLosses,
       винрейт: Number(this.portfolio.getWinRate().toFixed(2)),
       экспозицияПоСтратегиям: Object.fromEntries(
-        Object.entries(snapshot.exposureByStrategy).map(([strategyId, value]) => [
-          strategyId,
-          Number(value.toFixed(6)),
-        ]),
+        Object.entries(snapshot.exposureByStrategy).map(
+          ([strategyId, value]) => [strategyId, Number(value.toFixed(6))],
+        ),
       ),
       рискМенеджмент: {
         ...this.riskManager.getRiskState(),
@@ -1095,7 +1167,9 @@ export class BotRunnerService implements OnModuleDestroy {
           ? 'по_сигналу_стратегии'
           : 'только_по_стопам',
       },
-      свечейБезПозицииПоСимволам: Object.fromEntries(this.candlesWithoutPosition),
+      свечейБезПозицииПоСимволам: Object.fromEntries(
+        this.candlesWithoutPosition,
+      ),
     });
   }
 
@@ -1224,7 +1298,8 @@ export class BotRunnerService implements OnModuleDestroy {
         }[key] ?? key;
 
       translated[mappedKey] =
-        key.toLowerCase().includes('pct') || key.toLowerCase().includes('deviation')
+        key.toLowerCase().includes('pct') ||
+        key.toLowerCase().includes('deviation')
           ? Number((value * 100).toFixed(3))
           : Number(value.toFixed(6));
     }
@@ -1245,7 +1320,10 @@ export class BotRunnerService implements OnModuleDestroy {
       return result;
     }
 
-    const confirmation = this.confirmation.getTrend(symbol, this.confirmationInterval);
+    const confirmation = this.confirmation.getTrend(
+      symbol,
+      this.confirmationInterval,
+    );
 
     if (strategy.id === 'mean_reversion') {
       return this.applyMeanReversionHigherTimeframeGuard(result, confirmation);
@@ -1450,21 +1528,26 @@ export class BotRunnerService implements OnModuleDestroy {
       timeframeSelection: this.lastAdaptiveTimeframeSelection
         ? {
             режим: this.config.dynamicTimeframeEnabled ? 'adaptive' : 'static',
-            executionInterval: this.lastAdaptiveTimeframeSelection.executionInterval,
+            executionInterval:
+              this.lastAdaptiveTimeframeSelection.executionInterval,
             confirmationInterval:
               this.lastAdaptiveTimeframeSelection.confirmationInterval ?? 'нет',
             selectedAt: this.lastAdaptiveTimeframeSelection.selectedAt,
             sampleSymbols: this.lastAdaptiveTimeframeSelection.sampleSymbols,
             reason: this.lastAdaptiveTimeframeSelection.reason,
-            assessments: this.lastAdaptiveTimeframeSelection.assessments.map((assessment) => ({
-              interval: assessment.interval,
-              score: Number(assessment.score.toFixed(3)),
-              efficiency: Number(assessment.efficiency.toFixed(3)),
-              trendQuality: Number(assessment.trendQuality.toFixed(3)),
-              atrPct: Number((assessment.atrPct * 100).toFixed(3)),
-              volumeAccelerationPct: Number((assessment.volumeAcceleration * 100).toFixed(2)),
-              sampleSize: assessment.sampleSize,
-            })),
+            assessments: this.lastAdaptiveTimeframeSelection.assessments.map(
+              (assessment) => ({
+                interval: assessment.interval,
+                score: Number(assessment.score.toFixed(3)),
+                efficiency: Number(assessment.efficiency.toFixed(3)),
+                trendQuality: Number(assessment.trendQuality.toFixed(3)),
+                atrPct: Number((assessment.atrPct * 100).toFixed(3)),
+                volumeAccelerationPct: Number(
+                  (assessment.volumeAcceleration * 100).toFixed(2),
+                ),
+                sampleSize: assessment.sampleSize,
+              }),
+            ),
           }
         : {
             режим: this.config.dynamicTimeframeEnabled ? 'adaptive' : 'static',
@@ -1478,10 +1561,12 @@ export class BotRunnerService implements OnModuleDestroy {
             assessments: [],
           },
       strategySelectionMode: 'auto_best_signal',
-      activeStrategies: this.strategyRegistry.getStrategies().map((strategy) => ({
-        id: strategy.id,
-        name: strategy.name,
-      })),
+      activeStrategies: this.strategyRegistry
+        .getStrategies()
+        .map((strategy) => ({
+          id: strategy.id,
+          name: strategy.name,
+        })),
       strategySelection: this.lastStrategySelection
         ? {
             время: this.lastStrategySelection.timestamp,
@@ -1502,16 +1587,19 @@ export class BotRunnerService implements OnModuleDestroy {
                 ? Number(this.lastStrategySelection.selectedScore.toFixed(2))
                 : null,
             причина: this.lastStrategySelection.reason,
-            кандидаты: this.lastStrategySelection.candidates.map((candidate) => ({
-              стратегия: candidate.strategyName,
-              strategyId: candidate.strategyId,
-              сторона: candidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
-              статус: candidate.status === 'selected' ? 'выбрана' : 'отклонена',
-              режимРынка: candidate.marketRegime ?? 'не определён',
-              entryScore: Number(candidate.entryScore.toFixed(2)),
-              arbitrationScore: Number(candidate.arbitrationScore.toFixed(2)),
-              причина: candidate.reason,
-            })),
+            кандидаты: this.lastStrategySelection.candidates.map(
+              (candidate) => ({
+                стратегия: candidate.strategyName,
+                strategyId: candidate.strategyId,
+                сторона: candidate.side === 'LONG' ? 'ЛОНГ' : 'ШОРТ',
+                статус:
+                  candidate.status === 'selected' ? 'выбрана' : 'отклонена',
+                режимРынка: candidate.marketRegime ?? 'не определён',
+                entryScore: Number(candidate.entryScore.toFixed(2)),
+                arbitrationScore: Number(candidate.arbitrationScore.toFixed(2)),
+                причина: candidate.reason,
+              }),
+            ),
           }
         : null,
       execution: this.trader.getExecutionStatus(),
@@ -1522,7 +1610,10 @@ export class BotRunnerService implements OnModuleDestroy {
             [...this.watchedSymbols].map((symbol) => [
               symbol,
               (() => {
-                const state = this.confirmation.getTrend(symbol, this.confirmationInterval!);
+                const state = this.confirmation.getTrend(
+                  symbol,
+                  this.confirmationInterval!,
+                );
                 return {
                   готовность: state.isReady ? 'готов' : 'не готов',
                   направление: this.translateConfirmationTrend(state.trend),
@@ -1562,9 +1653,10 @@ export class BotRunnerService implements OnModuleDestroy {
           стопЦена: Number(position.stopPrice.toFixed(4)),
           тейкЦена: Number(position.takePrice.toFixed(4)),
           текущаяЦена: Number(
-            (this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice).toFixed(
-              4,
-            ),
+            (
+              this.portfolio.getMarkPrice(position.symbol) ??
+              position.entryPrice
+            ).toFixed(4),
           ),
           плавающийРезультат: Number(
             this.portfolio
@@ -1579,10 +1671,9 @@ export class BotRunnerService implements OnModuleDestroy {
           минимумПослеВхода: Number(position.lowestPrice.toFixed(4)),
         })),
         экспозицияПоСтратегиям: Object.fromEntries(
-          Object.entries(snapshot.exposureByStrategy).map(([strategyId, value]) => [
-            strategyId,
-            Number(value.toFixed(6)),
-          ]),
+          Object.entries(snapshot.exposureByStrategy).map(
+            ([strategyId, value]) => [strategyId, Number(value.toFixed(6))],
+          ),
         ),
       },
       рискМенеджмент: {
@@ -1591,7 +1682,9 @@ export class BotRunnerService implements OnModuleDestroy {
           ? 'по_сигналу_стратегии'
           : 'только_по_стопам',
       },
-      scannerTop: this.lastScanTop.map((item) => this.translateScannedSymbol(item)),
+      scannerTop: this.lastScanTop.map((item) =>
+        this.translateScannedSymbol(item),
+      ),
     };
   }
 
@@ -1659,7 +1752,8 @@ export class BotRunnerService implements OnModuleDestroy {
       причина: reason,
     });
 
-    const price = this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
+    const price =
+      this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
     const execution =
       position.side === 'LONG'
         ? await this.trader.tryCloseLong(
@@ -1693,7 +1787,9 @@ export class BotRunnerService implements OnModuleDestroy {
 
     return {
       closed,
-      reason: closed ? 'Позиция успешно закрыта' : 'Закрытие позиции не выполнено',
+      reason: closed
+        ? 'Позиция успешно закрыта'
+        : 'Закрытие позиции не выполнено',
       snapshot,
     };
   }
@@ -1710,7 +1806,8 @@ export class BotRunnerService implements OnModuleDestroy {
     });
 
     for (const position of openPositions) {
-      const price = this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
+      const price =
+        this.portfolio.getMarkPrice(position.symbol) ?? position.entryPrice;
       const execution =
         position.side === 'LONG'
           ? await this.trader.tryCloseLong(
@@ -1749,10 +1846,13 @@ export class BotRunnerService implements OnModuleDestroy {
   async liquidateAllSpotAssets(
     reason = 'Ликвидация всех внешних spot-активов через dashboard',
   ) {
-    this.logger.logInfo('Получена команда ликвидации всех внешних spot-активов', {
-      причина: reason,
-      execution: this.trader.getExecutionStatus().label,
-    });
+    this.logger.logInfo(
+      'Получена команда ликвидации всех внешних spot-активов',
+      {
+        причина: reason,
+        execution: this.trader.getExecutionStatus().label,
+      },
+    );
 
     const result = await this.trader.liquidateAllSpotAssets(reason);
     const refreshedStatus = await this.trader.refreshExecutionStatus();

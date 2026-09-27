@@ -12,7 +12,6 @@ import {
   ClosedTrade,
   ExecutionResult,
   makePositionKey,
-  Position,
   PositionSide,
 } from '../types';
 
@@ -210,7 +209,11 @@ export class PaperTraderService {
           this.config.breakevenTriggerPct,
         )
       ) {
-        armBreakeven(position, this.config.feePct, this.config.breakevenOffsetPct);
+        armBreakeven(
+          position,
+          this.config.feePct,
+          this.config.breakevenOffsetPct,
+        );
       }
 
       if (

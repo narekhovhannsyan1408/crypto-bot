@@ -62,9 +62,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
         quoteFree: this.portfolio.balance,
         quoteTotal: this.portfolio.getEquity(),
         spotQuoteFree: marketType !== 'futures' ? this.portfolio.balance : null,
-        spotQuoteTotal: marketType !== 'futures' ? this.portfolio.getEquity() : null,
+        spotQuoteTotal:
+          marketType !== 'futures' ? this.portfolio.getEquity() : null,
         futuresQuoteFree: marketType !== 'spot' ? this.portfolio.balance : null,
-        futuresQuoteTotal: marketType !== 'spot' ? this.portfolio.getEquity() : null,
+        futuresQuoteTotal:
+          marketType !== 'spot' ? this.portfolio.getEquity() : null,
         warnings: [],
       });
     }
@@ -86,11 +88,15 @@ export class BinanceExecutionService implements OnModuleDestroy {
       const balance = await client.fetchBalance();
       const quoteAsset = 'USDT';
       const quoteWallet =
-        (balance[quoteAsset] as { free?: number; total?: number } | undefined) ?? {};
+        (balance[quoteAsset] as
+          | { free?: number; total?: number }
+          | undefined) ?? {};
       const warnings: string[] = [];
 
       if (mode === 'live_testnet' && marketType === 'futures') {
-        warnings.push('Binance Futures Demo работает через demo trading endpoint');
+        warnings.push(
+          'Binance Futures Demo работает через demo trading endpoint',
+        );
         if (this.isUsingSharedLiveTestnetKeyForFutures()) {
           warnings.push(
             'Для Binance Futures Demo используется общий demo key из BINANCE_TESTNET_API_*',
@@ -102,11 +108,13 @@ export class BinanceExecutionService implements OnModuleDestroy {
         apiConfigured: true,
         accountConnectivity: 'ok',
         quoteFree:
-          typeof quoteWallet.free === 'number' && Number.isFinite(quoteWallet.free)
+          typeof quoteWallet.free === 'number' &&
+          Number.isFinite(quoteWallet.free)
             ? quoteWallet.free
             : null,
         quoteTotal:
-          typeof quoteWallet.total === 'number' && Number.isFinite(quoteWallet.total)
+          typeof quoteWallet.total === 'number' &&
+          Number.isFinite(quoteWallet.total)
             ? quoteWallet.total
             : null,
         spotQuoteFree: null,
@@ -120,7 +128,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       return this.buildStatus(mode, marketType, {
         apiConfigured: true,
         accountConnectivity: 'error',
-        lastError: this.describeUnknownError(error, 'Не удалось подключиться к Binance'),
+        lastError: this.describeUnknownError(
+          error,
+          'Не удалось подключиться к Binance',
+        ),
       });
     }
   }
@@ -146,7 +157,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
     if (marketType !== 'spot' && marketType !== 'hybrid') {
       return {
         success: false,
-        message: 'Ликвидация внешних активов доступна только в режиме Spot или Hybrid',
+        message:
+          'Ликвидация внешних активов доступна только в режиме Spot или Hybrid',
         soldAssets: [] as string[],
         skippedAssets: [] as Array<{ asset: string; reason: string }>,
       };
@@ -154,12 +166,19 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
     const restClient = this.getSpotRestClient(mode);
     const tradingClient = await this.getClient(mode, 'spot');
-    const accountInfo = await restClient.getAccountInformation({ omitZeroBalances: true });
-    const balances = Array.isArray(accountInfo.balances) ? accountInfo.balances : [];
+    const accountInfo = await restClient.getAccountInformation({
+      omitZeroBalances: true,
+    });
+    const balances = Array.isArray(accountInfo.balances)
+      ? accountInfo.balances
+      : [];
     const managedAssets = new Set(
       this.portfolio
         .getOpenPositions()
-        .filter((position) => position.side === 'LONG' && position.symbol.endsWith('USDT'))
+        .filter(
+          (position) =>
+            position.side === 'LONG' && position.symbol.endsWith('USDT'),
+        )
         .map((position) => position.symbol.replace(/USDT$/, '')),
     );
     const soldAssets: string[] = [];
@@ -228,7 +247,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       } catch (error) {
         skippedAssets.push({
           asset,
-          reason: error instanceof Error ? error.message : 'Не удалось выставить market sell',
+          reason:
+            error instanceof Error
+              ? error.message
+              : 'Не удалось выставить market sell',
         });
       }
     }
@@ -460,7 +482,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
           this.config.breakevenTriggerPct,
         )
       ) {
-        armBreakeven(position, this.config.feePct, this.config.breakevenOffsetPct);
+        armBreakeven(
+          position,
+          this.config.feePct,
+          this.config.breakevenOffsetPct,
+        );
       }
 
       if (
@@ -503,7 +529,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
     positionSizeUsdt: number,
   ): Promise<ExecutionResult> {
     const executionMarketType =
-      marketType === 'hybrid' ? (side === 'LONG' ? 'spot' : 'futures') : marketType;
+      marketType === 'hybrid'
+        ? side === 'LONG'
+          ? 'spot'
+          : 'futures'
+        : marketType;
 
     if (executionMarketType === 'spot' && side === 'SHORT') {
       return {
@@ -519,18 +549,31 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
     const client = await this.getClient(mode, executionMarketType);
     const marketSymbol = await this.getMarketSymbol(client, symbol);
-    const amount = this.normalizeAmount(client, marketSymbol, positionSizeUsdt / price);
+    const amount = this.normalizeAmount(
+      client,
+      marketSymbol,
+      positionSizeUsdt / price,
+    );
     const orderSide = side === 'LONG' ? 'buy' : 'sell';
     const rejectAction = side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT';
 
     try {
-      const order = await client.createOrder(marketSymbol, 'market', orderSide, amount);
+      const order = await client.createOrder(
+        marketSymbol,
+        'market',
+        orderSide,
+        amount,
+      );
       const executionPrice = this.resolveExecutionPrice(order, price);
       const executionTimestamp = order.timestamp ?? timestamp;
       const executionReason = `${reason} [${mode}/${marketType}]`;
       const quoteAsset = 'USDT';
       const baseAsset = symbol.replace(/USDT$/, '');
-      const feeSummary = this.resolveOrderFeeSummary(order, baseAsset, quoteAsset);
+      const feeSummary = this.resolveOrderFeeSummary(
+        order,
+        baseAsset,
+        quoteAsset,
+      );
       const executedQuantity = this.resolveOpenedQuantity(
         order,
         amount,
@@ -561,9 +604,14 @@ export class BinanceExecutionService implements OnModuleDestroy {
       });
     } catch (error) {
       if (this.isInsufficientFundsError(error)) {
-        const availableQuote = await this.getAvailableQuoteBalance(mode, executionMarketType);
+        const availableQuote = await this.getAvailableQuoteBalance(
+          mode,
+          executionMarketType,
+        );
         const venueLabel =
-          executionMarketType === 'futures' ? 'Binance Futures' : 'Binance Spot';
+          executionMarketType === 'futures'
+            ? 'Binance Futures'
+            : 'Binance Spot';
         const fundsHint =
           executionMarketType === 'futures'
             ? 'Пополни/сбрось Futures Demo баланс, проверь leverage по символу или уменьши BOT_POSITION_SIZE_USDT.'
@@ -580,9 +628,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
           interval,
           strategyId,
           strategyName,
-          reason: `Недостаточно средств для открытия позиции на ${venueLabel}: запрошен размер ~${positionSizeUsdt.toFixed(
-            4,
-          )} USDT.${availableHint} ${fundsHint}`.trim(),
+          reason:
+            `Недостаточно средств для открытия позиции на ${venueLabel}: запрошен размер ~${positionSizeUsdt.toFixed(
+              4,
+            )} USDT.${availableHint} ${fundsHint}`.trim(),
         };
       }
 
@@ -654,7 +703,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
         };
       }
 
-      const availableAmount = this.normalizeAmount(client, marketSymbol, freeBalance);
+      const availableAmount = this.normalizeAmount(
+        client,
+        marketSymbol,
+        freeBalance,
+      );
       if (!Number.isFinite(availableAmount) || availableAmount <= 0) {
         if (balance.locked > 0) {
           return {
@@ -711,14 +764,9 @@ export class BinanceExecutionService implements OnModuleDestroy {
       }
     }
 
-    const orderSide =
-      expectedSide === 'LONG'
-        ? 'sell'
-        : 'buy';
+    const orderSide = expectedSide === 'LONG' ? 'sell' : 'buy';
     const params =
-      executionMarketType === 'futures'
-        ? { reduceOnly: true }
-        : undefined;
+      executionMarketType === 'futures' ? { reduceOnly: true } : undefined;
     const order = await client.createOrder(
       marketSymbol,
       'market',
@@ -732,7 +780,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
     const executionReason = `${reason} [${mode}/${executionMarketType}]`;
     const quoteAsset = 'USDT';
     const baseAsset = symbol.replace(/USDT$/, '');
-    const feeSummary = this.resolveOrderFeeSummary(order, baseAsset, quoteAsset);
+    const feeSummary = this.resolveOrderFeeSummary(
+      order,
+      baseAsset,
+      quoteAsset,
+    );
     const executedQuantity = this.resolveClosedQuantity(order, amount);
 
     return this.paperTrader.recordExternalClosePosition({
@@ -766,7 +818,9 @@ export class BinanceExecutionService implements OnModuleDestroy {
     return Boolean(this.config.binanceApiKey && this.config.binanceApiSecret);
   }
 
-  private async refreshSpotAccountStatus(mode: ExecutionMode): Promise<ExecutionStatus> {
+  private async refreshSpotAccountStatus(
+    mode: ExecutionMode,
+  ): Promise<ExecutionStatus> {
     const client = this.getSpotRestClient(mode);
     const [accountInfo, openOrders] = await Promise.all([
       client.getAccountInformation({ omitZeroBalances: true }),
@@ -774,7 +828,9 @@ export class BinanceExecutionService implements OnModuleDestroy {
     ]);
     await this.ensureSpotUserDataStream(mode);
 
-    const balances = Array.isArray(accountInfo.balances) ? accountInfo.balances : [];
+    const balances = Array.isArray(accountInfo.balances)
+      ? accountInfo.balances
+      : [];
     const usdtBalance = balances.find((balance) => balance.asset === 'USDT');
     const quoteFree = Number(usdtBalance?.free ?? 0);
     const quoteLocked = Number(usdtBalance?.locked ?? 0);
@@ -797,11 +853,15 @@ export class BinanceExecutionService implements OnModuleDestroy {
     const warnings: string[] = [];
 
     if (openOrders.length > 0) {
-      warnings.push(`Есть открытые spot-ордера на Binance: ${openOrders.length}`);
+      warnings.push(
+        `Есть открытые spot-ордера на Binance: ${openOrders.length}`,
+      );
     }
 
     if (nonUsdtBalances.length > 0) {
-      warnings.push(`На Binance есть незакрытые spot-активы: ${nonUsdtBalances.length} шт.`);
+      warnings.push(
+        `На Binance есть незакрытые spot-активы: ${nonUsdtBalances.length} шт.`,
+      );
     }
 
     if (this.isSpotDemoRestFallbackMessage(streamState.lastError)) {
@@ -812,7 +872,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
       warnings.push('Private user-data stream Binance не подтверждён');
     }
 
-    if (streamState.lastError && !this.isSpotDemoRestFallbackMessage(streamState.lastError)) {
+    if (
+      streamState.lastError &&
+      !this.isSpotDemoRestFallbackMessage(streamState.lastError)
+    ) {
       warnings.push(`User-data stream: ${streamState.lastError}`);
     }
 
@@ -820,9 +883,13 @@ export class BinanceExecutionService implements OnModuleDestroy {
       apiConfigured: true,
       accountConnectivity: 'ok',
       quoteFree: Number.isFinite(quoteFree) ? quoteFree : null,
-      quoteTotal: Number.isFinite(quoteFree + quoteLocked) ? quoteFree + quoteLocked : null,
+      quoteTotal: Number.isFinite(quoteFree + quoteLocked)
+        ? quoteFree + quoteLocked
+        : null,
       spotQuoteFree: Number.isFinite(quoteFree) ? quoteFree : null,
-      spotQuoteTotal: Number.isFinite(quoteFree + quoteLocked) ? quoteFree + quoteLocked : null,
+      spotQuoteTotal: Number.isFinite(quoteFree + quoteLocked)
+        ? quoteFree + quoteLocked
+        : null,
       futuresQuoteFree: null,
       futuresQuoteTotal: null,
       lastError: null,
@@ -850,7 +917,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
       api_secret: credentials.secret,
       testnet: false,
       demoTrading: mode === 'live_testnet',
-      baseUrl: mode === 'live_testnet' ? 'https://demo-api.binance.com' : undefined,
+      baseUrl:
+        mode === 'live_testnet' ? 'https://demo-api.binance.com' : undefined,
       beautifyResponses: true,
     });
 
@@ -986,8 +1054,12 @@ export class BinanceExecutionService implements OnModuleDestroy {
   private async refreshSpotBalancesFromRest(mode: ExecutionMode) {
     try {
       const client = this.getSpotRestClient(mode);
-      const accountInfo = await client.getAccountInformation({ omitZeroBalances: true });
-      const balances = Array.isArray(accountInfo.balances) ? accountInfo.balances : [];
+      const accountInfo = await client.getAccountInformation({
+        omitZeroBalances: true,
+      });
+      const balances = Array.isArray(accountInfo.balances)
+        ? accountInfo.balances
+        : [];
       const usdtBalance = balances.find((balance) => balance.asset === 'USDT');
       const free = Number(usdtBalance?.free ?? 0);
       const locked = Number(usdtBalance?.locked ?? 0);
@@ -1006,8 +1078,12 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
   private async getSpotAssetBalance(mode: ExecutionMode, asset: string) {
     const client = this.getSpotRestClient(mode);
-    const accountInfo = await client.getAccountInformation({ omitZeroBalances: true });
-    const balances = Array.isArray(accountInfo.balances) ? accountInfo.balances : [];
+    const accountInfo = await client.getAccountInformation({
+      omitZeroBalances: true,
+    });
+    const balances = Array.isArray(accountInfo.balances)
+      ? accountInfo.balances
+      : [];
     const assetBalance = balances.find((balance) => balance.asset === asset);
 
     return {
@@ -1110,7 +1186,10 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
   private getLiveTestnetCredentials(marketType: 'spot' | 'futures') {
     if (marketType === 'futures') {
-      if (this.config.binanceFuturesDemoApiKey && this.config.binanceFuturesDemoApiSecret) {
+      if (
+        this.config.binanceFuturesDemoApiKey &&
+        this.config.binanceFuturesDemoApiSecret
+      ) {
         return {
           apiKey: this.config.binanceFuturesDemoApiKey,
           secret: this.config.binanceFuturesDemoApiSecret,
@@ -1149,9 +1228,9 @@ export class BinanceExecutionService implements OnModuleDestroy {
   private isUsingSharedLiveTestnetKeyForFutures() {
     return Boolean(
       !this.config.binanceFuturesDemoApiKey &&
-        !this.config.binanceFuturesDemoApiSecret &&
-        this.config.binanceTestnetApiKey &&
-        this.config.binanceTestnetApiSecret,
+      !this.config.binanceFuturesDemoApiSecret &&
+      this.config.binanceTestnetApiKey &&
+      this.config.binanceTestnetApiSecret,
     );
   }
 
@@ -1161,13 +1240,18 @@ export class BinanceExecutionService implements OnModuleDestroy {
     return market?.symbol ?? marketSymbol;
   }
 
-  private normalizeAmount(client: ccxt.Exchange, marketSymbol: string, amount: number) {
+  private normalizeAmount(
+    client: ccxt.Exchange,
+    marketSymbol: string,
+    amount: number,
+  ) {
     const normalized = Number(client.amountToPrecision(marketSymbol, amount));
     return normalized > 0 ? normalized : amount;
   }
 
   private resolveExecutionPrice(order: ccxt.Order, fallbackPrice: number) {
-    const average = typeof order.average === 'number' ? order.average : undefined;
+    const average =
+      typeof order.average === 'number' ? order.average : undefined;
     const price = typeof order.price === 'number' ? order.price : undefined;
 
     return average ?? price ?? fallbackPrice;
@@ -1179,7 +1263,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
     executedQuantity: number,
     fallbackNotional: number,
   ) {
-    if (typeof order.cost === 'number' && Number.isFinite(order.cost) && order.cost > 0) {
+    if (
+      typeof order.cost === 'number' &&
+      Number.isFinite(order.cost) &&
+      order.cost > 0
+    ) {
       return order.cost;
     }
 
@@ -1199,7 +1287,9 @@ export class BinanceExecutionService implements OnModuleDestroy {
     baseFee: number,
   ) {
     const filled =
-      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
+      typeof order.filled === 'number' &&
+      Number.isFinite(order.filled) &&
+      order.filled > 0
         ? order.filled
         : fallbackAmount;
 
@@ -1211,7 +1301,11 @@ export class BinanceExecutionService implements OnModuleDestroy {
   }
 
   private resolveClosedQuantity(order: ccxt.Order, fallbackAmount: number) {
-    if (typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0) {
+    if (
+      typeof order.filled === 'number' &&
+      Number.isFinite(order.filled) &&
+      order.filled > 0
+    ) {
       return order.filled;
     }
 
@@ -1231,7 +1325,12 @@ export class BinanceExecutionService implements OnModuleDestroy {
 
     return fees.reduce(
       (acc, fee) => {
-        if (!fee || typeof fee.cost !== 'number' || !Number.isFinite(fee.cost) || fee.cost <= 0) {
+        if (
+          !fee ||
+          typeof fee.cost !== 'number' ||
+          !Number.isFinite(fee.cost) ||
+          fee.cost <= 0
+        ) {
           return acc;
         }
 
@@ -1256,12 +1355,16 @@ export class BinanceExecutionService implements OnModuleDestroy {
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    return /insufficient balance|insufficient funds|margin is insufficient/i.test(message);
+    return /insufficient balance|insufficient funds|margin is insufficient/i.test(
+      message,
+    );
   }
 
   private isDeprecatedSpotTestnetUserDataStreamError(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return /410 gone|testnet\.binance\.vision\/api\/v3\/userdatastream/i.test(message);
+    return /410 gone|testnet\.binance\.vision\/api\/v3\/userdatastream/i.test(
+      message,
+    );
   }
 
   private async getAvailableQuoteBalance(
@@ -1278,7 +1381,8 @@ export class BinanceExecutionService implements OnModuleDestroy {
       const balance = await client.fetchBalance();
       const quoteWallet =
         (balance.USDT as { free?: number; total?: number } | undefined) ?? {};
-      return typeof quoteWallet.free === 'number' && Number.isFinite(quoteWallet.free)
+      return typeof quoteWallet.free === 'number' &&
+        Number.isFinite(quoteWallet.free)
         ? quoteWallet.free
         : null;
     } catch {

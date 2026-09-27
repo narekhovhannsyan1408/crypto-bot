@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
-import { Candle } from '../../market/types';
 import { BreakoutVolatilityStrategyService } from '../../strategy/breakout-volatility/breakout-volatility.strategy.service';
 import { MarketRegimeSwitcherStrategyService } from '../../strategy/market-regime-switcher/market-regime-switcher.strategy.service';
 import { MeanReversionStrategyService } from '../../strategy/mean-reversion/mean-reversion.strategy.service';
 import { RangeScalpingStrategyService } from '../../strategy/range-scalping/range-scalping.strategy.service';
-import { StrategyArbitrationService, StrategyOpenCandidate } from '../../strategy/strategy-arbitration/strategy-arbitration.service';
+import {
+  StrategyArbitrationService,
+  StrategyOpenCandidate,
+} from '../../strategy/strategy-arbitration/strategy-arbitration.service';
 import { StrategyService } from '../../strategy/strategy/strategy.service';
 import { TrendPullbackStrategyService } from '../../strategy/trend-pullback/trend-pullback.strategy.service';
 import { TradingStrategy } from '../../strategy/types';
@@ -190,7 +192,10 @@ export class BacktestEngineService {
         executionStatus,
       );
       if (selectionDecision.selectedStrategyId !== null) {
-        const rankedCandidates = arbitration.rankCandidates(openCandidates, executionStatus);
+        const rankedCandidates = arbitration.rankCandidates(
+          openCandidates,
+          executionStatus,
+        );
         for (const candidate of rankedCandidates) {
           if (!candidate.isAllowed) {
             continue;

@@ -8,6 +8,7 @@ import {
   fmtSignedMoney,
   fmtTime,
 } from './format.js';
+import { numberLocale, t, tm } from './i18n.js';
 
 const PAD = { top: 18, right: 14, bottom: 28, left: 72 };
 const DAY_MS = 86_400_000;
@@ -66,8 +67,7 @@ export function renderEquityChart(container, chart, livePoint) {
     points.length < 2 ||
     points[points.length - 1].timestamp === points[0].timestamp
   ) {
-    container.innerHTML =
-      '<div class="chart-empty">График появится через несколько минут работы бота — точки добавляются каждые 15 минут и после каждой сделки.</div>';
+    container.innerHTML = `<div class="chart-empty">${escapeHtml(t('chart.empty'))}</div>`;
     return;
   }
 
@@ -100,7 +100,12 @@ export function renderEquityChart(container, chart, livePoint) {
 
   const yDigits = maxY - minY < 20 ? 2 : 0;
   const yLabel = (value) =>
-    `${value.toLocaleString('ru-RU', { minimumFractionDigits: yDigits, maximumFractionDigits: yDigits })} $`;
+    new Intl.NumberFormat(numberLocale(), {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: yDigits,
+      maximumFractionDigits: yDigits,
+    }).format(value);
   const yTicks = niceTicks(minY, maxY, 4)
     .map(
       (value) =>
@@ -142,7 +147,7 @@ export function renderEquityChart(container, chart, livePoint) {
 
   const baseLabelY = baseY - 6 < PAD.top + 8 ? baseY + 14 : baseY - 6;
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="График капитала относительно стартовой суммы">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(t('chart.aria'))}">
       <defs>
         <clipPath id="chart-clip-up"><rect x="0" y="0" width="${width}" height="${Math.max(baseY, 0)}"/></clipPath>
         <clipPath id="chart-clip-down"><rect x="0" y="${baseY}" width="${width}" height="${Math.max(height - baseY, 0)}"/></clipPath>
@@ -151,7 +156,7 @@ export function renderEquityChart(container, chart, livePoint) {
       <path class="area-up" d="${area}" clip-path="url(#chart-clip-up)"/>
       <path class="area-down" d="${area}" clip-path="url(#chart-clip-down)"/>
       <line class="base-line" x1="${PAD.left}" x2="${width - PAD.right}" y1="${baseY}" y2="${baseY}"/>
-      <text class="base-label" x="${width - PAD.right}" y="${baseLabelY}" text-anchor="end">Старт: ${fmtMoney(base)}</text>
+      <text class="base-label" x="${width - PAD.right}" y="${baseLabelY}" text-anchor="end">${escapeHtml(t('chart.start', { amount: fmtMoney(base) }))}</text>
       <path class="equity-line" d="${line}"/>
       ${markers}
       ${xTicks}
@@ -198,10 +203,87 @@ export function renderEquityChart(container, chart, livePoint) {
       <div class="muted small">${fmtDateTime(nearest.timestamp)}</div>
       <b>${fmtMoney(nearest.equity)}</b>
       <span class="${diff >= 0 ? 'positive-text' : 'negative-text'}">${fmtSignedMoney(diff)}</span>
-      ${trade ? `<div class="small">${escapeHtml(trade.title)}</div>` : ''}`;
+      ${trade ? `<div class="small">${escapeHtml(trade.titleMsg ? tm(trade.titleMsg) : trade.title)}</div>` : ''}`;
     tooltip.style.left = `${(cx / width) * rect.width}px`;
     tooltip.style.top = `${(cy / height) * rect.height}px`;
     tooltip.hidden = false;
   });
   hoverArea.addEventListener('pointerleave', hide);
+}
+
+/** Просадка от пика в процентах для каждой точки капитала. */
+export function drawdownSeries(points) {
+  let peak = -Infinity;
+  return points.map((point) => {
+    peak = Math.max(peak, point.equity);
+    return {
+      timestamp: point.timestamp,
+      pct: peak > 0 ? (point.equity / peak - 1) * 100 : 0,
+    };
+  });
+}
+
+/**
+ * Область просадки под графиком капитала: 0% — новый максимум, ниже — насколько
+ * капитал сейчас меньше своего пика. Ось X совпадает с графиком капитала.
+ */
+export function renderDrawdownChart(container, chart, livePoint) {
+  const points = [...(chart?.points ?? [])];
+  if (
+    livePoint &&
+    (!points.length ||
+      livePoint.timestamp > points[points.length - 1].timestamp)
+  ) {
+    points.push(livePoint);
+  }
+  if (
+    points.length < 2 ||
+    points[points.length - 1].timestamp === points[0].timestamp
+  ) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const series = drawdownSeries(points);
+  const width = container.clientWidth || 600;
+  const height = container.clientHeight || 120;
+  const pad = { top: 8, right: PAD.right, bottom: 8, left: PAD.left };
+  const minX = series[0].timestamp;
+  const maxX = series[series.length - 1].timestamp;
+  const worst = Math.min(...series.map((item) => item.pct));
+  const minY = Math.min(worst * 1.15, -1);
+
+  const x = (t) =>
+    pad.left + ((t - minX) / (maxX - minX)) * (width - pad.left - pad.right);
+  const y = (v) => pad.top + (v / minY) * (height - pad.top - pad.bottom);
+
+  const line = series
+    .map(
+      (item, index) =>
+        `${index ? 'L' : 'M'}${x(item.timestamp).toFixed(1)},${y(item.pct).toFixed(1)}`,
+    )
+    .join('');
+  const area = `${line}L${x(maxX).toFixed(1)},${y(0).toFixed(1)}L${x(minX).toFixed(1)},${y(0).toFixed(1)}Z`;
+  const pctLabel = (value) =>
+    `${value < 0 ? '−' : ''}${Math.abs(value).toLocaleString(numberLocale(), { maximumFractionDigits: Math.abs(minY) < 5 ? 1 : 0 })}%`;
+  const ticks = [0, minY / 2, minY]
+    .map(
+      (value) =>
+        `<line class="grid-line" x1="${pad.left}" x2="${width - pad.right}" y1="${y(value)}" y2="${y(value)}"/>` +
+        `<text class="axis-label" x="${pad.left - 8}" y="${y(value) + 4}" text-anchor="end">${pctLabel(value)}</text>`,
+    )
+    .join('');
+  const worstPoint = series.reduce((a, b) => (b.pct < a.pct ? b : a));
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(t('adv.charts.drawdown'))}">
+      ${ticks}
+      <path class="drawdown-area" d="${area}"/>
+      <path class="drawdown-line" d="${line}"/>
+      ${
+        worstPoint.pct < -0.05
+          ? `<circle class="drawdown-worst" cx="${x(worstPoint.timestamp)}" cy="${y(worstPoint.pct)}" r="4"/>`
+          : ''
+      }
+    </svg>`;
 }

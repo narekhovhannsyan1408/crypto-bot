@@ -8,6 +8,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { AllocatorEngine } from '../../allocator/engine/allocator-engine.service';
 import { getBotConfig } from '../../config/bot-config';
+import { Msg, msg, ru } from '../../i18n/messages';
 import { LiveStreamService } from '../../streaming/live-stream/live-stream.service';
 import { createTrustChecker } from '../security/request-guard';
 import { LegacyRuntimeService } from './legacy-runtime.service';
@@ -54,7 +55,7 @@ export class DashboardSocketService
         );
       }
       return this.toPayload(
-        await this.allocator.stop('Остановлен из расширенного дашборда'),
+        await this.allocator.stop(msg('stop.reason.advanced')),
       );
     },
     emergency_close_all: async (message) => {
@@ -228,10 +229,11 @@ export class DashboardSocketService
     return runner;
   }
 
-  private toPayload(result: { success: boolean; message: string }) {
+  private toPayload(result: { success: boolean; message: Msg }) {
     return {
       статус: result.success ? 'успешно' : 'не выполнено',
-      сообщение: result.message,
+      сообщение: ru(result.message),
+      i18n: result.message,
     };
   }
 

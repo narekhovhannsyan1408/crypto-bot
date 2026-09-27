@@ -1,0 +1,834 @@
+/* Расширенный режим: те же токены и компоненты, что в простом (home.css), плюс
+   плотные таблицы, KPI-плитки, график просадки и системный журнал. */
+
+.container.wide {
+  max-width: 1320px;
+}
+
+.advanced-page .brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+main.adv,
+#allocator-view,
+.adv-column {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.adv-grid {
+  align-items: start;
+}
+
+.adv-session-main .mode-tag {
+  justify-self: start;
+}
+
+.adv-column + .card .kv-list {
+  margin-top: 6px;
+}
+
+.card-sub {
+  margin: 4px 0 0;
+}
+
+.card h2 + .kv-list,
+.card h2 + .param-grid,
+.card h2 + .alloc-compare {
+  margin-top: 14px;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ---------- Нет сессии ---------- */
+
+.adv-idle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.adv-idle .lead {
+  margin-top: 6px;
+}
+
+/* ---------- Сессия ---------- */
+
+.adv-session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.adv-session-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.adv-session-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+}
+
+.fact {
+  display: grid;
+  gap: 2px;
+}
+
+.fact-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.fact-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.adv-session-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.adv-session-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- KPI ---------- */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.kpi-grid:empty {
+  display: none;
+}
+
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kpi-label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.kpi-value {
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.kpi-sub {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi.positive .kpi-value {
+  color: var(--positive);
+}
+
+.kpi.negative .kpi-value {
+  color: var(--negative-strong);
+}
+
+.kpi.warning .kpi-value {
+  color: var(--warning);
+}
+
+/* ---------- Графики ---------- */
+
+.chart.adv-equity {
+  height: 320px;
+}
+
+.chart.drawdown {
+  height: 110px;
+}
+
+.drawdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 6px;
+  padding-left: 72px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart .drawdown-area {
+  fill: var(--negative-soft);
+}
+
+.chart .drawdown-line {
+  fill: none;
+  stroke: var(--negative-strong);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.chart .drawdown-worst {
+  fill: var(--surface);
+  stroke: var(--negative-strong);
+  stroke-width: 2;
+}
+
+.lg-drawdown {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--negative-soft);
+  border: 1.5px solid var(--negative-strong);
+}
+
+/* ---------- Таблицы ---------- */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+}
+
+.data-table td.wrap {
+  white-space: normal;
+  min-width: 220px;
+}
+
+.data-table .empty-row td {
+  text-align: center;
+  color: var(--muted);
+  padding: 28px 10px;
+  white-space: normal;
+}
+
+.asset-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.asset-cell .asset-icon {
+  width: 30px;
+  height: 30px;
+  font-size: 10px;
+}
+
+.asset-cell small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sma-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.sma-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.sma-chip.above {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.sma-chip.below {
+  background: var(--negative-soft);
+  color: var(--negative-strong);
+}
+
+.sma-value {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.votes {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.votes i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.votes i.on {
+  background: var(--positive);
+}
+
+.weight-cell {
+  min-width: 150px;
+}
+
+.weight-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 5px;
+}
+
+.weight-bar .current {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.weight-bar .target {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--text);
+}
+
+.signals-note {
+  margin: 12px 0 0;
+}
+
+/* ---------- Распределение ---------- */
+
+.alloc-compare {
+  display: grid;
+  gap: 14px;
+}
+
+.alloc-compare + .alloc-legend {
+  margin-top: 16px;
+}
+
+.alloc-row {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.alloc-row .alloc-bar {
+  margin: 0;
+}
+
+.alloc-row-label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+/* ---------- Пары «ключ — значение» ---------- */
+
+.kv-list {
+  display: grid;
+}
+
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.kv-row:last-child {
+  border-bottom: none;
+}
+
+.kv-row > span:first-child {
+  color: var(--muted);
+  flex: 0 1 auto;
+}
+
+/* Значение может быть длинным (адрес, путь): переносится, а не выталкивает подпись */
+.kv-row > strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.kv-row .badge {
+  white-space: normal;
+}
+
+.chain-problem {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--warning-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chain-problem b {
+  color: var(--warning);
+  font-weight: 650;
+}
+
+.chain-hint {
+  margin: 12px 0 0;
+}
+
+.chain-problem code,
+.chain-hint code {
+  font-size: 12px;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 6px;
+}
+
+.kv-row a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.kv-row a:hover {
+  text-decoration: underline;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.param {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+}
+
+.param-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.param-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.param-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- Фильтры-чипы ---------- */
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 999px;
+}
+
+.chip:hover {
+  color: var(--text);
+}
+
+.chip.active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+}
+
+.chip .count {
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+/* ---------- Системный журнал ---------- */
+
+.logs-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.search-input,
+.text-input {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  min-width: 240px;
+}
+
+.text-input {
+  width: 100%;
+}
+
+.search-input:focus,
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.log-list {
+  display: grid;
+  gap: 6px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.log-entry {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.log-entry summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+}
+
+.log-entry summary::-webkit-details-marker {
+  display: none;
+}
+
+.log-entry[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.log-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-time {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.log-entry pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 260px;
+  background: var(--surface-2);
+  border-radius: 0 0 12px 12px;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag.trade {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tag.portfolio {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.tag.signal {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.tag.error {
+  background: var(--negative-soft);
+  color: var(--negative-strong);
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 28px 12px;
+  font-size: 14px;
+}
+
+.empty-state b {
+  display: block;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+/* ---------- Внутридневные стратегии ---------- */
+
+#intraday-view {
+  display: grid;
+  gap: 16px;
+}
+
+.intraday-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.exec-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.exec-group {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.exec-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.exec-group button {
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.badge.success {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.badge.danger {
+  background: var(--negative-soft);
+  color: var(--negative-strong);
+}
+
+.badge.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.table-action {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--negative-strong);
+  font-size: 13px;
+  font-weight: 650;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.candidate {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.candidate.selected {
+  border-color: color-mix(in srgb, var(--positive) 45%, transparent);
+  background: var(--positive-soft);
+}
+
+.candidate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+/* ---------- Мобильные ---------- */
+
+@media (max-width: 680px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .kpi {
+    padding: 12px 14px;
+  }
+
+  .kpi-value {
+    font-size: 20px;
+  }
+
+  .drawdown-head {
+    padding-left: 0;
+  }
+
+  .chart.adv-equity {
+    height: 240px;
+  }
+
+  .search-input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .adv-session-actions,
+  .adv-session-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .log-entry summary {
+    grid-template-columns: auto 1fr;
+  }
+
+  .log-time {
+    grid-column: 1 / -1;
+  }
+}

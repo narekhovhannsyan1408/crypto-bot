@@ -1,83 +1,87 @@
-// Форматирование чисел, дат и текста для русского интерфейса.
+// Форматирование чисел, дат и текста под выбранный язык интерфейса.
 
-const moneyFormat = new Intl.NumberFormat('ru-RU', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+import {
+  formatDate,
+  formatList,
+  formatTime,
+  numberLocale,
+  t,
+} from './i18n.js';
 
-export const fmtMoney = (value) => `${moneyFormat.format(value)} $`;
+export const fmtMoney = (value) =>
+  new Intl.NumberFormat(numberLocale(), {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value);
 
-export const fmtSignedMoney = (value) =>
-  `${value > 0 ? '+' : value < 0 ? '−' : ''}${moneyFormat.format(Math.abs(value))} $`;
+// Знак ставим после округления: −0,001 → «0,00 $», а не «−0,00 $»
+const roundTo = (value, digits) => Math.round(value * 10 ** digits) / 10 ** digits;
+const sign = (value) => (value > 0 ? '+' : value < 0 ? '−' : '');
 
-export const fmtPct = (value) =>
-  `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toLocaleString(
-    'ru-RU',
-    {
-      maximumFractionDigits: 2,
-    },
-  )}%`;
+export const fmtSignedMoney = (value) => {
+  const rounded = roundTo(value, 2);
+  return `${sign(rounded)}${fmtMoney(Math.abs(rounded))}`;
+};
+
+// Значение уже в процентах: 12.5 → «+12,5%»
+export const fmtPct = (value) => {
+  const rounded = roundTo(value, 2);
+  return `${sign(rounded)}${Math.abs(rounded).toLocaleString(numberLocale(), {
+    maximumFractionDigits: 2,
+  })}%`;
+};
+
+export const fmtNumber = (value, digits = 2) =>
+  Number(value).toLocaleString(numberLocale(), {
+    maximumFractionDigits: digits,
+  });
 
 export const fmtPrice = (value) =>
-  `${value.toLocaleString('ru-RU', { maximumFractionDigits: value >= 100 ? 2 : 4 })} $`;
+  new Intl.NumberFormat(numberLocale(), {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: value >= 100 ? 2 : 4,
+  }).format(value);
 
 export const fmtQty = (value) =>
-  value.toLocaleString('ru-RU', { maximumSignificantDigits: 6 });
+  value.toLocaleString(numberLocale(), { maximumSignificantDigits: 6 });
 
-export const fmtTime = (ts) =>
-  new Date(ts).toLocaleTimeString('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+export const fmtTime = (ts) => formatTime(ts);
 
 export const fmtDateTime = (ts) =>
-  new Date(ts).toLocaleString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  formatDate(ts, { month: 'short', time: true });
 
-export const fmtShortDate = (ts) =>
-  new Date(ts).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+export const fmtShortDate = (ts) => formatDate(ts, { month: 'short' });
 
-export const plural = (n, forms) => {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return forms[0];
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
-    return forms[1];
-  return forms[2];
-};
+// День дневной свечи хранится как полночь UTC — показываем его без сдвига пояса
+export const fmtUtcDay = (ts) =>
+  formatDate(ts, { month: 'short', year: true, utc: true });
 
 export const humanDuration = (ms) => {
   const minutes = Math.max(Math.floor(ms / 60_000), 0);
-  if (minutes < 1) return 'меньше минуты';
-  if (minutes < 60)
-    return `${minutes} ${plural(minutes, ['минуту', 'минуты', 'минут'])}`;
+  if (minutes < 1) return t('duration.lessThanMinute');
+  if (minutes < 60) return t('duration.minutes', { count: minutes });
   const hours = Math.floor(minutes / 60);
   if (hours < 48) {
     const rest = minutes % 60;
-    const hoursText = `${hours} ${plural(hours, ['час', 'часа', 'часов'])}`;
+    const hoursText = t('duration.hours', { count: hours });
     return hours < 6 && rest > 0
-      ? `${hoursText} ${rest} ${plural(rest, ['минуту', 'минуты', 'минут'])}`
+      ? t('duration.hoursMinutes', {
+          hours: hoursText,
+          minutes: t('duration.minutes', { count: rest }),
+        })
       : hoursText;
   }
-  const days = Math.floor(hours / 24);
-  return `${days} ${plural(days, ['день', 'дня', 'дней'])}`;
+  return t('duration.days', { count: Math.floor(hours / 24) });
 };
 
 export const dayKey = (ts) => new Date(ts).toDateString();
 
 export const dayHeading = (ts) => {
-  if (dayKey(ts) === new Date().toDateString()) return 'Сегодня';
+  if (dayKey(ts) === new Date().toDateString()) return t('day.today');
   if (dayKey(ts) === new Date(Date.now() - 86_400_000).toDateString())
-    return 'Вчера';
-  return new Date(ts).toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+    return t('day.yesterday');
+  return formatDate(ts, { month: 'long', year: true });
 };
 
 export const escapeHtml = (value) =>
@@ -89,3 +93,22 @@ export const escapeHtml = (value) =>
     .replaceAll("'", '&#39;');
 
 export const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+// Ссылка на транзакцию Solana в обозревателе (для devnet/testnet — с параметром сети)
+export const explorerTxUrl = (chainTx) =>
+  `https://explorer.solana.com/tx/${encodeURIComponent(chainTx.txId)}${
+    chainTx.cluster === 'mainnet-beta'
+      ? ''
+      : `?cluster=${encodeURIComponent(chainTx.cluster)}`
+  }`;
+
+export const explorerAddressUrl = (address, cluster = 'mainnet-beta') =>
+  `https://explorer.solana.com/address/${encodeURIComponent(address)}${
+    cluster === 'mainnet-beta' ? '' : `?cluster=${encodeURIComponent(cluster)}`
+  }`;
+
+export const shortAddress = (address) =>
+  `${address.slice(0, 4)}…${address.slice(-4)}`;
+
+// «BTC», «BTC and ETH», «BTC, ETH и SOL» — по правилам выбранного языка
+export const joinList = (items) => formatList(items);

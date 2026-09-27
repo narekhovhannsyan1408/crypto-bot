@@ -1,275 +1,200 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Crypto Bot — расширенный режим</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <title>Crypto Bot — advanced mode</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b5bdb'/%3E%3Cpath d='M7 21l6-6 4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/css/home.css" />
+    <link rel="stylesheet" href="/css/advanced.css" />
   </head>
-  <body>
-    <div class="layout">
-      <header class="topbar">
-        <div class="topbar-copy">
-          <h1>Crypto Bot Live Dashboard</h1>
-          <p class="muted">
-            Живой мониторинг исполнения, портфеля, риска и торговых решений
-          </p>
+  <body class="advanced-page">
+    <header class="app-header">
+      <div class="container wide header-row">
+        <a class="brand" href="/">
+          <span class="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" /><path d="M7 21l6-6 4 4 8-9" /></svg>
+          </span>
+          <span class="brand-name" data-i18n="app.name">Crypto Bot</span>
+          <span class="brand-chip" data-i18n="adv.badge">Advanced</span>
+        </a>
+        <div class="header-right">
+          <span class="status-pill" id="status-pill" data-tone="muted">
+            <span class="dot"></span><span id="status-text" data-i18n="status.loading">Loading…</span>
+          </span>
+          <div id="lang-switch"></div>
+          <a class="header-link" href="/" data-i18n="adv.backToSimple">← Simple mode</a>
         </div>
-        <div class="topbar-actions">
-          <div class="status-chip" id="connection-status">Подключение...</div>
-          <div class="status-chip subtle" id="data-freshness">—</div>
-          <a href="/" class="secondary-button">← Простой режим</a>
-          <button id="refresh-button" class="secondary-button">Обновить snapshot</button>
-          <button id="liquidate-spot-assets-button" class="danger-button intraday-only">
-            Продать все spot-активы
-          </button>
-          <button id="panic-button" class="danger-button intraday-only">
-            Экстренно закрыть все позиции
-          </button>
-        </div>
-      </header>
+      </div>
+    </header>
 
-      <section class="panel" id="allocator-panel" hidden>
-        <div class="panel-header">
-          <h2>Трендовый аллокатор</h2>
-          <span class="status-chip subtle" id="allocator-status">—</span>
-        </div>
-        <section class="cards-grid" id="allocator-metrics"></section>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Актив</th>
-                <th>Тренд</th>
-                <th>Целевая доля</th>
-                <th>Текущая доля</th>
-                <th>Количество</th>
-                <th>Цена</th>
-                <th>Стоимость, USDT</th>
-              </tr>
-            </thead>
-            <tbody id="allocator-assets"></tbody>
-          </table>
-        </div>
-        <div class="topbar-actions">
-          <button id="allocator-rebalance-button" class="secondary-button">Ребалансировать сейчас</button>
-          <button id="allocator-stop-button" class="danger-button">Остановить и продать всё в USDT</button>
-        </div>
-      </section>
-
-      <section class="panel intraday-only">
-        <div class="panel-header">
-          <h2>Портфель и Балансы</h2>
-          <span class="muted">Ключевые метрики бота и Binance</span>
-        </div>
-        <section class="cards-grid" id="metrics-grid"></section>
-      </section>
-
-      <section class="panel intraday-only">
-        <div class="panel-header">
-          <h2>Режим исполнения</h2>
-          <span class="muted">Статус среды, routing и синхронизация с Binance</span>
-        </div>
-        <div class="execution-grid">
-          <div id="execution-status" class="execution-status-card"></div>
-          <div class="execution-actions">
-            <div class="action-group">
-              <div class="action-group-title">Безопасный режим</div>
-              <button
-                class="secondary-button"
-                data-execution-mode="paper"
-                data-market-type="spot"
-              >
-                Paper
-              </button>
-            </div>
-            <div class="action-group">
-              <div class="action-group-title">Demo</div>
-              <button
-                class="secondary-button"
-                data-execution-mode="live_testnet"
-                data-market-type="spot"
-              >
-                Demo Spot
-              </button>
-              <button
-                class="secondary-button"
-                data-execution-mode="live_testnet"
-                data-market-type="futures"
-              >
-                Demo Futures
-              </button>
-              <button
-                class="secondary-button"
-                data-execution-mode="live_testnet"
-                data-market-type="hybrid"
-              >
-                Demo Hybrid
-              </button>
-            </div>
-            <div class="action-group">
-              <div class="action-group-title">Live Real</div>
-              <button
-                class="danger-button"
-                data-execution-mode="live_real"
-                data-market-type="spot"
-              >
-                Live Spot
-              </button>
-              <button
-                class="danger-button"
-                data-execution-mode="live_real"
-                data-market-type="futures"
-              >
-                Live Futures
-              </button>
-              <button
-                class="danger-button"
-                data-execution-mode="live_real"
-                data-market-type="hybrid"
-              >
-                Live Hybrid
-              </button>
-            </div>
-            <div class="action-group action-group-wide">
-              <div class="action-group-title">Сервис</div>
-              <button id="refresh-execution-button" class="secondary-button">
-                Обновить статус Binance
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>График капитала</h2>
-          <span class="muted">Live equity curve</span>
-        </div>
-        <div class="chart-wrapper">
-          <svg id="equity-chart" viewBox="0 0 1000 320" preserveAspectRatio="none"></svg>
-        </div>
-      </section>
-
-      <section class="two-column intraday-only">
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Открытые позиции</h2>
-          <span class="status-chip subtle" id="positions-count">0</span>
-          </div>
-          <div class="table-wrapper">
-          <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Символ</th>
-                  <th>Стратегия</th>
-                  <th>Сторона</th>
-                  <th>Рынок</th>
-                  <th>Вход</th>
-                  <th>Текущая</th>
-                  <th>Возраст, мин</th>
-                  <th>Плавающий результат</th>
-                  <th>Стоп</th>
-                  <th>Тейк</th>
-                  <th>Защита</th>
-                  <th>Действие</th>
-                </tr>
-              </thead>
-              <tbody id="positions-table"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Риск и runtime</h2>
-            <span class="muted">Universe, лимиты, загрузка</span>
-          </div>
-          <div class="runtime-columns">
-            <div class="subpanel">
-              <h3>Universe</h3>
-              <ul id="universe-list" class="tag-list"></ul>
-            </div>
-            <div class="subpanel">
-              <h3>Риск-менеджмент</h3>
-              <div id="risk-state" class="kv-list"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel intraday-only">
-        <div class="panel-header">
-          <h2>Автоподбор стратегии</h2>
-          <span class="muted">Какая стратегия выбрана и почему</span>
-        </div>
-        <div class="strategy-selection-layout">
-          <div class="strategy-selection-summary">
-            <div id="strategy-selection-summary"></div>
-            <div class="subpanel">
-              <h3>Активные стратегии</h3>
-              <ul id="active-strategies-list" class="tag-list"></ul>
-            </div>
-          </div>
-          <div class="subpanel">
-            <h3>Кандидаты последнего выбора</h3>
-            <div id="strategy-candidates-list" class="strategy-candidates-list"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Сделки</h2>
-          <span class="muted">Последние операции и результат</span>
-        </div>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Время</th>
-                <th>Символ</th>
-                <th>Стратегия</th>
-                <th>Действие</th>
-                <th>Сторона</th>
-                <th>Вход</th>
-                <th>Выход</th>
-                <th>Чистый результат</th>
-                <th>Комиссии</th>
-                <th>Причина</th>
-              </tr>
-            </thead>
-            <tbody id="trades-table"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Live-логи</h2>
-          <span class="muted">Последние события системы</span>
-        </div>
-        <div class="logs-toolbar">
-          <div class="log-filter-group" id="log-filter-group">
-            <button class="log-filter-button active" data-log-filter="ALL">Все</button>
-            <button class="log-filter-button" data-log-filter="RISK">Риск-менеджер</button>
-            <button class="log-filter-button" data-log-filter="СИГНАЛ">Сигнал</button>
-            <button class="log-filter-button" data-log-filter="СДЕЛКА">Сделка</button>
-            <button class="log-filter-button" data-log-filter="ПОРТФЕЛЬ">Портфель</button>
-            <button class="log-filter-button" data-log-filter="ИНФО">Инфо</button>
-            <button class="log-filter-button" data-log-filter="ОШИБКА">Ошибка</button>
-          </div>
-          <input
-            id="log-search-input"
-            class="log-search-input"
-            type="search"
-            placeholder="Поиск по логам, символу, причине..."
-          />
-        </div>
-        <div id="logs-container" class="logs-container"></div>
-      </section>
+    <div class="offline-banner" id="offline-banner" data-i18n="offline.banner" hidden>
+      No connection to the bot.
     </div>
 
-    <script src="/app.js"></script>
+    <main class="container wide adv">
+      <section class="card loading" id="loading-view" aria-busy="true">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-line"></div>
+        <span class="muted small" data-i18n="loading.text">Connecting to the bot…</span>
+      </section>
+
+      <!-- ===== Трендовый аллокатор ===== -->
+      <div id="allocator-view" hidden>
+        <section class="card adv-idle" id="idle-view" hidden>
+          <div>
+            <h1 data-i18n="adv.idle.title">No session yet</h1>
+            <p class="lead" data-i18n="adv.idle.text">Start the bot in simple mode — this page will show the full picture: signals, charts, the decision journal and the system log.</p>
+          </div>
+          <a class="btn-primary link-button" href="/" data-i18n="adv.idle.cta">Open simple mode</a>
+        </section>
+
+        <section class="card adv-session" id="session-card" hidden>
+          <div class="adv-session-main">
+            <span class="mode-tag" id="mode-tag"></span>
+            <div class="adv-session-facts" id="session-facts"></div>
+          </div>
+          <div class="adv-session-actions">
+            <button type="button" class="btn-secondary" id="rebalance-btn">
+              <span aria-hidden="true">⟳</span> <span data-i18n="adv.rebalance">Rebalance now</span>
+            </button>
+            <button type="button" class="btn-danger" id="stop-btn">
+              <span aria-hidden="true">■</span> <span data-i18n="stop.button">Stop and sell everything</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="bot-error" id="bot-error" role="alert" hidden></div>
+
+        <section class="kpi-grid" id="kpis"></section>
+
+        <section class="card" id="charts-card" hidden>
+          <div class="card-head">
+            <div>
+              <h2 data-i18n="adv.charts.title">Capital and drawdown</h2>
+              <p class="card-sub muted small" data-i18n="adv.charts.sub">Equity with every trade marked; below — how far the capital is from its peak.</p>
+            </div>
+            <div class="segmented" id="range-buttons" role="group" data-i18n-attr="aria-label:chart.rangeLabel">
+              <button type="button" data-range="day" aria-pressed="false" data-i18n="chart.range.day">Day</button>
+              <button type="button" data-range="week" aria-pressed="false" data-i18n="chart.range.week">Week</button>
+              <button type="button" data-range="month" aria-pressed="false" data-i18n="chart.range.month">Month</button>
+              <button type="button" data-range="all" class="active" aria-pressed="true" data-i18n="chart.range.all">All</button>
+            </div>
+          </div>
+          <div class="chart adv-equity" id="equity-chart"></div>
+          <div class="drawdown-head">
+            <span class="small muted" data-i18n="adv.charts.drawdown">Drawdown from peak</span>
+            <span class="small" id="drawdown-now"></span>
+          </div>
+          <div class="chart drawdown" id="drawdown-chart"></div>
+          <div class="chart-legend">
+            <span><i class="lg-line"></i><span data-i18n="chart.legend.equity">Your capital</span></span>
+            <span><i class="lg-base"></i><span data-i18n="chart.legend.base">Starting amount</span></span>
+            <span><i class="lg-buy"></i><span data-i18n="chart.legend.buy">Buy</span></span>
+            <span><i class="lg-sell"></i><span data-i18n="chart.legend.sell">Sell</span></span>
+            <span><i class="lg-drawdown"></i><span data-i18n="adv.charts.drawdownLegend">Drawdown</span></span>
+          </div>
+        </section>
+
+        <section class="card" id="signals-card" hidden>
+          <div class="card-head">
+            <div>
+              <h2 data-i18n="adv.signals.title">Trend signals</h2>
+              <p class="card-sub muted small" id="signals-sub"></p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table signals-table" id="signals-table"></table>
+          </div>
+          <p class="small muted signals-note" data-i18n="adv.signals.note">Each asset gets an equal slice of the capital. The share of that slice held in the coin equals the share of moving averages the daily close is above: 4 of 4 — fully in the coin, 0 of 4 — fully in dollars.</p>
+        </section>
+
+        <div class="grid-2 adv-grid">
+          <div class="adv-column">
+            <section class="card" id="allocation-card" hidden>
+              <h2 data-i18n="adv.alloc.title">Allocation: now vs target</h2>
+              <div class="alloc-compare" id="alloc-compare"></div>
+              <div class="alloc-legend" id="alloc-legend"></div>
+            </section>
+            <section class="card" id="params-card">
+              <h2 data-i18n="adv.params.title">Strategy parameters</h2>
+              <div class="param-grid" id="params"></div>
+            </section>
+          </div>
+          <section class="card" id="chain-card">
+            <h2 data-i18n="adv.chain.title">Execution and on-chain</h2>
+            <div class="kv-list" id="chain-info"></div>
+          </section>
+        </div>
+
+        <section class="card" id="journal-card" hidden>
+          <div class="card-head">
+            <h2 data-i18n="adv.journal.title">Decision journal</h2>
+            <div class="chip-group" id="journal-filters" role="group"></div>
+          </div>
+          <ol class="timeline" id="journal"></ol>
+          <button type="button" class="show-more" id="journal-more" data-i18n="activity.showMore" hidden>Show more</button>
+        </section>
+
+        <section class="card" id="history-card" hidden>
+          <h2 data-i18n="history.title">Past runs</h2>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th data-i18n="history.period">Period</th>
+                  <th data-i18n="history.mode">Mode</th>
+                  <th data-i18n="history.start">Started with</th>
+                  <th data-i18n="history.end">Ended with</th>
+                  <th data-i18n="history.result">Result</th>
+                </tr>
+              </thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ===== Внутридневные стратегии (BOT_STRATEGY_MODE=intraday) ===== -->
+      <div id="intraday-view" hidden></div>
+
+      <!-- ===== Живой системный журнал ===== -->
+      <section class="card" id="logs-card">
+        <div class="card-head">
+          <div>
+            <h2 data-i18n="adv.logs.title">System log</h2>
+            <p class="card-sub muted small" data-i18n="adv.logs.sub">Live technical events from the bot. Messages are shown exactly as the bot writes them.</p>
+          </div>
+          <span class="status-pill" id="socket-status" data-tone="muted"><span class="dot"></span><span id="socket-text" data-i18n="adv.logs.connecting">Connecting…</span></span>
+        </div>
+        <div class="logs-toolbar">
+          <div class="chip-group" id="log-filters" role="group"></div>
+          <input id="log-search" class="search-input" type="search" data-i18n-attr="placeholder:adv.logs.search;aria-label:adv.logs.search" />
+        </div>
+        <div class="log-list" id="logs"></div>
+      </section>
+
+      <footer class="footer" data-i18n="footer">This is an automated trading program, not investment advice.</footer>
+    </main>
+
+    <dialog class="modal" id="confirm-dialog">
+      <form method="dialog" class="modal-body" id="confirm-form">
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-text"></p>
+        <label class="field" id="confirm-phrase-field" hidden>
+          <span class="field-label" id="confirm-phrase-label"></span>
+          <input id="confirm-phrase" class="text-input" autocomplete="off" />
+        </label>
+        <p class="form-error" id="confirm-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="confirm-cancel" data-i18n="dialog.cancel">Cancel</button>
+          <button type="submit" class="btn-danger" id="confirm-ok"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="/js/advanced.js"></script>
   </body>
 </html>

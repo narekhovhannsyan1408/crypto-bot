@@ -3,6 +3,7 @@
 import { api } from './api.js';
 import { renderEquityChart } from './chart.js';
 import { createDialogs } from './dialogs.js';
+import { initI18n, mountLangSwitch, onLangChange } from './i18n.js';
 import { el, renderApp } from './render.js';
 
 const POLL_MS = 5_000;
@@ -106,6 +107,7 @@ async function pollLoop() {
 
 el.startTestBtn.addEventListener('click', () => dialogs.openStart('test'));
 el.startRealBtn.addEventListener('click', () => dialogs.openStart('real'));
+el.startSolanaBtn.addEventListener('click', () => dialogs.openStart('solana'));
 el.stopBtn.addEventListener('click', () => dialogs.openStop());
 
 el.showMore.addEventListener('click', () => {
@@ -134,4 +136,13 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) void refresh();
 });
 
-void pollLoop();
+// Смена языка: статичный текст переводит i18n, динамический — перерисовка
+onLangChange(() => {
+  if (state.app) renderApp(state.app);
+  drawChart();
+});
+
+mountLangSwitch(document.getElementById('lang-switch'));
+initI18n()
+  .catch((error) => console.error('Не удалось загрузить словарь', error))
+  .finally(() => void pollLoop());

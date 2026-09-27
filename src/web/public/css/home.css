@@ -17,6 +17,9 @@
   --btc: #f7931a;
   --eth: #627eea;
   --usdt: #26a17b;
+  --usdc: #2775ca;
+  --sol: #9945ff;
+  --sol-green: #14f195;
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
   --radius: 18px;
   color-scheme: light;
@@ -39,6 +42,8 @@
     --negative-soft: rgba(242, 85, 85, 0.14);
     --warning: #fbbf24;
     --warning-soft: rgba(251, 191, 36, 0.14);
+    --usdc: #5b9be6;
+    --sol: #b98cff;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
     color-scheme: dark;
   }
@@ -182,6 +187,35 @@ main.container {
 
 .header-link:hover {
   color: var(--text);
+}
+
+.lang-switch {
+  display: inline-flex;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.lang-switch button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+.lang-switch button:hover {
+  color: var(--text);
+}
+
+.lang-switch button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
 }
 
 .status-pill {
@@ -368,6 +402,27 @@ main.container {
 }
 
 .start-real .start-sub {
+  color: var(--muted);
+}
+
+.start-solana {
+  grid-column: 1 / -1;
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--sol) 12%, var(--surface)),
+    color-mix(in srgb, var(--sol-green) 12%, var(--surface))
+  );
+  border-color: color-mix(in srgb, var(--sol) 35%, transparent);
+  color: var(--text);
+}
+
+.start-solana .start-icon {
+  background: linear-gradient(135deg, var(--sol), var(--sol-green));
+  color: #fff;
+  font-size: 20px;
+}
+
+.start-solana .start-sub {
   color: var(--muted);
 }
 
@@ -907,6 +962,11 @@ main.container {
   color: var(--positive);
 }
 
+.event-icon.proof {
+  background: color-mix(in srgb, var(--sol) 14%, transparent);
+  color: var(--sol);
+}
+
 .event-icon.stop,
 .event-icon.autostop,
 .event-icon.error {
@@ -928,6 +988,23 @@ main.container {
   font-size: 13px;
   margin-top: 4px;
   font-variant-numeric: tabular-nums;
+}
+
+.chain-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.chain-link:hover {
+  text-decoration: underline;
+}
+
+.chain-note {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .event-time {
@@ -1138,6 +1215,11 @@ main.container {
   background: var(--accent-soft);
 }
 
+.choice input:disabled + span {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .choice input:focus-visible + span {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
@@ -1281,6 +1363,11 @@ main.container {
     display: none;
   }
 
+  .status-pill {
+    font-size: 13px;
+    padding: 5px 10px;
+  }
+
   .chart {
     height: 230px;
   }
@@ -1405,4 +1492,20 @@ fieldset.field {
 fieldset.field legend {
   padding: 0;
   margin-bottom: 6px;
+}
+
+/* Узкие телефоны: в шапке остаются логотип, статус и выбор языка */
+@media (max-width: 520px) {
+  .brand-name,
+  .brand-chip {
+    display: none;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+
+  .lang-switch button {
+    padding: 4px 7px;
+  }
 }

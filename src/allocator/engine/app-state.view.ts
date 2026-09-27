@@ -1,9 +1,10 @@
-import { ExecutionMode } from '../../trader/execution.types';
+import { Msg, ru } from '../../i18n/messages';
+import { AllocatorMode, quoteAssetOf, venueOf } from '../allocator-mode';
 import { baseAssetOf } from '../brokers/allocator-broker';
 import { downsampleEquity } from '../session/session-helpers';
 import { AllocatorSession, SessionSummary } from '../session/session.types';
 import { assetName, trendLabel } from './asset-names';
-import { MODE_LABELS } from './narrator';
+import { modeLabelMsg } from './narrator';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_CHART_POINTS = 600;
@@ -17,18 +18,41 @@ const RANGE_MS: Record<Exclude<ChartRange, 'all'>, number> = {
   month: 30 * DAY_MS,
 };
 
-export type Readiness = { available: boolean; missing: string[] };
+export type Readiness = { available: boolean; missing: Msg[] };
+
+export type SolanaInfo = {
+  // Кошелёк режима solana_real (публичный адрес)
+  walletAddress: string | null;
+  quoteAsset: string;
+  tokens: Array<{ base: string; symbol: string; mint: string }>;
+  proof: {
+    enabled: boolean;
+    cluster: string;
+    address: string | null;
+    problem: Msg | null;
+  };
+};
 
 export type ViewContext = {
+  strategyMode: 'intraday' | 'trend_allocator';
   session: AllocatorSession | null;
   history: SessionSummary[];
   prices: Record<string, number>;
   pricesAt: number;
-  lastError: string | null;
+  lastError: Msg | null;
   busy: boolean;
-  readiness: Record<ExecutionMode, Readiness>;
+  readiness: Record<AllocatorMode, Readiness>;
+  solana: SolanaInfo;
   assets: string[];
   smaPeriods: number[];
+  // Параметры стратегии для расширенного режима
+  params: {
+    rebalanceThresholdPct: number;
+    volTarget: number;
+    minOrderUsdt: number;
+    checkIntervalMs: number;
+    slippageBps: number;
+  };
   minCapital: number;
   now: number;
   activityLimit: number;
@@ -69,12 +93,14 @@ export const chartVersion = (session: AllocatorSession) =>
 export const buildAppState = (ctx: ViewContext) => {
   const base = {
     generatedAt: ctx.now,
+    strategyMode: ctx.strategyMode,
     busy: ctx.busy,
     lastError: ctx.lastError,
     readiness: ctx.readiness,
+    solana: ctx.solana,
     history: ctx.history.map((item) => ({
       ...item,
-      modeLabel: MODE_LABELS[item.mode],
+      modeLabel: ru(modeLabelMsg(item.mode)),
       profit: round(item.finalEquity - item.initialCapital),
       profitPct: round((item.finalEquity / item.initialCapital - 1) * 100),
     })),
@@ -86,6 +112,7 @@ export const buildAppState = (ctx: ViewContext) => {
       })),
       smaPeriods: ctx.smaPeriods,
       minCapital: ctx.minCapital,
+      params: ctx.params,
     },
   };
 
@@ -127,10 +154,13 @@ export const buildAppState = (ctx: ViewContext) => {
     session: {
       id: session.id,
       mode: session.mode,
-      modeLabel: MODE_LABELS[session.mode],
+      modeLabel: ru(modeLabelMsg(session.mode)),
+      venue: venueOf(session.mode),
+      quoteAsset: quoteAssetOf(session.mode),
       startedAt: session.startedAt,
       stoppedAt: session.stoppedAt,
       stopReason: session.stopReason,
+      stopReasonMsg: session.stopReasonMsg ?? null,
       initialCapital: session.initialCapital,
       equity: round(equity),
       profit: round(equity - session.initialCapital),
@@ -152,6 +182,26 @@ export const buildAppState = (ctx: ViewContext) => {
           ? round(session.initialCapital * (1 - session.autoStopLossPct))
           : null,
       assets,
+      // Подробности последнего решения: цена закрытия и каждая скользящая средняя
+      signals: session.lastSignals.map((signal) => ({
+        symbol: signal.symbol,
+        base: baseAssetOf(signal.symbol),
+        day: signal.day,
+        close: signal.close,
+        votes: Math.round(signal.trendScore * smaCount),
+        total: smaCount,
+        exposure: signal.exposure,
+        targetWeightPct: round((signal.exposure / ctx.assets.length) * 100, 1),
+        annualizedVol: signal.annualizedVol,
+        sma: ctx.smaPeriods.map((period) => ({
+          period,
+          value: signal.smaValues[period] ?? null,
+          above:
+            signal.smaValues[period] === undefined
+              ? null
+              : signal.close > signal.smaValues[period],
+        })),
+      })),
       lastDecisionDay: session.lastRebalanceDay,
       nextDecisionAt: running
         ? (Math.floor(ctx.now / DAY_MS) + 1) * DAY_MS
@@ -171,7 +221,13 @@ export type ChartData = {
   version: string | null;
   initialCapital: number;
   points: Array<{ timestamp: number; equity: number }>;
-  trades: Array<{ timestamp: number; kind: 'buy' | 'sell'; title: string }>;
+  trades: Array<{
+    timestamp: number;
+    kind: 'buy' | 'sell';
+    title: string;
+    // Ключ словаря для подсказки на графике (у старых записей может не быть)
+    titleMsg: Msg | null;
+  }>;
 };
 
 export const buildChart = (
@@ -207,6 +263,7 @@ export const buildChart = (
         timestamp: entry.timestamp,
         kind: entry.kind as 'buy' | 'sell',
         title: entry.title,
+        titleMsg: entry.text?.title ?? null,
       })),
   };
 };

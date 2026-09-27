@@ -96,6 +96,49 @@ export type AllocatorConfig = {
   dataRestBaseUrl: string;
 };
 
+export type SolanaCluster = 'mainnet-beta' | 'devnet' | 'testnet';
+
+const solanaClusterValue = (
+  value: string | undefined,
+  fallback: SolanaCluster,
+): SolanaCluster => {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'mainnet' || normalized === 'mainnet-beta')
+    return 'mainnet-beta';
+  if (normalized === 'devnet') return 'devnet';
+  if (normalized === 'testnet') return 'testnet';
+  return fallback;
+};
+
+export const defaultSolanaRpcUrl = (cluster: SolanaCluster) =>
+  `https://api.${cluster}.solana.com`;
+
+export type SolanaProofConfig = {
+  // Публиковать каждое ежедневное решение в блокчейн через Memo-программу
+  enabled: boolean;
+  cluster: SolanaCluster;
+  rpcUrl: string;
+  keypairPath: string;
+};
+
+export type SolanaConfig = {
+  // RPC основной сети: баланс кошелька и отправка свопов (режим solana_real)
+  rpcUrl: string;
+  jupiterApiUrl: string;
+  jupiterApiKey: string;
+  // Ключ кошелька: base58 (экспорт из Phantom) или JSON-массив solana-keygen
+  privateKey: string;
+  keypairPath: string;
+  allowReal: boolean;
+  slippageBps: number;
+  maxPriorityFeeLamports: number;
+  // Столько SOL бот не трогает: из них платятся комиссии сети
+  minSolForFees: number;
+  // Свои адреса токенов: BTC:<mint>:<decimals>,ETH:<mint>:<decimals>
+  tokenMints: string;
+  proof: SolanaProofConfig;
+};
+
 export type LogLevelName =
   | 'trace'
   | 'debug'
@@ -128,6 +171,7 @@ const logLevelValue = (value: string | undefined): LogLevelName => {
 export type BotConfig = {
   strategyMode: 'intraday' | 'trend_allocator';
   allocator: AllocatorConfig;
+  solana: SolanaConfig;
   logging: LoggingConfig;
   symbol: string;
   interval: string;
@@ -251,6 +295,45 @@ export const getBotConfig = (): BotConfig => {
         'https://api.binance.com',
       ),
     },
+    solana: (() => {
+      const proofCluster = solanaClusterValue(
+        process.env.SOLANA_PROOF_CLUSTER,
+        'devnet',
+      );
+      return {
+        rpcUrl: stringValue(
+          process.env.SOLANA_RPC_URL,
+          defaultSolanaRpcUrl('mainnet-beta'),
+        ),
+        jupiterApiUrl: stringValue(
+          process.env.SOLANA_JUPITER_API_URL,
+          'https://lite-api.jup.ag',
+        ),
+        jupiterApiKey: stringValue(process.env.JUPITER_API_KEY, ''),
+        privateKey: stringValue(process.env.SOLANA_PRIVATE_KEY, ''),
+        keypairPath: stringValue(process.env.SOLANA_KEYPAIR_PATH, ''),
+        allowReal: process.env.BOT_ALLOW_SOLANA_REAL === 'true',
+        slippageBps: numberValue(process.env.SOLANA_SLIPPAGE_BPS, 50),
+        maxPriorityFeeLamports: numberValue(
+          process.env.SOLANA_MAX_PRIORITY_FEE_LAMPORTS,
+          500_000,
+        ),
+        minSolForFees: numberValue(process.env.SOLANA_MIN_SOL_FOR_FEES, 0.02),
+        tokenMints: stringValue(process.env.SOLANA_TOKEN_MINTS, ''),
+        proof: {
+          enabled: process.env.SOLANA_PROOF_ENABLED === 'true',
+          cluster: proofCluster,
+          rpcUrl: stringValue(
+            process.env.SOLANA_PROOF_RPC_URL,
+            defaultSolanaRpcUrl(proofCluster),
+          ),
+          keypairPath: stringValue(
+            process.env.SOLANA_PROOF_KEYPAIR_PATH,
+            resolve(process.cwd(), '.solana', 'proof-keypair.json'),
+          ),
+        },
+      };
+    })(),
     symbol: stringValue(process.env.BOT_SYMBOL, 'BTCUSDT'),
     interval: stringValue(process.env.BOT_INTERVAL, '1m'),
     confirmationInterval: process.env.BOT_CONFIRMATION_INTERVAL?.trim() || null,

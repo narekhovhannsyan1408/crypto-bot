@@ -2,18 +2,41 @@ import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { getBotConfig } from '../../config/bot-config';
 import { BotLoggerService } from '../../logger/bot-logger/bot-logger.service';
 import { AppLogger } from '../../observability/app-logger';
+import {
+  errorMsg,
+  LocalizedError,
+  Msg,
+  msg,
+  MsgParam,
+  ru,
+} from '../../i18n/messages';
 import { newId, runWithLogContext } from '../../observability/log-context';
-import { ExecutionMode } from '../../trader/execution.types';
+import { SolanaProofService } from '../../solana/solana-proof.service';
+import {
+  buildTokenRegistry,
+  unsupportedAssets,
+} from '../../solana/solana-tokens';
+import {
+  AllocatorMode,
+  hasExternalAccount,
+  isSolanaMode,
+  quoteAssetOf,
+  venueOf,
+} from '../allocator-mode';
 import {
   AllocatorBroker,
   AllocatorFill,
   baseAssetOf,
 } from '../brokers/allocator-broker';
 import { BrokerFactory } from '../brokers/broker.factory';
-import { planRebalance, RebalanceOrder } from '../domain/rebalance-planner';
+import {
+  planRebalance,
+  RebalanceOrder,
+  RebalancePlan,
+} from '../domain/rebalance-planner';
 import { appendActivity, appendEquityPoint } from '../session/session-helpers';
 import { SessionStore } from '../session/session-store';
-import { AllocatorSession } from '../session/session.types';
+import { AllocatorSession, SignalSnapshot } from '../session/session.types';
 import {
   AppState,
   buildAppState,
@@ -23,15 +46,20 @@ import {
   PRICES_STALE_MS,
   Readiness,
   sessionEquity,
+  SolanaInfo,
 } from './app-state.view';
 import {
   describeAutoStopReason,
+  describeDecisionFailure,
   describeHoldingDecision,
+  describeProof,
+  describeReconcile,
   describeSellAll,
   describeStart,
   describeStop,
   explainOrder,
-  MODE_LABELS,
+  modeLabelMsg,
+  Narration,
 } from './narrator';
 import { SignalService } from './signal.service';
 
@@ -44,13 +72,14 @@ export const MIN_CAPITAL_USDT = 100;
 const MAX_PAPER_CAPITAL_USDT = 10_000_000;
 
 export type StartOptions = {
-  mode: ExecutionMode;
+  mode: AllocatorMode;
   capitalUsdt: number;
   // 0 — без автозащиты, 0.3 — продать всё при потере 30% от стартового капитала
   autoStopLossPct: number;
 };
 
-export type ActionResult = { success: boolean; message: string };
+// message — ключ словаря: страница показывает его на выбранном языке
+export type ActionResult = { success: boolean; message: Msg };
 
 const lastClosedDay = (now: number) =>
   Math.floor(now / DAY_MS) * DAY_MS - DAY_MS;
@@ -58,6 +87,10 @@ const isoDay = (day: number) => new Date(day).toISOString().slice(0, 10);
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const describeError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+const rejected = (
+  key: string,
+  params?: Record<string, MsgParam>,
+): ActionResult => ({ success: false, message: msg(key, params) });
 
 /**
  * Жизненный цикл бота: запуск и остановка сессии, ежедневное решение по тренду,
@@ -80,7 +113,7 @@ export class AllocatorEngine implements OnModuleDestroy {
   private tickInFlight = false;
   private prices: Record<string, number> = {};
   private pricesAt = 0;
-  private lastError: string | null = null;
+  private lastError: Msg | null = null;
   private retry = { day: 0, failures: 0, nextAttemptAt: 0 };
   private staleAutoStopReported = false;
 
@@ -90,6 +123,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     private readonly store: SessionStore,
     private readonly brokers: BrokerFactory,
     private readonly signals: SignalService,
+    private readonly proof: SolanaProofService,
   ) {}
 
   onModuleDestroy() {
@@ -120,10 +154,18 @@ export class AllocatorEngine implements OnModuleDestroy {
         return;
       }
       if (session.mode === 'live_real' && !this.config.allowLiveReal) {
-        this.lastError =
-          'Сессия с реальными деньгами не возобновлена: BOT_ALLOW_LIVE_REAL не равен true';
+        this.lastError = msg('resume.blockedLive');
         this.logger.logError(
-          this.lastError,
+          ru(this.lastError),
+          undefined,
+          'allocator.session.resume_blocked',
+        );
+        return;
+      }
+      if (session.mode === 'solana_real' && !this.config.solana.allowReal) {
+        this.lastError = msg('resume.blockedSolana');
+        this.logger.logError(
+          ru(this.lastError),
           undefined,
           'allocator.session.resume_blocked',
         );
@@ -150,7 +192,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       this.logger.logInfo(
         'Работа бота возобновлена после перезапуска',
         {
-          режим: MODE_LABELS[session.mode],
+          режим: ru(modeLabelMsg(session.mode)),
           стартовыйКапитал: session.initialCapital,
           последнееРешение: session.lastRebalanceDay
             ? isoDay(session.lastRebalanceDay)
@@ -176,7 +218,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       if (!result.success) {
         this.journal.warn(
           'allocator.session.start_rejected',
-          result.message,
+          ru(result.message),
           options,
         );
       }
@@ -185,7 +227,7 @@ export class AllocatorEngine implements OnModuleDestroy {
   }
 
   stop(
-    reason = 'Остановлен вами',
+    reason: Msg = msg('stop.reason.user'),
     kind: 'stop' | 'autostop' = 'stop',
   ): Promise<ActionResult> {
     return this.operation(kind, () =>
@@ -223,11 +265,11 @@ export class AllocatorEngine implements OnModuleDestroy {
       this.exclusive(async () => {
         const session = this.session;
         if (!session || session.status !== 'running') {
-          return { success: false, message: 'Бот сейчас не работает' };
+          return rejected('action.notRunning');
         }
         const now = Date.now();
         await this.rebalance(session, lastClosedDay(now), now);
-        return { success: true, message: 'Ребалансировка выполнена' };
+        return { success: true, message: msg('action.rebalanced') };
       }),
     );
   }
@@ -251,18 +293,28 @@ export class AllocatorEngine implements OnModuleDestroy {
     );
   }
 
-  getModeReadiness(mode: ExecutionMode): Readiness {
-    const missing: string[] = [];
+  getModeReadiness(mode: AllocatorMode): Readiness {
+    const missing: Msg[] = [];
+    if (isSolanaMode(mode)) {
+      missing.push(...this.solanaTokenProblems());
+    }
+    if (mode === 'solana_real') {
+      const wallet = this.brokers.solanaWallet();
+      if (wallet.problem) {
+        missing.push(wallet.problem);
+      } else if (!wallet.address) {
+        missing.push(msg('err.solana.noWallet'));
+      }
+      if (!this.config.solana.allowReal) {
+        missing.push(msg('ready.solanaFlag'));
+      }
+    }
     if (mode === 'live_real') {
       if (!this.config.binanceApiKey || !this.config.binanceApiSecret) {
-        missing.push(
-          'Не заданы BINANCE_API_KEY и BINANCE_API_SECRET в файле .env',
-        );
+        missing.push(msg('ready.binanceKeys'));
       }
       if (!this.config.allowLiveReal) {
-        missing.push(
-          'Не включена реальная торговля: BOT_ALLOW_LIVE_REAL=true в файле .env',
-        );
+        missing.push(msg('ready.liveFlag'));
       }
     }
     if (
@@ -270,47 +322,61 @@ export class AllocatorEngine implements OnModuleDestroy {
       (!this.config.binanceTestnetApiKey ||
         !this.config.binanceTestnetApiSecret)
     ) {
-      missing.push(
-        'Не заданы BINANCE_TESTNET_API_KEY и BINANCE_TESTNET_API_SECRET в файле .env',
-      );
+      missing.push(msg('ready.demoKeys'));
     }
     return { available: missing.length === 0, missing };
   }
 
-  async getAvailableBalance(mode: ExecutionMode) {
-    if (mode === 'paper') {
-      return { success: true, freeUsdt: null as number | null, message: '' };
+  async getAvailableBalance(mode: AllocatorMode) {
+    const quoteAsset = quoteAssetOf(mode);
+    if (!hasExternalAccount(mode)) {
+      return {
+        success: true,
+        freeUsdt: null as number | null,
+        quoteAsset,
+        message: null as Msg | null,
+      };
     }
     const readiness = this.getModeReadiness(mode);
     if (!readiness.available) {
       return {
         success: false,
         freeUsdt: null,
-        message: readiness.missing.join('. '),
+        quoteAsset,
+        message: msg('ready.missing', { items: readiness.missing }),
       };
     }
     try {
-      const balances = await this.brokers
-        .get(mode)
-        .getFreeBalances(this.settings.assets);
-      return { success: true, freeUsdt: balances?.USDT ?? 0, message: '' };
+      const broker = this.brokers.get(mode);
+      const balances = await broker.getFreeBalances(this.settings.assets);
+      return {
+        success: true,
+        freeUsdt: balances?.[broker.quoteAsset] ?? 0,
+        quoteAsset,
+        message: null,
+      };
     } catch (error) {
       this.journal.warn(
         'allocator.balance.failed',
-        'Не удалось получить баланс Binance',
+        `Не удалось получить баланс ${venueOf(mode)}`,
         { mode },
         error,
       );
       return {
         success: false,
         freeUsdt: null,
-        message: `Не удалось подключиться к Binance: ${describeError(error)}`,
+        quoteAsset,
+        message: msg('action.connectFailed', {
+          venue: venueOf(mode),
+          error: errorMsg(error),
+        }),
       };
     }
   }
 
   getAppState(activityLimit = 30): AppState {
     return buildAppState({
+      strategyMode: this.config.strategyMode,
       session: this.session,
       history: this.store.getHistory(),
       prices: this.prices,
@@ -321,13 +387,37 @@ export class AllocatorEngine implements OnModuleDestroy {
         paper: this.getModeReadiness('paper'),
         live_testnet: this.getModeReadiness('live_testnet'),
         live_real: this.getModeReadiness('live_real'),
+        solana_sim: this.getModeReadiness('solana_sim'),
+        solana_real: this.getModeReadiness('solana_real'),
       },
+      solana: this.getSolanaInfo(),
       assets: this.settings.assets,
       smaPeriods: this.settings.smaPeriods,
+      params: {
+        rebalanceThresholdPct: this.settings.rebalanceThresholdPct,
+        volTarget: this.settings.volTarget,
+        minOrderUsdt: this.settings.minOrderUsdt,
+        checkIntervalMs: this.settings.checkIntervalMs,
+        slippageBps: this.config.solana.slippageBps,
+      },
       minCapital: MIN_CAPITAL_USDT,
       now: Date.now(),
       activityLimit,
     });
+  }
+
+  getSolanaInfo(): SolanaInfo {
+    const registry = this.tokenRegistry();
+    return {
+      walletAddress: this.brokers.solanaWallet().address,
+      quoteAsset: quoteAssetOf('solana_sim'),
+      tokens: this.settings.assets.flatMap((symbol) => {
+        const base = baseAssetOf(symbol);
+        const token = registry?.[base];
+        return token ? [{ base, symbol: token.symbol, mint: token.mint }] : [];
+      }),
+      proof: this.proof.status(),
+    };
   }
 
   getChart(range: ChartRange) {
@@ -342,43 +432,44 @@ export class AllocatorEngine implements OnModuleDestroy {
 
   private async startSession(options: StartOptions): Promise<ActionResult> {
     if (this.session?.status === 'running') {
-      return {
-        success: false,
-        message: 'Бот уже работает. Сначала остановите текущую сессию.',
-      };
+      return rejected('action.alreadyRunning');
     }
 
     const capital = Number(options.capitalUsdt);
     const autoStop = Number(options.autoStopLossPct);
+    const quoteAsset = quoteAssetOf(options.mode);
+    const venue = venueOf(options.mode);
     if (!Number.isFinite(capital) || capital < MIN_CAPITAL_USDT) {
-      return {
-        success: false,
-        message: `Минимальная сумма — ${MIN_CAPITAL_USDT} USDT`,
-      };
+      return rejected('action.minCapital', {
+        amount: MIN_CAPITAL_USDT,
+        quote: quoteAsset,
+      });
     }
-    if (options.mode === 'paper' && capital > MAX_PAPER_CAPITAL_USDT) {
-      return { success: false, message: 'Слишком большая тестовая сумма' };
+    if (!hasExternalAccount(options.mode) && capital > MAX_PAPER_CAPITAL_USDT) {
+      return rejected('action.paperTooLarge');
     }
     if (!Number.isFinite(autoStop) || autoStop < 0 || autoStop >= 1) {
-      return { success: false, message: 'Некорректный уровень автозащиты' };
+      return rejected('action.badAutostop');
     }
 
     const readiness = this.getModeReadiness(options.mode);
     if (!readiness.available) {
-      return { success: false, message: readiness.missing.join('. ') };
+      return rejected('ready.missing', { items: readiness.missing });
     }
 
     const broker = this.brokers.get(options.mode);
-    if (options.mode !== 'paper') {
+    if (hasExternalAccount(options.mode)) {
       try {
         const balances = await broker.getFreeBalances(this.settings.assets);
-        const freeUsdt = balances?.USDT ?? 0;
-        if (capital > freeUsdt) {
-          return {
-            success: false,
-            message: `На Binance свободно только ${freeUsdt.toFixed(2)} USDT`,
-          };
+        const freeQuote = balances?.[broker.quoteAsset] ?? 0;
+        if (capital > freeQuote) {
+          return rejected('action.notEnoughFree', {
+            amount: freeQuote,
+            quote: quoteAsset,
+            venue,
+          });
         }
+        await broker.assertCanTrade?.();
       } catch (error) {
         this.journal.warn(
           'allocator.balance.failed',
@@ -386,10 +477,10 @@ export class AllocatorEngine implements OnModuleDestroy {
           undefined,
           error,
         );
-        return {
-          success: false,
-          message: `Не удалось подключиться к Binance: ${describeError(error)}`,
-        };
+        return rejected('action.connectFailed', {
+          venue,
+          error: errorMsg(error),
+        });
       }
     }
 
@@ -433,7 +524,7 @@ export class AllocatorEngine implements OnModuleDestroy {
         this.logger.logInfo(
           'Бот запущен из веб-интерфейса',
           {
-            режим: MODE_LABELS[options.mode],
+            режим: ru(modeLabelMsg(options.mode)),
             капиталUSDT: capital,
             автозащита: autoStop > 0 ? `−${autoStop * 100}%` : 'выключена',
             assets: this.settings.assets,
@@ -448,18 +539,18 @@ export class AllocatorEngine implements OnModuleDestroy {
           session.benchmarkStartPrices = { ...this.prices };
           this.store.saveCurrent(session);
         }
-        return { success: true, message: 'Бот запущен' };
+        return { success: true, message: msg('action.started') };
       },
     );
   }
 
   private async stopSession(
-    reason: string,
+    reason: Msg,
     kind: 'stop' | 'autostop',
   ): Promise<ActionResult> {
     const session = this.session;
     if (!session || session.status !== 'running') {
-      return { success: false, message: 'Бот сейчас не работает' };
+      return rejected('action.notRunning');
     }
 
     // Сессия могла не возобновиться после перезапуска — остановить её всё равно можно
@@ -477,7 +568,8 @@ export class AllocatorEngine implements OnModuleDestroy {
     const now = Date.now();
     session.status = 'stopped';
     session.stoppedAt = now;
-    session.stopReason = reason;
+    session.stopReason = ru(reason);
+    session.stopReasonMsg = reason;
     appendEquityPoint(
       session.equityHistory,
       { timestamp: now, equity },
@@ -502,12 +594,13 @@ export class AllocatorEngine implements OnModuleDestroy {
       stoppedAt: now,
       initialCapital: session.initialCapital,
       finalEquity: equity,
-      stopReason: reason,
+      stopReason: ru(reason),
+      stopReasonMsg: reason,
     });
     this.logger.logInfo(
       kind === 'autostop' ? 'Сработала автозащита' : 'Бот остановлен',
       {
-        причина: reason,
+        причина: ru(reason),
         итогUSDT: round(equity),
         initialCapital: session.initialCapital,
         cash: session.cash,
@@ -526,12 +619,15 @@ export class AllocatorEngine implements OnModuleDestroy {
         undefined,
         { unsold, quantities: session.quantities },
       );
-      return {
-        success: false,
-        message: `Бот остановлен, но не удалось продать: ${unsold.join(', ')}. Проверьте Binance.`,
-      };
+      return rejected('action.stoppedUnsold', {
+        assets: unsold,
+        venue: venueOf(session.mode),
+      });
     }
-    return { success: true, message: 'Бот остановлен, всё продано в USDT' };
+    return {
+      success: true,
+      message: msg('action.stopped', { quote: quoteAssetOf(session.mode) }),
+    };
   }
 
   // ---------- внутреннее ----------
@@ -660,7 +756,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       RETRY_MAX_MS,
     );
     this.retry.nextAttemptAt = now + delay;
-    this.lastError = describeError(error);
+    this.lastError = errorMsg(error);
     this.logger.logError('Не удалось принять ежедневное решение', error, null);
     this.journal.warn(
       'allocator.rebalance.failed',
@@ -675,8 +771,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     if (this.retry.failures === 1) {
       appendActivity(session, {
         kind: 'error',
-        title: 'Не удалось принять ежедневное решение',
-        details: `${describeError(error)}. Бот повторит попытку автоматически.`,
+        ...describeDecisionFailure(errorMsg(error)),
       });
       this.store.saveCurrent(session);
     }
@@ -766,8 +861,11 @@ export class AllocatorEngine implements OnModuleDestroy {
     );
 
     const smaCount = this.settings.smaPeriods.length;
+    const quoteAsset = broker.quoteAsset;
+    await this.publishDecision(session, day, signals, targetWeights, plan);
+
     const previousSignals = session.lastSignals;
-    const failedOrders: string[] = [];
+    const failedOrders: Msg[] = [];
     for (const order of plan.orders) {
       try {
         const fill =
@@ -788,12 +886,16 @@ export class AllocatorEngine implements OnModuleDestroy {
         this.recordFill(
           session,
           fill,
-          explainOrder(order, signal, previous, smaCount),
+          explainOrder(order, signal, previous, smaCount, quoteAsset),
           order,
         );
       } catch (error) {
         failedOrders.push(
-          `${order.side === 'BUY' ? 'покупка' : 'продажа'} ${baseAssetOf(order.symbol)}: ${describeError(error)}`,
+          msg('err.orderItem', {
+            side: msg(order.side === 'BUY' ? 'side.buy' : 'side.sell'),
+            base: baseAssetOf(order.symbol),
+            error: errorMsg(error),
+          }),
         );
         this.logger.logError(
           `Не удалось исполнить ордер ${order.side} ${order.symbol}`,
@@ -816,16 +918,20 @@ export class AllocatorEngine implements OnModuleDestroy {
     if (plan.orders.length === 0) {
       appendActivity(session, {
         kind: 'check',
-        title: 'Ежедневная проверка рынка: изменений не нужно',
-        details: describeHoldingDecision(signals, assets.length, smaCount),
+        ...describeHoldingDecision(
+          signals,
+          assets.length,
+          smaCount,
+          quoteAsset,
+        ),
       });
     }
     session.lastSignals = signals;
     this.store.saveCurrent(session);
 
     if (failedOrders.length > 0) {
-      throw new Error(
-        `Не удалось исполнить ордера (${failedOrders.join('; ')})`,
+      throw new LocalizedError(
+        msg('err.ordersFailed', { items: failedOrders }),
       );
     }
     session.lastRebalanceDay = day;
@@ -908,7 +1014,7 @@ export class AllocatorEngine implements OnModuleDestroy {
     );
   }
 
-  private async sellEverything(session: AllocatorSession, reason: string) {
+  private async sellEverything(session: AllocatorSession, reason: Msg) {
     const unsold: string[] = [];
     for (const symbol of this.settings.assets) {
       const quantity = session.quantities[symbol] ?? 0;
@@ -916,7 +1022,11 @@ export class AllocatorEngine implements OnModuleDestroy {
       try {
         const fill = await this.broker!.sell(symbol, quantity);
         this.applyFill(session, fill);
-        this.recordFill(session, fill, describeSellAll(symbol, reason));
+        this.recordFill(
+          session,
+          fill,
+          describeSellAll(symbol, reason, this.broker!.quoteAsset),
+        );
       } catch (error) {
         unsold.push(baseAssetOf(symbol));
         this.logger.logError(
@@ -956,12 +1066,13 @@ export class AllocatorEngine implements OnModuleDestroy {
         session.quantities[symbol] = free;
       }
     }
-    const freeUsdt = balances.USDT ?? 0;
-    if (session.cash > freeUsdt) {
+    const quoteAsset = quoteAssetOf(session.mode);
+    const freeQuote = balances[quoteAsset] ?? 0;
+    if (session.cash > freeQuote) {
       adjustments.push(
-        `USDT: ${session.cash.toFixed(2)} → ${freeUsdt.toFixed(2)}`,
+        `${quoteAsset}: ${session.cash.toFixed(2)} → ${freeQuote.toFixed(2)}`,
       );
-      session.cash = freeUsdt;
+      session.cash = freeQuote;
     }
     this.journal.debug(
       'allocator.reconcile.checked',
@@ -983,8 +1094,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       );
       appendActivity(session, {
         kind: 'error',
-        title: 'Баланс на Binance меньше, чем учёт бота',
-        details: `Похоже, средства перемещались вручную. Учёт скорректирован: ${adjustments.join('; ')}.`,
+        ...describeReconcile(venueOf(session.mode), adjustments),
       });
       this.store.saveCurrent(session);
     }
@@ -1011,7 +1121,7 @@ export class AllocatorEngine implements OnModuleDestroy {
   private recordFill(
     session: AllocatorSession,
     fill: AllocatorFill,
-    text: { title: string; details: string },
+    text: Narration,
     order?: RebalanceOrder,
   ) {
     appendActivity(session, {
@@ -1022,6 +1132,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       price: fill.price,
       quoteAmount: fill.quoteAmount,
       fee: fill.fee,
+      chainTx: fill.chainTx,
     });
     appendEquityPoint(
       session.equityHistory,
@@ -1030,7 +1141,7 @@ export class AllocatorEngine implements OnModuleDestroy {
       true,
     );
     this.store.saveCurrent(session);
-    this.journal.info('allocator.order.filled', text.title, {
+    this.journal.info('allocator.order.filled', ru(text.title), {
       fill,
       order: order ?? null,
       after: {
@@ -1049,10 +1160,83 @@ export class AllocatorEngine implements OnModuleDestroy {
         количество: round(fill.quantity, 8),
         суммаUSDT: round(fill.quoteAmount),
         комиссия: round(fill.fee, 6),
-        причина: `${text.details} [${session.mode}]`,
+        причина: `${text.details ? ru(text.details) : ''} [${session.mode}]`,
       },
       null,
     );
+  }
+
+  /**
+   * Публикует решение в Solana до исполнения ордеров. Ошибка публикации не
+   * мешает торговле: решение всё равно исполняется, сбой пишется в журнал.
+   */
+  private async publishDecision(
+    session: AllocatorSession,
+    day: number,
+    signals: SignalSnapshot[],
+    targetWeights: Record<string, number>,
+    plan: RebalancePlan,
+  ) {
+    const smaCount = this.settings.smaPeriods.length;
+    try {
+      const chainTx = await this.proof.publish({
+        sessionId: session.id,
+        mode: session.mode,
+        day,
+        equity: plan.equity,
+        quote: quoteAssetOf(session.mode),
+        signals: signals.map((signal) => ({
+          asset: baseAssetOf(signal.symbol),
+          close: signal.close,
+          votes: Math.round(signal.trendScore * smaCount),
+          total: smaCount,
+          targetWeight: targetWeights[signal.symbol] ?? 0,
+        })),
+        orders: plan.orders.map((order) => ({
+          side: order.side,
+          asset: baseAssetOf(order.symbol),
+          amount: order.quoteAmount,
+        })),
+      });
+      if (chainTx) {
+        appendActivity(session, {
+          kind: 'proof',
+          ...describeProof(day, chainTx.cluster),
+          chainTx,
+        });
+        this.store.saveCurrent(session);
+      }
+    } catch (error) {
+      this.journal.warn(
+        'solana.proof.failed',
+        'Не удалось записать решение в Solana',
+        { day: isoDay(day) },
+        error,
+      );
+    }
+  }
+
+  private tokenRegistry() {
+    try {
+      return buildTokenRegistry(this.config.solana.tokenMints);
+    } catch {
+      return null;
+    }
+  }
+
+  private solanaTokenProblems() {
+    try {
+      const registry = buildTokenRegistry(this.config.solana.tokenMints);
+      const missing = unsupportedAssets(
+        registry,
+        this.settings.assets.map(baseAssetOf),
+      );
+      return missing.length
+        ? [msg('ready.solanaTokens', { assets: missing })]
+        : [];
+    } catch (error) {
+      return [errorMsg(error)];
+    }
   }
 
   private async refreshPrices() {
@@ -1067,7 +1251,7 @@ export class AllocatorEngine implements OnModuleDestroy {
   }
 
   private fail(event: string, message: string, error: unknown) {
-    this.lastError = describeError(error);
+    this.lastError = errorMsg(error);
     this.logger.logError(message, error, null);
     this.journal.warn(event, message, undefined, error);
   }

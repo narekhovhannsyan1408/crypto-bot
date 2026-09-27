@@ -10,6 +10,7 @@ import {
 import { dirname } from 'node:path';
 import { getBotConfig } from '../../config/bot-config';
 import { AppLogger } from '../../observability/app-logger';
+import { migrateLegacyTexts } from './legacy-migration';
 import { AllocatorSession, SessionSummary } from './session.types';
 
 type StateFile = {
@@ -95,7 +96,20 @@ export class SessionStore {
     if (current) {
       current.benchmarkStartPrices ??= null;
     }
-    return { version: 2, current, history: parsed.history ?? [] };
+    const state: StateFile = {
+      version: 2,
+      current,
+      history: parsed.history ?? [],
+    };
+    const { migrated, unparsed } = migrateLegacyTexts(state);
+    if (migrated || unparsed) {
+      this.journal.info(
+        'session.store.texts_migrated',
+        'Старые записи ленты переведены в ключи словаря',
+        { migrated, unparsed },
+      );
+    }
+    return state;
   }
 
   private persist() {

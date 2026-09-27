@@ -1,11 +1,13 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
+  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { getBotConfig } from '../../config/bot-config';
+import { localizedHttpError } from '../../i18n/http-errors';
+import { msg } from '../../i18n/messages';
 import { createTrustChecker } from './request-guard';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
@@ -36,7 +38,7 @@ export class TrustedRequestGuard implements CanActivate {
     const jsonBody =
       request.headers['content-type']?.startsWith('application/json');
     if (!trusted || (!SAFE_METHODS.has(request.method) && !jsonBody)) {
-      throw new ForbiddenException('Запрос отклонён');
+      throw localizedHttpError(HttpStatus.FORBIDDEN, msg('req.forbidden'));
     }
     return true;
   }

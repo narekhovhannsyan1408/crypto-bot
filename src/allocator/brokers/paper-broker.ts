@@ -5,6 +5,7 @@ import { AllocatorBroker, AllocatorFill } from './allocator-broker';
 /** Виртуальный счёт: настоящие цены Binance, комиссия и проскальзывание моделируются. */
 export class PaperAllocatorBroker implements AllocatorBroker {
   readonly mode = 'paper' as const;
+  readonly quoteAsset = 'USDT';
 
   constructor(
     private readonly marketData: AllocatorMarketDataService,

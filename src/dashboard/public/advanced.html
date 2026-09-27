@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto Bot — расширенный режим</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="topbar">
+        <div class="topbar-copy">
+          <h1>Crypto Bot Live Dashboard</h1>
+          <p class="muted">
+            Живой мониторинг исполнения, портфеля, риска и торговых решений
+          </p>
+        </div>
+        <div class="topbar-actions">
+          <div class="status-chip" id="connection-status">Подключение...</div>
+          <div class="status-chip subtle" id="data-freshness">—</div>
+          <a href="/" class="secondary-button">← Простой режим</a>
+          <button id="refresh-button" class="secondary-button">Обновить snapshot</button>
+          <button id="liquidate-spot-assets-button" class="danger-button intraday-only">
+            Продать все spot-активы
+          </button>
+          <button id="panic-button" class="danger-button intraday-only">
+            Экстренно закрыть все позиции
+          </button>
+        </div>
+      </header>
+
+      <section class="panel" id="allocator-panel" hidden>
+        <div class="panel-header">
+          <h2>Трендовый аллокатор</h2>
+          <span class="status-chip subtle" id="allocator-status">—</span>
+        </div>
+        <section class="cards-grid" id="allocator-metrics"></section>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Актив</th>
+                <th>Тренд</th>
+                <th>Целевая доля</th>
+                <th>Текущая доля</th>
+                <th>Количество</th>
+                <th>Цена</th>
+                <th>Стоимость, USDT</th>
+              </tr>
+            </thead>
+            <tbody id="allocator-assets"></tbody>
+          </table>
+        </div>
+        <div class="topbar-actions">
+          <button id="allocator-rebalance-button" class="secondary-button">Ребалансировать сейчас</button>
+          <button id="allocator-stop-button" class="danger-button">Остановить и продать всё в USDT</button>
+        </div>
+      </section>
+
+      <section class="panel intraday-only">
+        <div class="panel-header">
+          <h2>Портфель и Балансы</h2>
+          <span class="muted">Ключевые метрики бота и Binance</span>
+        </div>
+        <section class="cards-grid" id="metrics-grid"></section>
+      </section>
+
+      <section class="panel intraday-only">
+        <div class="panel-header">
+          <h2>Режим исполнения</h2>
+          <span class="muted">Статус среды, routing и синхронизация с Binance</span>
+        </div>
+        <div class="execution-grid">
+          <div id="execution-status" class="execution-status-card"></div>
+          <div class="execution-actions">
+            <div class="action-group">
+              <div class="action-group-title">Безопасный режим</div>
+              <button
+                class="secondary-button"
+                data-execution-mode="paper"
+                data-market-type="spot"
+              >
+                Paper
+              </button>
+            </div>
+            <div class="action-group">
+              <div class="action-group-title">Demo</div>
+              <button
+                class="secondary-button"
+                data-execution-mode="live_testnet"
+                data-market-type="spot"
+              >
+                Demo Spot
+              </button>
+              <button
+                class="secondary-button"
+                data-execution-mode="live_testnet"
+                data-market-type="futures"
+              >
+                Demo Futures
+              </button>
+              <button
+                class="secondary-button"
+                data-execution-mode="live_testnet"
+                data-market-type="hybrid"
+              >
+                Demo Hybrid
+              </button>
+            </div>
+            <div class="action-group">
+              <div class="action-group-title">Live Real</div>
+              <button
+                class="danger-button"
+                data-execution-mode="live_real"
+                data-market-type="spot"
+              >
+                Live Spot
+              </button>
+              <button
+                class="danger-button"
+                data-execution-mode="live_real"
+                data-market-type="futures"
+              >
+                Live Futures
+              </button>
+              <button
+                class="danger-button"
+                data-execution-mode="live_real"
+                data-market-type="hybrid"
+              >
+                Live Hybrid
+              </button>
+            </div>
+            <div class="action-group action-group-wide">
+              <div class="action-group-title">Сервис</div>
+              <button id="refresh-execution-button" class="secondary-button">
+                Обновить статус Binance
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>График капитала</h2>
+          <span class="muted">Live equity curve</span>
+        </div>
+        <div class="chart-wrapper">
+          <svg id="equity-chart" viewBox="0 0 1000 320" preserveAspectRatio="none"></svg>
+        </div>
+      </section>
+
+      <section class="two-column intraday-only">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Открытые позиции</h2>
+          <span class="status-chip subtle" id="positions-count">0</span>
+          </div>
+          <div class="table-wrapper">
+          <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Символ</th>
+                  <th>Стратегия</th>
+                  <th>Сторона</th>
+                  <th>Рынок</th>
+                  <th>Вход</th>
+                  <th>Текущая</th>
+                  <th>Возраст, мин</th>
+                  <th>Плавающий результат</th>
+                  <th>Стоп</th>
+                  <th>Тейк</th>
+                  <th>Защита</th>
+                  <th>Действие</th>
+                </tr>
+              </thead>
+              <tbody id="positions-table"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Риск и runtime</h2>
+            <span class="muted">Universe, лимиты, загрузка</span>
+          </div>
+          <div class="runtime-columns">
+            <div class="subpanel">
+              <h3>Universe</h3>
+              <ul id="universe-list" class="tag-list"></ul>
+            </div>
+            <div class="subpanel">
+              <h3>Риск-менеджмент</h3>
+              <div id="risk-state" class="kv-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel intraday-only">
+        <div class="panel-header">
+          <h2>Автоподбор стратегии</h2>
+          <span class="muted">Какая стратегия выбрана и почему</span>
+        </div>
+        <div class="strategy-selection-layout">
+          <div class="strategy-selection-summary">
+            <div id="strategy-selection-summary"></div>
+            <div class="subpanel">
+              <h3>Активные стратегии</h3>
+              <ul id="active-strategies-list" class="tag-list"></ul>
+            </div>
+          </div>
+          <div class="subpanel">
+            <h3>Кандидаты последнего выбора</h3>
+            <div id="strategy-candidates-list" class="strategy-candidates-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Сделки</h2>
+          <span class="muted">Последние операции и результат</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Время</th>
+                <th>Символ</th>
+                <th>Стратегия</th>
+                <th>Действие</th>
+                <th>Сторона</th>
+                <th>Вход</th>
+                <th>Выход</th>
+                <th>Чистый результат</th>
+                <th>Комиссии</th>
+                <th>Причина</th>
+              </tr>
+            </thead>
+            <tbody id="trades-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Live-логи</h2>
+          <span class="muted">Последние события системы</span>
+        </div>
+        <div class="logs-toolbar">
+          <div class="log-filter-group" id="log-filter-group">
+            <button class="log-filter-button active" data-log-filter="ALL">Все</button>
+            <button class="log-filter-button" data-log-filter="RISK">Риск-менеджер</button>
+            <button class="log-filter-button" data-log-filter="СИГНАЛ">Сигнал</button>
+            <button class="log-filter-button" data-log-filter="СДЕЛКА">Сделка</button>
+            <button class="log-filter-button" data-log-filter="ПОРТФЕЛЬ">Портфель</button>
+            <button class="log-filter-button" data-log-filter="ИНФО">Инфо</button>
+            <button class="log-filter-button" data-log-filter="ОШИБКА">Ошибка</button>
+          </div>
+          <input
+            id="log-search-input"
+            class="log-search-input"
+            type="search"
+            placeholder="Поиск по логам, символу, причине..."
+          />
+        </div>
+        <div id="logs-container" class="logs-container"></div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -8,6 +8,7 @@ import { ScannerModule } from './scanner/scanner.module';
 import { BacktestModule } from './backtest/backtest.module';
 import { StreamingModule } from './streaming/streaming.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AllocatorModule } from './allocator/allocator.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ScannerModule,
     BacktestModule,
     DashboardModule,
+    AllocatorModule,
   ],
 })
 export class AppModule {}

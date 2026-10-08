@@ -88,13 +88,17 @@ async function buildSegment(segment, index) {
   } else {
     const clip = join(CLIPS, `${segment.visual.clip}.mp4`);
     const clipLength = duration(clip);
-    // Длинный клип немного ускоряем, короткий — удерживаем на последнем кадре
-    const speed = Math.min(Math.max(clipLength / (length + 1.5), 1), MAX_CLIP_SPEEDUP);
+    // Длинный клип немного ускоряем, короткий — удерживаем на последнем кадре.
+    // fit: клип записан ровно под озвучку, но запись экрана растягивает время —
+    // сжимаем его точно до длины сегмента, чтобы действия совпали с репликами
+    const speed = segment.visual.fit
+      ? clipLength / length
+      : Math.min(Math.max(clipLength / (length + 1.5), 1), MAX_CLIP_SPEEDUP);
     const played = clipLength / speed;
     length = Math.max(length, played);
     // Плашка поверх записи, например «Replay · …» для кадров не из живой сессии
     const label = segment.visual.label
-      ? `,drawtext=fontfile=${LABEL_FONT}:text='${segment.visual.label.replace(/[':\\]/g, '')}':x=w-tw-48:y=44:fontsize=30:fontcolor=white:box=1:boxcolor=0x3b5bdb@0.92:boxborderw=16`
+      ? `,drawtext=fontfile=${LABEL_FONT}:text='${segment.visual.label.replace(/[':\\]/g, '')}':x=40:y=84:fontsize=34:fontcolor=white:box=1:boxcolor=0x3b5bdb@0.95:boxborderw=18`
       : '';
     video = [
       '-i', clip,
@@ -123,7 +127,7 @@ const srtTime = (seconds) => {
   return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`;
 };
 
-const MAX_CAPTION = 84;
+const MAX_CAPTION = 64;
 
 // Режет фразу на части примерно равной длины по границам слов (без «висячих» хвостов)
 function balancedSplit(sentence) {
@@ -162,7 +166,21 @@ function phrases(text) {
       merged.push(sentence);
     }
   }
-  return merged.flatMap(balancedSplit);
+  // Длинную фразу сначала делим по запятым и двоеточиям, чтобы строки не рвались посреди смысла
+  return merged.flatMap((sentence) => {
+    if (sentence.length <= MAX_CAPTION) return [sentence];
+    const clauses = sentence.split(/(?<=[,:;])\s+/);
+    const lines = [];
+    for (const clause of clauses) {
+      const last = lines[lines.length - 1];
+      if (last && `${last} ${clause}`.length <= MAX_CAPTION) {
+        lines[lines.length - 1] = `${last} ${clause}`;
+      } else {
+        lines.push(clause);
+      }
+    }
+    return lines.flatMap(balancedSplit);
+  });
 }
 
 function captions(segments) {
@@ -202,7 +220,7 @@ function assemble(built, srtPath, { burn, name }) {
   });
   const total = built.reduce((sum, item) => sum + item.length, 0) - FADE * (built.length - 1);
   const style =
-    "FontName=Helvetica Neue,FontSize=10,PrimaryColour=&H00FFFFFF,OutlineColour=&H80101828,BorderStyle=3,Outline=6,Shadow=0,MarginV=26";
+    "FontName=Helvetica Neue,FontSize=10,PrimaryColour=&H00FFFFFF,OutlineColour=&H20101828,BorderStyle=3,Outline=6,Shadow=0,MarginV=26";
   const subtitles = burn ? `,subtitles=${srtPath}:force_style='${style}'` : '';
   filters.push(
     `${video}fade=t=in:st=0:d=0.6,fade=t=out:st=${(total - 1).toFixed(3)}:d=1${subtitles}[vout]`,

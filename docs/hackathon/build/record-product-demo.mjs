@@ -129,72 +129,91 @@ async function main() {
     `addEventListener('DOMContentLoaded', () => { ${CURSOR_SCRIPT} })`,
   );
 
-  // 1. Главная и запуск на Solana: симуляция на настоящих котировках Jupiter
+  // Действия идут по таймингу озвучки (секунды от начала клипа, голос начинается с 0.5 с),
+  // чтобы картинка совпадала с тем, о чём говорится
+  const timeline = () => {
+    const t0 = Date.now();
+    return (seconds) => sleep(Math.max(0, t0 + seconds * 1000 - Date.now()));
+  };
+
+  // 1. Главная и выбор режима: голос про свой кошелёк и симуляцию звучит при открытом окне
   if (SCENES.has('start')) {
     await page.goto(`${LIVE_URL}/?lang=en`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('#start-view:not([hidden])', { timeout: 20_000 });
     await sleep(800);
     await record(page, 'product-1-start', async () => {
-      await sleep(1500);
+      const at = timeline();
+      await at(2.8);
+      await moveTo(page, '#start-solana-btn');
+      await at(5.2);
       await moveTo(page, '#start-test-btn');
-      await sleep(700);
-      await moveTo(page, '#start-real-btn');
-      await sleep(700);
-      await click(page, '#start-solana-btn', 1400);
+      await at(8.0);
+      await click(page, '#start-solana-btn', 0);
+      await at(10.0);
       await moveTo(page, 'input[value="solana_real"] + span');
-      await sleep(1000);
+      await at(12.7);
       await moveTo(page, 'input[value="solana_sim"] + span');
-      await sleep(1200);
-      await click(page, '#start-confirm', 200);
-      await page.waitForSelector('#session-view:not([hidden])', { timeout: 90_000 });
-      await sleep(4500);
+      await at(17.6);
+      await click(page, '#start-confirm', 0);
+      await at(18.8);
     });
+    await page.waitForSelector('#session-view:not([hidden])', { timeout: 90_000 });
+    await sleep(300);
   }
 
-  // 2. Что бот держит и почему: доли, тренды, лента с объяснением каждой сделки
+  // 2. Первое решение, доли и лента с объяснением сделок
   if (SCENES.has('now')) {
     await record(page, 'product-2-now', async () => {
-      await smoothScroll(page, '.now-card', 1800);
-      await sleep(3500);
-      await smoothScroll(page, '#activity', 1800);
-      await sleep(5000);
-      await smoothScroll(page, 0, 1400);
-      await sleep(800);
+      const at = timeline();
+      await at(3.1);
+      await smoothScroll(page, '.now-card', 1400);
+      await at(10.5);
+      await smoothScroll(page, '#activity', 1400);
+      await at(17.3);
     });
   }
 
-  // 3. Расширенный режим живой сессии: сигналы, доли, исполнение, журнал, лог
+  // 3. Расширенный режим живой сессии: таблица сигналов, пока о ней говорится, потом настройки, журнал, лог
   if (SCENES.has('advanced')) {
     await page.goto(`${LIVE_URL}/advanced?lang=en`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('#session-card:not([hidden])', { timeout: 20_000 });
     await sleep(1500);
     await record(page, 'product-3-advanced', async () => {
-      await sleep(2000);
-      await smoothScroll(page, '#signals-card', 1600);
+      const at = timeline();
+      await at(2.4);
+      await smoothScroll(page, '#signals-card', 1400);
+      await moveTo(page, '#signals-table tbody tr:first-child td:nth-child(2)');
+      await at(10.4);
       await moveTo(page, '#signals-table tbody tr:first-child td:nth-child(3)');
-      await sleep(3500);
-      await smoothScroll(page, '.adv-grid', 1600);
+      await at(14.4);
+      await smoothScroll(page, '.adv-grid', 1300);
       await moveTo(page, '#chain-info');
-      await sleep(3000);
-      await smoothScroll(page, '#journal-card', 1600);
-      await sleep(2000);
-      await smoothScroll(page, '#logs-card', 1600);
-      await sleep(3000);
+      await at(17.0);
+      await smoothScroll(page, '#journal-card', 1000);
+      await at(18.3);
+      await smoothScroll(page, '#logs-card', 1000);
+      await at(21.7);
     });
   }
 
-  // 4. История на реплее 2026 года и три языка интерфейса
+  // 4. Реплей 2026 года: цифры на английском экране, языки — ровно под фразу о языках
   if (SCENES.has('replay')) {
     await page.goto(`${REPLAY_URL}/?lang=en`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('#session-view:not([hidden])', { timeout: 20_000 });
     await sleep(1500);
     await record(page, 'product-4-replay', async () => {
-      await sleep(1500);
+      const at = timeline();
+      await at(6.6);
       await moveTo(page, '#profit-value');
-      await sleep(2000);
-      await click(page, '#lang-switch button[data-lang="ru"]', 2200);
-      await click(page, '#lang-switch button[data-lang="hy"]', 2200);
-      await click(page, '#lang-switch button[data-lang="en"]', 1500);
+      await at(8.9);
+      await moveTo(page, '#benchmark');
+      await at(14.4);
+      await click(page, '#lang-switch button[data-lang="ru"]', 0);
+      await at(16.2);
+      await click(page, '#lang-switch button[data-lang="hy"]', 0);
+      await at(18.0);
+      await click(page, '#lang-switch button[data-lang="en"]', 0);
+      await at(19.0);
     });
   }
 
@@ -215,19 +234,22 @@ async function main() {
     });
   }
 
-  // 6. Остановка живой сессии: всё продаётся, итог
+  // 6. Остановка живой сессии: кнопка, подтверждение, итог рядом с «просто держать»
   if (SCENES.has('stop')) {
     await page.goto(`${LIVE_URL}/?lang=en`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('#session-view:not([hidden])', { timeout: 20_000 });
     await sleep(1200);
     await record(page, 'product-6-stop', async () => {
-      await sleep(1000);
-      await click(page, '#stop-btn', 1500);
-      await click(page, '#stop-confirm', 200);
+      const at = timeline();
+      await at(1.9);
+      await click(page, '#stop-btn', 0);
+      await at(3.3);
+      await click(page, '#stop-confirm', 0);
       await page.waitForSelector('#stopped-note:not([hidden])', { timeout: 90_000 });
-      await sleep(2500);
-      await smoothScroll(page, '#activity', 1800);
-      await sleep(3500);
+      await moveTo(page, '#benchmark');
+      await at(9.6);
+      await smoothScroll(page, '#activity', 1600);
+      await at(15.2);
     });
   }
 

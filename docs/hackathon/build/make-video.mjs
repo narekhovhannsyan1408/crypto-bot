@@ -75,15 +75,19 @@ async function buildSegment(segment, index) {
   let length = spoken + LEAD + TAIL;
   let video;
 
-  if (segment.visual.slide) {
+  if (segment.visual.slide || segment.visual.image) {
     const frames = Math.round(length * FPS);
-    const image = join(SLIDES, `slide-${String(segment.visual.slide).padStart(2, '0')}.png`);
-    // Медленный зум: изображение увеличено вдвое, чтобы движение было плавным
+    // image — готовый кадр 1920×1080 (путь от docs/hackathon), slide — номер слайда
+    const image = segment.visual.image
+      ? join(ROOT, segment.visual.image)
+      : join(SLIDES, `slide-${String(segment.visual.slide).padStart(2, '0')}.png`);
+    // Медленный зум: изображение увеличено вдвое, чтобы движение было плавным; zoom: 0 — без зума
+    const zoom = script.zoom ?? 0.035;
     video = [
       '-i', image,
       '-i', audio,
       '-filter_complex',
-      `[0:v]scale=3840:2160,zoompan=z='1+0.035*on/${frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1920x1080:fps=${FPS},format=yuv420p[v];${audioFilter}`,
+      `[0:v]scale=3840:2160,zoompan=z='1+${zoom}*on/${frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1920x1080:fps=${FPS},format=yuv420p[v];${audioFilter}`,
     ];
   } else {
     const clip = join(CLIPS, `${segment.visual.clip}.mp4`);
@@ -213,7 +217,7 @@ function assemble(built, srtPath, { burn, name }) {
     offset += built[index].length - FADE;
     const v = `[v${index + 1}]`;
     const a = `[a${index + 1}]`;
-    filters.push(`${video}[${index + 1}:v]xfade=transition=fade:duration=${FADE}:offset=${offset.toFixed(3)}${v}`);
+    filters.push(`${video}[${index + 1}:v]xfade=transition=${script.transition ?? 'fade'}:duration=${FADE}:offset=${offset.toFixed(3)}${v}`);
     filters.push(`${audio}[${index + 1}:a]acrossfade=d=${FADE}${a}`);
     video = v;
     audio = a;

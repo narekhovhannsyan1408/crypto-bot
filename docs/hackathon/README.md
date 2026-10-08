@@ -12,6 +12,8 @@ Everything for the submission, in English.
 | `video/captions.srt` | Captions to upload next to the clean video (YouTube, Loom…) |
 | `video/voiceover.md` | Voice-over script with timings — read it to record your own voice |
 | `video/script.json` | Source of the narration (segments, text, which slide or clip, voice) |
+| `video/crypto-bot-pitch-captions.mp4` | **Pitch video for the Colosseum form**, 1:53: the deck PDF presented page by page in a PDF viewer, first-person narration, captions burned in (not in git) |
+| `video/pitch-script.json`, `video/crypto-bot-pitch.srt` | Narration of the pitch video and its captions |
 | `video/crypto-bot-product-demo-captions.mp4` | **Product demo for the Colosseum form**, 1:50: only the live app (start on Solana, first decision, advanced mode, a labelled 2026 replay, stop), narrated, captions burned in (not in git) |
 | `video/demo-script.json`, `video/crypto-bot-product-demo.srt` | Narration of the product demo and its captions |
 | `video/crypto-bot-x-teaser.mp4` | ~30-second teaser with captions for X: intro → live demo → end card (not in git) |
@@ -68,7 +70,11 @@ node make-video.mjs
 node record-product-demo.mjs        # then convert work/clips/product-*.webm to .mp4 as below
 SCRIPT=demo-script.json node make-video.mjs
 
-# 6. Social: X teaser, 9:16 story, X avatar and header
+# 6. Pitch video: deck pages inside a PDF viewer, narrated
+node render-viewer-pages.mjs
+SCRIPT=pitch-script.json node make-video.mjs
+
+# 7. Social: X teaser, 9:16 story, X avatar and header
 node make-social-cuts.mjs
 node render-x-assets.mjs
 ```

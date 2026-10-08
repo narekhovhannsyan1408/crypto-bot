@@ -1,0 +1,91 @@
+{
+  "title": "Crypto Bot — pitch",
+  "output": "crypto-bot-pitch",
+  "engine": "kokoro",
+  "kokoro": {
+    "voice": "af_heart",
+    "speed": 1.13
+  },
+  "voice": "Samantha",
+  "rate": 178,
+  "zoom": 0,
+  "segments": [
+    {
+      "id": "s01-title",
+      "visual": {
+        "image": "build/work/pitch/page-01.png"
+      },
+      "text": "Hi! I'm the founder of Crypto Bot: a calm autopilot for Bitcoin, Ethereum and Solana that trades on Solana and can record every decision on-chain."
+    },
+    {
+      "id": "s02-problem",
+      "visual": {
+        "image": "build/work/pitch/page-02.png"
+      },
+      "text": "I'm a senior software engineer with ten years in web development. In March, I built seven day-trading strategies. Backtested on Binance history, none had an edge after fees. Bots like that overtrade, can't prove their record, and hold your keys."
+    },
+    {
+      "id": "s03-solution",
+      "visual": {
+        "image": "build/work/pitch/page-03.png"
+      },
+      "text": "So I built the opposite: one slow decision a day. Price above its moving averages? Hold more of the coin. Below them? Wait in dollars."
+    },
+    {
+      "id": "s04-how",
+      "visual": {
+        "image": "build/work/pitch/page-04.png"
+      },
+      "text": "After the daily close, the bot computes the signal, plans the rebalance, and swaps through Jupiter straight from the user's own wallet."
+    },
+    {
+      "id": "s05-proof",
+      "visual": {
+        "image": "build/work/pitch/page-05.png"
+      },
+      "text": "Each decision can be written to Solana with the Memo program before any order. Block time can't be backdated, so anyone can check it. Devnet for now."
+    },
+    {
+      "id": "s06-backtest",
+      "visual": {
+        "image": "build/work/pitch/page-06.png"
+      },
+      "text": "Backtested on Bitcoin and Ethereum since twenty eighteen, with fees: forty-two percent a year, versus twenty-three for buy and hold, at about half the drawdown. A backtest, not a promise."
+    },
+    {
+      "id": "s07-solana",
+      "visual": {
+        "image": "build/work/pitch/page-07.png"
+      },
+      "text": "Solana makes it practical: Jupiter quoted about four cents to buy and sell five hundred dollars of Bitcoin, versus about a dollar on an exchange."
+    },
+    {
+      "id": "s08-product",
+      "visual": {
+        "image": "build/work/pitch/page-08.png"
+      },
+      "text": "Starting takes a click and a confirmation. The app explains every trade in plain words, in English, Russian and Armenian."
+    },
+    {
+      "id": "s09-trust",
+      "visual": {
+        "image": "build/work/pitch/page-09.png"
+      },
+      "text": "It's non-custodial, with a risk-free simulation on live Jupiter quotes, auto-protection, and a hundred seventy-nine automated tests."
+    },
+    {
+      "id": "s10-roadmap",
+      "visual": {
+        "image": "build/work/pitch/page-10.png"
+      },
+      "text": "Next: a mainnet proof journal with a public verifier, then an on-chain vault, then a marketplace of strategies ranked by proven results."
+    },
+    {
+      "id": "s11-close",
+      "visual": {
+        "image": "build/work/pitch/page-11.png"
+      },
+      "text": "Why me? I ship, and I trust data over my own work: when it says no, I start again. Crypto Bot: trend-following you can verify. Thank you."
+    }
+  ]
+}

@@ -15,21 +15,21 @@
       "visual": {
         "image": "build/work/pitch/page-01.png"
       },
-      "text": "Hi! I'm Narek Hovhannisyan, the founder of Crypto Bot: a calm autopilot for Bitcoin, Ethereum and Solana that trades on Solana and can record every decision on-chain."
+      "text": "Hi! I'm Narek Hovhannisyan. This is Crypto Bot: a calm autopilot for Bitcoin, Ethereum and Solana that trades on Solana and can record every decision on-chain."
     },
     {
       "id": "s02-problem",
       "visual": {
         "image": "build/work/pitch/page-02.png"
       },
-      "text": "I'm a senior software engineer with ten years in web development. In March, I built seven day-trading strategies. Backtested on Binance history, none had an edge after fees. Bots like that overtrade, can't prove their record, and hold your keys."
+      "text": "Retail trading bots fail people in three ways: they overtrade, their track records can't be checked, and they want your keys. We built seven intraday strategies first. Backtested on Binance history, none had an edge after fees."
     },
     {
       "id": "s03-solution",
       "visual": {
         "image": "build/work/pitch/page-03.png"
       },
-      "text": "So I built the opposite: one slow decision a day. Price above its moving averages? Hold more of the coin. Below them? Wait in dollars."
+      "text": "So Crypto Bot does the opposite: one slow decision a day. Price above its moving averages? Hold more of the coin. Below them? Wait in dollars."
     },
     {
       "id": "s04-how",
@@ -85,7 +85,7 @@
       "visual": {
         "image": "build/work/pitch/page-11.png"
       },
-      "text": "Why me? I ship, and I trust data over my own work: when it says no, I start again. Crypto Bot: trend-following you can verify. Thank you."
+      "text": "Crypto Bot: one slow decision a day, from your own wallet, on Solana. Trend-following you can verify. Thank you."
     }
   ]
 }

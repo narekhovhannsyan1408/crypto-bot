@@ -1,163 +1,159 @@
 1
-00:00:00,500 --> 00:00:02,350
-Hi! I'm Narek Hovhannisyan.
-
-2
-00:00:02,400 --> 00:00:05,797
+00:00:00,500 --> 00:00:03,850
 This is Crypto Bot: a calm autopilot for Bitcoin,
 
-3
-00:00:05,847 --> 00:00:08,189
+2
+00:00:03,900 --> 00:00:06,209
 Ethereum and Solana that trades on
 
-4
-00:00:08,239 --> 00:00:11,425
+3
+00:00:06,259 --> 00:00:09,400
 Solana and can record every decision on-chain.
 
-5
-00:00:12,225 --> 00:00:15,946
+4
+00:00:10,200 --> 00:00:13,921
 Retail trading bots fail people in three ways: they overtrade,
 
-6
-00:00:15,996 --> 00:00:19,717
+5
+00:00:13,971 --> 00:00:17,692
 their track records can't be checked, and they want your keys.
 
-7
-00:00:19,767 --> 00:00:22,211
+6
+00:00:17,742 --> 00:00:20,186
 We built seven intraday strategies first.
 
-8
-00:00:22,261 --> 00:00:25,800
+7
+00:00:20,236 --> 00:00:23,775
 Backtested on Binance history, none had an edge after fees.
 
-9
-00:00:26,600 --> 00:00:30,312
+8
+00:00:24,575 --> 00:00:28,287
 So Crypto Bot does the opposite: one slow decision a day.
 
-10
-00:00:30,362 --> 00:00:32,425
+9
+00:00:28,337 --> 00:00:30,400
 Price above its moving averages?
 
-11
-00:00:32,475 --> 00:00:34,669
+10
+00:00:30,450 --> 00:00:32,644
 Hold more of the coin. Below them?
 
-12
-00:00:34,719 --> 00:00:35,725
+11
+00:00:32,694 --> 00:00:33,700
 Wait in dollars.
 
-13
-00:00:36,525 --> 00:00:39,428
+12
+00:00:34,500 --> 00:00:37,403
 After the daily close, the bot computes the signal,
 
-14
-00:00:39,478 --> 00:00:40,586
+13
+00:00:37,453 --> 00:00:38,561
 plans the rebalance,
 
-15
-00:00:40,636 --> 00:00:44,175
+14
+00:00:38,611 --> 00:00:42,150
 and swaps through Jupiter straight from the user's own wallet.
 
-16
-00:00:44,975 --> 00:00:47,307
+15
+00:00:42,950 --> 00:00:45,282
 Each decision can be written to Solana
 
-17
-00:00:47,357 --> 00:00:49,751
+16
+00:00:45,332 --> 00:00:47,726
 with the Memo program before any order.
 
-18
-00:00:49,801 --> 00:00:53,135
+17
+00:00:47,776 --> 00:00:51,110
 Block time can't be backdated, so anyone can check it.
 
-19
-00:00:53,185 --> 00:00:54,075
+18
+00:00:51,160 --> 00:00:52,050
 Devnet for now.
 
-20
-00:00:54,875 --> 00:00:58,415
+19
+00:00:52,850 --> 00:00:56,390
 Backtested on Bitcoin and Ethereum since twenty eighteen,
 
-21
-00:00:58,465 --> 00:01:00,682
+20
+00:00:56,440 --> 00:00:58,657
 with fees: forty-two percent a year,
 
-22
-00:01:00,732 --> 00:01:03,012
+21
+00:00:58,707 --> 00:01:00,987
 versus twenty-three for buy and hold,
 
-23
-00:01:03,062 --> 00:01:04,713
+22
+00:01:01,037 --> 00:01:02,688
 at about half the drawdown.
 
-24
-00:01:04,763 --> 00:01:06,350
+23
+00:01:02,738 --> 00:01:04,325
 A backtest, not a promise.
 
-25
-00:01:07,150 --> 00:01:08,734
+24
+00:01:05,125 --> 00:01:06,709
 Solana makes it practical:
 
-26
-00:01:08,784 --> 00:01:11,123
+25
+00:01:06,759 --> 00:01:09,098
 Jupiter quoted about four cents to buy
 
-27
-00:01:11,173 --> 00:01:13,699
+26
+00:01:09,148 --> 00:01:11,674
 and sell five hundred dollars of Bitcoin,
 
-28
-00:01:13,749 --> 00:01:16,025
+27
+00:01:11,724 --> 00:01:14,000
 versus about a dollar on an exchange.
 
-29
-00:01:16,825 --> 00:01:19,422
+28
+00:01:14,800 --> 00:01:17,397
 Starting takes a click and a confirmation.
 
-30
-00:01:19,472 --> 00:01:22,951
+29
+00:01:17,447 --> 00:01:20,926
 The app explains every trade in plain words, in English,
 
-31
-00:01:23,001 --> 00:01:24,275
+30
+00:01:20,976 --> 00:01:22,250
 Russian and Armenian.
 
-32
-00:01:25,075 --> 00:01:26,253
+31
+00:01:23,050 --> 00:01:24,228
 It's non-custodial,
 
-33
-00:01:26,303 --> 00:01:29,548
+32
+00:01:24,278 --> 00:01:27,523
 with a risk-free simulation on live Jupiter quotes,
 
-34
-00:01:29,598 --> 00:01:33,425
+33
+00:01:27,573 --> 00:01:31,400
 auto-protection, and a hundred seventy-nine automated tests.
 
-35
-00:01:34,225 --> 00:01:37,517
+34
+00:01:32,200 --> 00:01:35,492
 Next: a mainnet proof journal with a public verifier,
 
-36
-00:01:37,567 --> 00:01:38,968
+35
+00:01:35,542 --> 00:01:36,943
 then an on-chain vault,
 
-37
-00:01:39,018 --> 00:01:42,625
+36
+00:01:36,993 --> 00:01:40,600
 then a marketplace of strategies ranked by proven results.
 
-38
-00:01:43,425 --> 00:01:47,126
+37
+00:01:41,400 --> 00:01:45,101
 Crypto Bot: one slow decision a day, from your own wallet,
 
-39
-00:01:47,176 --> 00:01:47,773
+38
+00:01:45,151 --> 00:01:45,748
 on Solana.
 
-40
-00:01:47,823 --> 00:01:49,778
+39
+00:01:45,798 --> 00:01:47,753
 Trend-following you can verify.
 
-41
-00:01:49,828 --> 00:01:50,425
+40
+00:01:47,803 --> 00:01:48,400
 Thank you.

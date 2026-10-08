@@ -14,11 +14,19 @@ import { join } from 'node:path';
 import { speak } from './tts-kokoro.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
-const WORK = join(import.meta.dirname, 'work');
 const VIDEO = join(ROOT, 'video');
 const SLIDES = join(ROOT, 'slides');
-const CLIPS = join(WORK, 'clips');
-const script = JSON.parse(readFileSync(join(VIDEO, 'script.json'), 'utf8'));
+const CLIPS = join(import.meta.dirname, 'work', 'clips');
+// SCRIPT=demo-script.json — другой ролик (например, продуктовое демо) из того же конвейера
+const script = JSON.parse(
+  readFileSync(join(VIDEO, process.env.SCRIPT ?? 'script.json'), 'utf8'),
+);
+// У каждого ролика свои озвучка и сегменты; основной ролик — в work/, как раньше
+const NAME = script.output ?? 'crypto-bot-demo';
+const WORK = script.output
+  ? join(import.meta.dirname, 'work', script.output)
+  : join(import.meta.dirname, 'work');
+const LABEL_FONT = '/System/Library/Fonts/Helvetica.ttc';
 
 const FPS = 30;
 const LEAD = 0.5; // тишина перед репликой
@@ -84,11 +92,15 @@ async function buildSegment(segment, index) {
     const speed = Math.min(Math.max(clipLength / (length + 1.5), 1), MAX_CLIP_SPEEDUP);
     const played = clipLength / speed;
     length = Math.max(length, played);
+    // Плашка поверх записи, например «Replay · …» для кадров не из живой сессии
+    const label = segment.visual.label
+      ? `,drawtext=fontfile=${LABEL_FONT}:text='${segment.visual.label.replace(/[':\\]/g, '')}':x=w-tw-48:y=44:fontsize=30:fontcolor=white:box=1:boxcolor=0x3b5bdb@0.92:boxborderw=16`
+      : '';
     video = [
       '-i', clip,
       '-i', audio,
       '-filter_complex',
-      `[0:v]setpts=PTS/${speed.toFixed(4)},fps=${FPS},tpad=stop_mode=clone:stop_duration=${(length - played + 1).toFixed(2)},scale=1920:1080,format=yuv420p[v];${audioFilter}`,
+      `[0:v]setpts=PTS/${speed.toFixed(4)},fps=${FPS},tpad=stop_mode=clone:stop_duration=${(length - played + 1).toFixed(2)},scale=1920:1080${label},format=yuv420p[v];${audioFilter}`,
     ];
   }
 
@@ -235,8 +247,8 @@ const built = [];
 for (const [index, segment] of script.segments.entries()) {
   built.push({ segment, ...(await buildSegment(segment, index)) });
 }
-const srtPath = join(VIDEO, 'captions.srt');
+const srtPath = join(VIDEO, script.output ? `${NAME}.srt` : 'captions.srt');
 writeFileSync(srtPath, captions(built));
-voiceoverDoc(built);
-assemble(built, srtPath, { burn: false, name: 'crypto-bot-demo.mp4' });
-assemble(built, srtPath, { burn: true, name: 'crypto-bot-demo-captions.mp4' });
+if (!script.output) voiceoverDoc(built);
+assemble(built, srtPath, { burn: false, name: `${NAME}.mp4` });
+assemble(built, srtPath, { burn: true, name: `${NAME}-captions.mp4` });

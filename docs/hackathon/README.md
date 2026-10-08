@@ -12,6 +12,8 @@ Everything for the submission, in English.
 | `video/captions.srt` | Captions to upload next to the clean video (YouTube, Loom…) |
 | `video/voiceover.md` | Voice-over script with timings — read it to record your own voice |
 | `video/script.json` | Source of the narration (segments, text, which slide or clip, voice) |
+| `video/crypto-bot-product-demo-captions.mp4` | **Product demo for the Colosseum form**, 1:50: only the live app (start on Solana, first decision, advanced mode, a labelled 2026 replay, stop), narrated, captions burned in (not in git) |
+| `video/demo-script.json`, `video/crypto-bot-product-demo.srt` | Narration of the product demo and its captions |
 | `video/crypto-bot-x-teaser.mp4` | ~30-second teaser with captions for X: intro → live demo → end card (not in git) |
 | `video/crypto-bot-story-9x16.mp4` | 11-second vertical story (1080×1920) for Instagram and Telegram Stories: the product live, the Colosseum hackathon, the X page (not in git) |
 | `stories/story.html` | Scenes of the vertical story; the voice-over lines are in `build/make-social-cuts.mjs` |
@@ -60,7 +62,13 @@ BASE_URL=http://127.0.0.1:3210 node capture-screens.mjs
 # 4. Video
 node make-video.mjs
 
-# 5. Social: X teaser, 9:16 story, X avatar and header
+# 5. Product demo (live app only): two bots — an empty one on :3210 and the 2026 replay on :3212
+#      BOT_ALLOCATOR_STATE_FILE=.tmp/live.json BOT_DASHBOARD_PORT=3210 BOT_ALLOCATOR_ASSETS=BTCUSDT,ETHUSDT,SOLUSDT npm run start
+#      BOT_ALLOCATOR_STATE_FILE=.tmp/replay.json BOT_DASHBOARD_PORT=3212 BOT_ALLOCATOR_ASSETS=BTCUSDT,ETHUSDT,SOLUSDT npm run start
+node record-product-demo.mjs        # then convert work/clips/product-*.webm to .mp4 as below
+SCRIPT=demo-script.json node make-video.mjs
+
+# 6. Social: X teaser, 9:16 story, X avatar and header
 node make-social-cuts.mjs
 node render-x-assets.mjs
 ```

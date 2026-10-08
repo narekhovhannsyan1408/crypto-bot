@@ -1,0 +1,119 @@
+1
+00:00:00,500 --> 00:00:02,641
+This is Crypto Bot, running live.
+
+2
+00:00:02,691 --> 00:00:05,097
+Once a day it decides whether to hold
+
+3
+00:00:05,147 --> 00:00:08,351
+Bitcoin, Ethereum and Solana, or wait in dollars.
+
+4
+00:00:08,401 --> 00:00:11,537
+I'll start it on Solana in simulation mode: real
+
+5
+00:00:11,587 --> 00:00:14,791
+Jupiter quotes and routes, virtual USDC, no risk.
+
+6
+00:00:14,841 --> 00:00:18,575
+The own wallet option runs the same flow with real swaps.
+
+7
+00:00:20,833 --> 00:00:23,359
+Within seconds it makes its first decision.
+
+8
+00:00:23,409 --> 00:00:27,191
+Each coin is above three of its four moving averages, so the bot
+
+9
+00:00:27,241 --> 00:00:31,144
+holds a quarter of the capital in each and keeps the rest in USDC.
+
+10
+00:00:31,194 --> 00:00:33,839
+The feed explains every trade in plain words,
+
+11
+00:00:33,889 --> 00:00:36,833
+and the next decision comes after the daily close.
+
+12
+00:00:37,633 --> 00:00:39,779
+Advanced mode shows the reasoning.
+
+13
+00:00:39,829 --> 00:00:43,138
+For every coin: the daily close, its distance to the
+
+14
+00:00:43,188 --> 00:00:46,691
+20, 50, 100 and 200-day averages, and the target share.
+
+15
+00:00:46,741 --> 00:00:51,212
+Today each coin is below its 20-day average and above the other three.
+
+16
+00:00:51,262 --> 00:00:54,183
+Below are the venue and on-chain settings, the
+
+17
+00:00:54,233 --> 00:00:58,058
+decision journal, and a live log of everything the bot does.
+
+18
+00:01:00,358 --> 00:01:03,419
+For more history, here is the same app replaying
+
+19
+00:01:03,469 --> 00:01:06,466
+the strategy on real 2026 prices since January.
+
+20
+00:01:06,516 --> 00:01:09,253
+It is up about eleven percent, while simply
+
+21
+00:01:09,303 --> 00:01:12,040
+holding the three coins lost about fifteen.
+
+22
+00:01:12,090 --> 00:01:16,058
+And the interface switches to Russian and Armenian on the fly.
+
+23
+00:01:16,858 --> 00:01:20,706
+The equity curve marks every trade, and the drawdown panel shows how
+
+24
+00:01:20,756 --> 00:01:24,546
+far the capital fell from its peak: under twenty percent this year.
+
+25
+00:01:24,596 --> 00:01:28,272
+When the trends came back in late summer, the bot bought back in.
+
+26
+00:01:28,322 --> 00:01:30,908
+The journal filters trades, checks and errors.
+
+27
+00:01:33,208 --> 00:01:34,689
+Back to the live session.
+
+28
+00:01:34,739 --> 00:01:39,281
+Stopping is one button: the bot sells everything back to USDC and shows the
+
+29
+00:01:39,331 --> 00:01:44,608
+result, about a dollar below the start, mostly the round-trip cost of Jupiter's quotes.
+
+30
+00:01:44,658 --> 00:01:48,833
+Crypto Bot: one slow decision a day, from your own wallet, on Solana.

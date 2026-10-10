@@ -3,7 +3,7 @@
 A trend-following autopilot for crypto that trades on **Binance** or on **Solana** (through the
 Jupiter aggregator) — and can publish every decision on-chain, so its track record can't be faked.
 
-![Crypto Bot dashboard](docs/hackathon/assets/app-simple.png)
+![Crypto Bot dashboard](docs/dashboard.png)
 
 <sub>The dashboard replaying 2026 on real prices (Jan 1 → Sep 26, 2026): +20% vs −5% for buy & hold.
 See [Results](#results) for how these numbers are produced.</sub>
@@ -349,7 +349,6 @@ src/
   bot, strategy, trader, market, scanner, streaming, backtest/
                     legacy intraday strategies (research only, see below)
 test/               end-to-end API tests
-docs/hackathon/     Solana Hackathon deck, video and their build scripts
 ```
 
 **Legacy intraday mode.** `BOT_STRATEGY_MODE=intraday` runs the original intraday strategies. They
@@ -374,6 +373,3 @@ research and are not recommended.
 - Binance keys should allow spot trading only, without withdrawals. The Solana key stays on your
   machine; the bot only signs swaps and memo records.
 - This is an automated trading program, not investment advice.
-
-Hackathon materials (pitch deck, demo video and how they are built) are in
-[docs/hackathon](docs/hackathon/README.md).

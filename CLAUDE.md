@@ -145,7 +145,7 @@ above. Don't log keys or full balance responses without a reason.
 
 ## Hackathon materials
 
-`docs/hackathon/` holds the Solana Hackathon deck (`deck.html` → PDF/PNG), the demo video build
+`docs/hackathon/` (local only, git-ignored) holds the Solana Hackathon deck (`deck.html` → PDF/PNG), the demo video build
 (`build/`: puppeteer screen recordings, Kokoro voice-over, ffmpeg assembly) and `replay-state.ts`,
 which builds a session state by replaying the real strategy on historical prices for screenshots.
 Screens made from a replay must be labelled as such.
